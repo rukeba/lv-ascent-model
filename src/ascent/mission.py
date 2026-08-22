@@ -85,6 +85,7 @@ class Mission:
         self.telemetry = Telemetry()
         self._burned = [0.0] * len(self.vehicle.stages)
         self._steering_loss = 0.0
+        self._steering_rate = 0.0
         self._throttle = 1.0
         self._attitude = None
         self._guided = True
@@ -397,10 +398,17 @@ class Mission:
         normal = effective_gravity * math.cos(state.flight_path_angle) \
             - 2.0 * self.omega * speed
 
+        rate = 0.0
         if state.thrust > 1.0:
             demanded = (state.mass / state.thrust) \
                 * (speed * state.flight_path_rate + normal)
             state.steering_demand = demanded
             state.steering_angle = math.asin(max(-1.0, min(1.0, demanded)))
-            self._steering_loss += (state.thrust / state.mass) \
-                * (1.0 - math.cos(state.steering_angle)) * self.dt
+            rate = (state.thrust / state.mass) * (1.0 - math.cos(state.steering_angle))
+        # over the interval, not off its end alone. An interval that begins
+        # unpowered and ends alight spans an ignition and was flown before it,
+        # so it carries nothing: averaging across that step change would charge
+        # the new stage for time the old one flew
+        span = 0.0 if self._steering_rate == 0.0 else 0.5 * (self._steering_rate + rate)
+        self._steering_loss += span * self.dt
+        self._steering_rate = rate

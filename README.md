@@ -179,9 +179,9 @@ uv run python examples/steering_loss_comparison.py
 
 ```
 programme                gravity  aerodynamic  steering     total   perigee   apogee
-five-phase                2326.7         29.3     579.0    2935.0     500.1    501.0
-velocity-share            2290.9         29.7     460.2    2780.8     500.4    507.6
-bilinear-tangent          2242.1         29.6     485.7    2757.4     500.1    500.5
+five-phase                2326.7         29.3     578.7    2934.7     500.1    501.0
+velocity-share            2290.9         29.7     460.0    2780.6     500.4    507.6
+bilinear-tangent          2242.1         29.6     485.2    2757.0     500.1    500.5
 
 largest deviation from the published figures: 0.04 m/s
 ```

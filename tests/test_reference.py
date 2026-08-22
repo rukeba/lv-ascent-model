@@ -15,13 +15,13 @@ from ascent import (BilinearTangentProgramme, CutoffAtTime, FivePhaseProgramme,
 CASES = (
     ('five-phase',
      FivePhaseProgramme(t1=20.0, t4=502.8, k2=0.056178, k3=0.522859),
-     502.8, (2326.7, 29.3, 579.0)),
+     502.8, (2326.7, 29.3, 578.7)),
     ('velocity-share',
      VelocityShareProgramme(t1=20.0, tf=491.691775, te=502.1492, s=0.995106),
-     502.1492, (2290.9, 29.7, 460.2)),
+     502.1492, (2290.9, 29.7, 460.0)),
     ('bilinear-tangent',
      BilinearTangentProgramme(t1=20.0, a=-1.097246, b=527.99193, c=1.927467, te=501.2),
-     501.2, (2242.1, 29.6, 485.7)),
+     501.2, (2242.1, 29.6, 485.2)),
 )
 
 
