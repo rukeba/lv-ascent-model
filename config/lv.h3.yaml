@@ -44,7 +44,7 @@ stages:
 
   - name: second stage
     ignition_time: 325
-    dry_mass: 7_000           # stage ~3 t plus the satellite ~4 t
+    dry_mass: 3_000           # the stage alone: the satellite is the entry below
     propellant_mass: 23_000
     thrust_sea_level: 137_000
     thrust_vacuum: 137_000

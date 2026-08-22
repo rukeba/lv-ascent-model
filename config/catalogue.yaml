@@ -282,111 +282,111 @@ missions:
   - vehicle: lv.h3
     target_altitude: 1_000_000
     launch_site: {latitude: 30.4, azimuth: 90}
-    pitch_programme: {type: velocity-share, t1: 20.0, tf: 696.0694027797006, te: 767.2101554568742, s: 0.5685097339676373}
-    cutoff: {type: time, time: 767.2101554568742}
+    pitch_programme: {type: velocity-share, t1: 20.0, tf: 596.0297283738942, te: 689.5836830158312, s: 3.643126043819503}
+    cutoff: {type: time, time: 689.5836830158312}
     simulation: {duration: 1020, steps_per_second: 10}
-    reached: {perigee_km: 1000.00, apogee_km: 1000.00, gravity_loss: 2658.7, aerodynamic_loss: 119.6, steering_loss: 1547.7, total_loss: 4326.0}
+    reached: {perigee_km: 1000.00, apogee_km: 1000.00, gravity_loss: 2747.5, aerodynamic_loss: 120.8, steering_loss: 1551.3, total_loss: 4419.6}
 
   - vehicle: lv.h3
     target_altitude: 1_000_000
     launch_site: {latitude: 30.4, azimuth: 90}
-    pitch_programme: {type: bilinear-tangent, t1: 20.0, a: -0.08334184230233262, b: 61.38527030128065, c: 0.18474997691256798, te: 756.5480364424649}
-    cutoff: {type: time, time: 756.5480364424649}
+    pitch_programme: {type: bilinear-tangent, t1: 20.0, a: -0.0942714380832711, b: 61.242948219265834, c: 0.15309045598054957, te: 669.6447859973156}
+    cutoff: {type: time, time: 669.6447859973156}
     simulation: {duration: 1010, steps_per_second: 10}
-    reached: {perigee_km: 999.79, apogee_km: 1000.20, gravity_loss: 2555.4, aerodynamic_loss: 119.9, steering_loss: 1686.3, total_loss: 4361.6}
+    reached: {perigee_km: 999.70, apogee_km: 1000.30, gravity_loss: 2542.9, aerodynamic_loss: 121.7, steering_loss: 2081.0, total_loss: 4745.6}
 
   - vehicle: lv.h3
     target_altitude: 1_050_000
     launch_site: {latitude: 30.4, azimuth: 90}
-    pitch_programme: {type: five-phase, t1: 20.0, t4: 777.5453686943727, k2: 0.05, k3: 0.29749443595518543}
-    cutoff: {type: time, time: 777.5453686943727}
+    pitch_programme: {type: five-phase, t1: 20.0, t4: 684.5872315519235, k2: 0.05, k3: 0.5792827450573722}
+    cutoff: {type: time, time: 684.5872315519235}
     simulation: {duration: 1030, steps_per_second: 10}
-    reached: {perigee_km: 1050.00, apogee_km: 1050.00, gravity_loss: 2722.8, aerodynamic_loss: 118.9, steering_loss: 1650.6, total_loss: 4492.4}
+    reached: {perigee_km: 1050.00, apogee_km: 1050.00, gravity_loss: 2666.8, aerodynamic_loss: 121.1, steering_loss: 1717.2, total_loss: 4505.0}
 
   - vehicle: lv.h3
     target_altitude: 1_050_000
     launch_site: {latitude: 30.4, azimuth: 90}
-    pitch_programme: {type: velocity-share, t1: 20.0, tf: 736.8597497381228, te: 772.2800280520606, s: 0.04541262499330435}
-    cutoff: {type: time, time: 772.2800280520606}
+    pitch_programme: {type: velocity-share, t1: 20.0, tf: 628.030156201876, te: 691.346650355783, s: 2.963228081669433}
+    cutoff: {type: time, time: 691.346650355783}
     simulation: {duration: 1020, steps_per_second: 10}
-    reached: {perigee_km: 1050.00, apogee_km: 1050.00, gravity_loss: 2677.2, aerodynamic_loss: 119.7, steering_loss: 1672.1, total_loss: 4469.1}
+    reached: {perigee_km: 1049.98, apogee_km: 1050.01, gravity_loss: 2736.7, aerodynamic_loss: 120.9, steering_loss: 1631.4, total_loss: 4489.0}
 
   - vehicle: lv.h3
     target_altitude: 1_050_000
     launch_site: {latitude: 30.4, azimuth: 90}
-    pitch_programme: {type: bilinear-tangent, t1: 20.0, a: -0.08065474943491047, b: 60.18828887661775, c: 0.16934823708888708, te: 766.2460586427159}
-    cutoff: {type: time, time: 766.2460586427159}
+    pitch_programme: {type: bilinear-tangent, t1: 20.0, a: -0.09118104539242274, b: 59.992603289377534, c: 0.13988434567024027, te: 677.9503780767466}
+    cutoff: {type: time, time: 677.9503780767466}
     simulation: {duration: 1020, steps_per_second: 10}
-    reached: {perigee_km: 1049.79, apogee_km: 1050.21, gravity_loss: 2615.7, aerodynamic_loss: 119.8, steering_loss: 1775.5, total_loss: 4511.0}
+    reached: {perigee_km: 1049.63, apogee_km: 1050.37, gravity_loss: 2596.0, aerodynamic_loss: 121.6, steering_loss: 2137.6, total_loss: 4855.2}
 
   - vehicle: lv.h3
     target_altitude: 1_100_000
     launch_site: {latitude: 30.4, azimuth: 90}
-    pitch_programme: {type: five-phase, t1: 20.0, t4: 786.5891680835523, k2: 0.05, k3: 0.3562975632474135}
-    cutoff: {type: time, time: 786.5891680835523}
+    pitch_programme: {type: five-phase, t1: 20.0, t4: 691.388490972404, k2: 0.05, k3: 0.6194457261832724}
+    cutoff: {type: time, time: 691.388490972404}
     simulation: {duration: 1040, steps_per_second: 10}
-    reached: {perigee_km: 1100.00, apogee_km: 1100.00, gravity_loss: 2782.0, aerodynamic_loss: 118.9, steering_loss: 1700.6, total_loss: 4601.5}
+    reached: {perigee_km: 1100.00, apogee_km: 1100.00, gravity_loss: 2708.0, aerodynamic_loss: 121.0, steering_loss: 1778.5, total_loss: 4607.6}
 
   - vehicle: lv.h3
     target_altitude: 1_100_000
     launch_site: {latitude: 30.4, azimuth: 90}
-    pitch_programme: {type: velocity-share, t1: 20.0, tf: 738.77783869532, te: 782.2204053817596, s: 0.5387635290587631}
-    cutoff: {type: time, time: 782.2204053817596}
+    pitch_programme: {type: velocity-share, t1: 20.0, tf: 630.6488147977934, te: 701.9622900274371, s: 3.5763485561449238}
+    cutoff: {type: time, time: 701.9622900274371}
     simulation: {duration: 1030, steps_per_second: 10}
-    reached: {perigee_km: 1100.00, apogee_km: 1100.00, gravity_loss: 2743.5, aerodynamic_loss: 119.5, steering_loss: 1730.4, total_loss: 4593.5}
+    reached: {perigee_km: 1100.00, apogee_km: 1100.00, gravity_loss: 2819.7, aerodynamic_loss: 120.8, steering_loss: 1707.2, total_loss: 4647.6}
 
   - vehicle: lv.h3
     target_altitude: 1_100_000
     launch_site: {latitude: 30.4, azimuth: 90}
-    pitch_programme: {type: bilinear-tangent, t1: 20.0, a: -0.07132740852589714, b: 53.88437051175456, c: 0.14171618415754164, te: 775.4511179554565}
-    cutoff: {type: time, time: 775.4511179554565}
+    pitch_programme: {type: bilinear-tangent, t1: 20.0, a: -0.08066923256916399, b: 53.71228762557872, c: 0.11669207627091009, te: 685.8336259679551}
+    cutoff: {type: time, time: 685.8336259679551}
     simulation: {duration: 1030, steps_per_second: 10}
-    reached: {perigee_km: 1099.76, apogee_km: 1100.24, gravity_loss: 2673.4, aerodynamic_loss: 119.7, steering_loss: 1866.7, total_loss: 4659.9}
+    reached: {perigee_km: 1099.74, apogee_km: 1100.26, gravity_loss: 2646.7, aerodynamic_loss: 121.6, steering_loss: 2190.3, total_loss: 4958.5}
 
   - vehicle: lv.h3
     target_altitude: 1_150_000
     launch_site: {latitude: 30.4, azimuth: 90}
-    pitch_programme: {type: five-phase, t1: 20.0, t4: 794.9605815073533, k2: 0.05, k3: 0.407751810032851}
-    cutoff: {type: time, time: 794.9605815073533}
+    pitch_programme: {type: five-phase, t1: 20.0, t4: 697.892027949374, k2: 0.05, k3: 0.6577793715447504}
+    cutoff: {type: time, time: 697.892027949374}
     simulation: {duration: 1050, steps_per_second: 10}
-    reached: {perigee_km: 1150.00, apogee_km: 1150.00, gravity_loss: 2836.5, aerodynamic_loss: 118.8, steering_loss: 1751.5, total_loss: 4706.9}
+    reached: {perigee_km: 1150.00, apogee_km: 1150.00, gravity_loss: 2747.2, aerodynamic_loss: 121.0, steering_loss: 1844.0, total_loss: 4712.2}
 
   - vehicle: lv.h3
     target_altitude: 1_150_000
     launch_site: {latitude: 30.4, azimuth: 90}
-    pitch_programme: {type: velocity-share, t1: 20.0, tf: 763.6839019928179, te: 788.8900299485224, s: 0.432411239328835}
-    cutoff: {type: time, time: 788.8900299485224}
+    pitch_programme: {type: velocity-share, t1: 20.0, tf: 650.705053869435, te: 707.0445909659694, s: 3.4265269704181676}
+    cutoff: {type: time, time: 707.0445909659694}
     simulation: {duration: 1040, steps_per_second: 10}
-    reached: {perigee_km: 1150.00, apogee_km: 1150.00, gravity_loss: 2779.6, aerodynamic_loss: 119.5, steering_loss: 1830.7, total_loss: 4729.8}
+    reached: {perigee_km: 1150.00, apogee_km: 1150.00, gravity_loss: 2845.2, aerodynamic_loss: 120.8, steering_loss: 1787.9, total_loss: 4753.9}
 
   - vehicle: lv.h3
     target_altitude: 1_150_000
     launch_site: {latitude: 30.4, azimuth: 90}
-    pitch_programme: {type: bilinear-tangent, t1: 20.0, a: -0.06022189914181549, b: 46.02467440016323, c: 0.11308578917859823, te: 784.2514609474625}
-    cutoff: {type: time, time: 784.2514609474625}
+    pitch_programme: {type: bilinear-tangent, t1: 20.0, a: -0.06801421817690513, b: 45.79580857542536, c: 0.09261796416457882, te: 693.3269866649113}
+    cutoff: {type: time, time: 693.3269866649113}
     simulation: {duration: 1030, steps_per_second: 10}
-    reached: {perigee_km: 1149.75, apogee_km: 1150.25, gravity_loss: 2729.3, aerodynamic_loss: 119.6, steering_loss: 1960.9, total_loss: 4809.9}
+    reached: {perigee_km: 1149.76, apogee_km: 1150.24, gravity_loss: 2695.2, aerodynamic_loss: 121.5, steering_loss: 2239.3, total_loss: 5056.1}
 
   - vehicle: lv.h3
     target_altitude: 1_200_000
     launch_site: {latitude: 30.4, azimuth: 90}
-    pitch_programme: {type: five-phase, t1: 20.0, t4: 802.8425470350417, k2: 0.05, k3: 0.45440574220468216}
-    cutoff: {type: time, time: 802.8425470350417}
+    pitch_programme: {type: five-phase, t1: 20.0, t4: 704.1291379054805, k2: 0.05, k3: 0.6945858971381552}
+    cutoff: {type: time, time: 704.1291379054805}
     simulation: {duration: 1060, steps_per_second: 10}
-    reached: {perigee_km: 1200.00, apogee_km: 1200.00, gravity_loss: 2887.9, aerodynamic_loss: 118.8, steering_loss: 1808.4, total_loss: 4815.1}
+    reached: {perigee_km: 1200.00, apogee_km: 1200.00, gravity_loss: 2784.8, aerodynamic_loss: 121.0, steering_loss: 1913.3, total_loss: 4819.1}
 
   - vehicle: lv.h3
     target_altitude: 1_200_000
     launch_site: {latitude: 30.4, azimuth: 90}
-    pitch_programme: {type: velocity-share, t1: 20.0, tf: 788.0797411630506, te: 795.4416898125854, s: 0.3446487305127964}
-    cutoff: {type: time, time: 795.4416898125854}
+    pitch_programme: {type: velocity-share, t1: 20.0, tf: 670.4242732090554, te: 712.0903803337251, s: 3.2998849868325264}
+    cutoff: {type: time, time: 712.0903803337251}
     simulation: {duration: 1050, steps_per_second: 10}
-    reached: {perigee_km: 1200.00, apogee_km: 1200.00, gravity_loss: 2815.5, aerodynamic_loss: 119.5, steering_loss: 1930.3, total_loss: 4865.3}
+    reached: {perigee_km: 1200.00, apogee_km: 1200.00, gravity_loss: 2871.1, aerodynamic_loss: 120.8, steering_loss: 1880.4, total_loss: 4872.4}
 
   - vehicle: lv.h3
     target_altitude: 1_200_000
     launch_site: {latitude: 30.4, azimuth: 90}
-    pitch_programme: {type: bilinear-tangent, t1: 20.0, a: -0.056965186761695104, b: 44.02565179883207, c: 0.10143612203744058, te: 792.8518820276402}
-    cutoff: {type: time, time: 792.8518820276402}
+    pitch_programme: {type: bilinear-tangent, t1: 20.0, a: -0.06430165316680124, b: 43.766576390804474, c: 0.08272529531627061, te: 700.6446527474512}
+    cutoff: {type: time, time: 700.6446527474512}
     simulation: {duration: 1040, steps_per_second: 10}
-    reached: {perigee_km: 1199.72, apogee_km: 1200.28, gravity_loss: 2785.1, aerodynamic_loss: 119.6, steering_loss: 2054.6, total_loss: 4959.3}
+    reached: {perigee_km: 1199.58, apogee_km: 1200.42, gravity_loss: 2743.5, aerodynamic_loss: 121.5, steering_loss: 2288.0, total_loss: 5153.0}
