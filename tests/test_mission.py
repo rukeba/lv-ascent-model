@@ -223,6 +223,12 @@ def test_the_velocity_budget_adds_back_up():
     It only closes if both loss integrands are projected in the frame the
     equations are written in. Taking the centripetal term from the inertial
     speed instead leaves Falcon 9 out by some 240 m/s and H3 by 820.
+
+    The identity belongs to the guided phase: once the programme has ended the
+    thrust follows the attitude the vehicle held rather than its velocity, and
+    only its projection counts along the track. All three of these cut off
+    within a second of the handover, which the check below keeps true, so what
+    falls outside is a fraction of one step.
     """
     for name in ('f9', 'a62', 'h3'):
         mission = load_mission(f'config/mission.{name}.yaml')
@@ -230,6 +236,7 @@ def test_the_velocity_budget_adds_back_up():
         budget = velocity_budget(telemetry, mission.omega)
 
         end = int(np.flatnonzero(telemetry.thrust > 0.0)[-1]) + 1
+        assert telemetry.t[end - 1] - mission.pitch_programme.end_time < 1.0, name
         delivered = float(np.trapezoid(telemetry.thrust[:end] / telemetry.mass[:end],
                                        telemetry.t[:end]))
         spent = budget.gravity + budget.aerodynamic + telemetry.speed[end - 1]

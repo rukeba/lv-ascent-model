@@ -79,6 +79,11 @@ def test_a_programme_that_cannot_be_built_says_so():
             BilinearTangentProgramme(**{'t1': 20.0, 'a': -0.06, 'b': 28.6,
                                         'c': 0.15, 'te': 490.0, **bad})
 
+    # nor can its denominator pass through zero on the way, which would come
+    # back as a jump of pi in the angle and a division by nothing in the rate
+    with pytest.raises(ValueError, match='passes through'):
+        BilinearTangentProgramme(t1=0.0, a=-28.6, b=28.6, c=-1.0, te=2.0)
+
     # and none of them can be shorter than the grid they are tabulated on
     with pytest.raises(ValueError, match='one grid step'):
         BilinearTangentProgramme(t1=0.0, a=-0.06, b=28.6, c=0.15, te=0.05)

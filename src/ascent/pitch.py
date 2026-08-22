@@ -178,6 +178,12 @@ class BilinearTangentProgramme(PitchProgramme):
         if te <= t1:
             raise ValueError(f'the turn has to end after it starts, and not '
                              f't1={t1:g}, te={te:g}')
+        # the denominator has a pole at tau = -1/c, and a turn that runs
+        # through it comes back as a jump of pi in the angle and as division by
+        # nothing in the rate
+        if c * (te - t1) + 1.0 <= 0.0:
+            raise ValueError(f'the denominator of the tangent passes through '
+                             f'zero inside the turn: c={c:g}, te-t1={te - t1:g}')
         self.t1, self.a, self.b, self.c, self.te = t1, a, b, c, te
 
         t = self._grid(te)

@@ -44,5 +44,8 @@ def test_published_velocity_budget(name, programme, cutoff_time, published):
     assert budget.gravity == pytest.approx(gravity, abs=0.1)
     assert budget.aerodynamic == pytest.approx(aerodynamic, abs=0.1)
     assert budget.steering == pytest.approx(steering, abs=0.1)
-    # and each of them puts the vehicle on the orbit it was aiming for
+    # and each of them arrives at the altitude it was aiming for. Only two of
+    # the three arrive circular: the velocity-share set leaves an apogee 7.6 km
+    # up, which is the shape of that quartic rather than a miss
     assert mission.orbit.perigee_altitude == pytest.approx(500_000, abs=1_000)
+    assert mission.orbit.apogee_altitude == pytest.approx(500_000, abs=10_000)
