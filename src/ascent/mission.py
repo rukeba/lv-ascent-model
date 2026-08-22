@@ -19,7 +19,7 @@ around 60 m/s^2 an event misplaced by one step at 10 Hz is worth several m/s.
 """
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from .atmosphere import Air, air_at, gravity
 from .constants import EARTH_OMEGA, EARTH_RADIUS
@@ -49,6 +49,8 @@ class Segment:
     throttle: float
     # attitude flown once the programme has ended, rad; None while it runs
     attitude: float | None
+    # False once the tank is dry: the piece is flown on what the vehicle has
+    burning: bool = True
 
 
 class Mission:
@@ -76,6 +78,7 @@ class Mission:
         """Fly the mission and return the recorded flight."""
         self.dt = 1.0 / self.steps_per_second
         self.omega = rotation_in_plane(self.latitude_deg, self.azimuth_deg)
+        self.cutoff.reset()
         self.telemetry = Telemetry()
         self._burned = [0.0] * len(self.vehicle.stages)
         self._steering_loss = 0.0
@@ -127,7 +130,9 @@ class Mission:
         # the throttle is read in the middle: the bounds sit exactly on the
         # switching instants, where the setting is ambiguous
         middle = 0.5 * (begin + end)
-        segment = Segment(stage, index, self._probe_throttle(middle), self._attitude)
+        capacity = stage.propellant_mass
+        segment = Segment(stage, index, self._probe_throttle(middle),
+                          self._attitude, self._burned[index] < capacity)
         self._throttle = segment.throttle
 
         derivatives = self._guided_rates if self._guided else self._free_rates
@@ -137,11 +142,16 @@ class Mission:
         y = (*self._y, self._burned[index])
         advanced = rk4_step(rates, begin, y, end - begin)
 
-        capacity = stage.propellant_mass
+        # the propellant the piece would take is allowed to run past the tank,
+        # because that overshoot is the only thing that says the tank empties
+        # inside the piece and where
         if y[-1] < capacity < advanced[-1]:
             dry = self._solve_exhaustion(rates, y, begin, end, advanced[-1], capacity)
             at_dry = rk4_step(rates, begin, y, dry - begin)
-            advanced = rk4_step(rates, dry, (*at_dry[:-1], capacity), end - dry)
+            spent = replace(segment, burning=False)
+            def coasting(t, y):
+                return derivatives(t, y, spent)
+            advanced = rk4_step(coasting, dry, (*at_dry[:-1], capacity), end - dry)
 
         self._y = advanced[:-1]
         self._burned[index] = min(advanced[-1], capacity)
@@ -211,8 +221,8 @@ class Mission:
         speed, radius, _, burned = y
         angle = self.pitch_programme.sample(t)[0]
         air = air_at(radius - EARTH_RADIUS)
-        mass = self.vehicle.mass(t, burned)
-        thrust, flow = self._propulsion(segment, air, burned)
+        mass = self.vehicle.mass_on(segment.index, burned)
+        thrust, flow = self._propulsion(segment, air)
         drag = self.vehicle.drag(air, radius - EARTH_RADIUS, speed)
 
         acceleration = (thrust - drag) / mass \
@@ -232,8 +242,8 @@ class Mission:
         radius, _, vertical, horizontal, burned = y
         speed = math.hypot(vertical, horizontal)
         air = air_at(radius - EARTH_RADIUS)
-        mass = self.vehicle.mass(t, burned)
-        thrust, flow = self._propulsion(segment, air, burned)
+        mass = self.vehicle.mass_on(segment.index, burned)
+        thrust, flow = self._propulsion(segment, air)
         drag = self.vehicle.drag(air, radius - EARTH_RADIUS, speed)
 
         axial = (thrust - drag) / mass
@@ -245,13 +255,17 @@ class Mission:
             - vertical * horizontal / radius - 2.0 * omega * vertical
         return (vertical, horizontal / radius, radial, tangential, flow)
 
-    def _propulsion(self, segment: Segment, air: Air, burned: float) -> tuple[float, float]:
-        """Thrust (N) and propellant flow (kg/s) at a trial point.
+    def _propulsion(self, segment: Segment, air: Air) -> tuple[float, float]:
+        """Thrust (N) and propellant flow (kg/s) over one piece of a step.
 
-        Both fall to zero once the tank is empty, so a trial evaluation can
-        never burn propellant that is not there.
+        Whether the tank still has anything in it is settled once, for the
+        whole piece, and never at a trial point. A trial point that overshoots
+        the capacity would drop the thrust in the middle of the step - the very
+        step change that cutting the step at the instant the tank runs dry
+        exists to keep out - and it would do so for the four-stage weights
+        rather than for the part of the step that is really still burning.
         """
-        if segment.throttle <= 0 or burned >= segment.stage.propellant_mass:
+        if not segment.burning or segment.throttle <= 0:
             return 0.0, 0.0
         throttle = min(1.0, segment.throttle)
         return (segment.stage.thrust(air.pressure) * throttle,

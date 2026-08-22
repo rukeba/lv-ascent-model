@@ -36,7 +36,12 @@ class VelocityBudget:
 
 def velocity_budget(telemetry: Telemetry) -> VelocityBudget:
     powered = np.flatnonzero(telemetry.thrust > 0.0)
-    end = int(powered[-1]) + 1 if len(powered) else len(telemetry)
+    if not len(powered):
+        # nothing was ever spent, so nothing was spent on anything. Integrating
+        # the whole flight instead would report the gravity and the drag of a
+        # pure coast as losses, and its last instant as a burnout that never was
+        return VelocityBudget(0.0, 0.0, 0.0, float(telemetry.t[0]))
+    end = int(powered[-1]) + 1
 
     t = telemetry.t[:end]
     radius = telemetry.radius[:end]

@@ -78,7 +78,18 @@ class LaunchVehicle:
 
     def mass(self, t: float, propellant_burned: float) -> float:
         """Mass still on the vehicle, given what the active stage has burned."""
-        index, stage = self.active_stage(t)
+        index, _ = self.active_stage(t)
+        return self.mass_on(index, propellant_burned)
+
+    def mass_on(self, index: int, propellant_burned: float) -> float:
+        """The same, for a stage named outright rather than found by time.
+
+        The step is cut at every separation, so the last point of the piece
+        below one falls exactly on the ignition above it. Asking by time there
+        answers for the stage that has not flown the piece, which is a step
+        change in mass inside a step that was cut to avoid exactly that.
+        """
+        stage = self.stages[index]
         stack = sum(s.dry_mass + s.propellant_mass for s in self.stages[index:])
         return stack - min(propellant_burned, stage.propellant_mass)
 

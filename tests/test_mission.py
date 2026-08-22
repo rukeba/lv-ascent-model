@@ -5,7 +5,8 @@ import math
 import numpy as np
 import pytest
 
-from ascent import CutoffAtTime, LaunchVehicle, Mission, Stage, load_mission
+from ascent import (CutoffAtInertialSpeed, CutoffAtTime, LaunchVehicle, Mission,
+                    Stage, load_mission)
 from ascent.constants import EARTH_RADIUS, STANDARD_GRAVITY
 from ascent.pitch import PitchProgramme
 
@@ -52,18 +53,108 @@ def test_horizontal_vacuum_flight_matches_tsiolkovsky():
     assert np.max(np.abs(telemetry.altitude)) < 1e-6
 
 
-def test_tank_running_dry_is_located_exactly():
-    """The burn ends when the propellant does, not at the end of a step."""
-    vehicle = vacuum_vehicle()
+def test_tank_running_dry_is_located_inside_the_step():
+    """The burn ends when the propellant does, not at the end of a step.
+
+    The tank is sized to empty nine tenths of the way through a step - inside
+    it, and in the part of it where a trial point of the scheme overshoots the
+    capacity while the weighted result of the whole step does not. A crossing
+    test read off that result alone misses this and carries the burn into the
+    next step, which puts the last powered instant a step late and the event
+    itself some fifty milliseconds late.
+
+    Both halves are checked: the instant, to within the step it belongs to, and
+    the total, which the rocket equation fixes to a hundredth of a metre per
+    second - a thousandth of a step of the acceleration at burnout.
+    """
+    step, dry, isp = 0.1, 1_000.0, 300.0
+    flow = vacuum_vehicle(dry=dry, isp=isp).stages[0].mass_flow(0.0, 1.0)
+    exhausted = 90.0 + 0.9 * step
+    propellant = flow * exhausted
+
+    vehicle = vacuum_vehicle(dry=dry, propellant=propellant, isp=isp)
+    mission = Mission(vehicle, Horizontal(300.0), CutoffAtTime(400.0),
+                      target_altitude=0.0, duration=300.0,
+                      steps_per_second=1 / step,
+                      latitude_deg=0.0, azimuth_deg=0.0)
+    telemetry = mission.run()
+
+    # the last row still under thrust is the one before the tank runs dry, and
+    # the row after it is already empty
+    burning = telemetry.t[telemetry.thrust > 0.0]
+    assert burning[-1] == pytest.approx(exhausted - 0.9 * step, abs=1e-9)
+
+    expected = isp * STANDARD_GRAVITY * math.log((dry + propellant) / dry)
+    assert abs(mission.final_state.speed - expected) < 0.01
+
+
+def test_a_stage_still_burning_at_separation_keeps_its_own_mass():
+    """The mass over a step belongs to the stage that flies it.
+
+    The step is cut at the separation, so the last point of the piece below it
+    falls exactly on the ignition above. Read the mass by that instant and the
+    final evaluation of the scheme weighs the vehicle without the stage that is
+    still pushing it - here a third of the stack - which is a step change in
+    mass inside a step that was cut precisely to keep step changes out.
+
+    Two burns in a vacuum, the first cut short by the separation rather than by
+    an empty tank, so the closed form is the rocket equation applied twice.
+    """
+    separation, isp = 60.0, 300.0
+    lower = Stage(name='lower', ignition_time=0, dry_mass=2_000.0,
+                  propellant_mass=30_000.0, thrust_vacuum=400_000.0,
+                  thrust_sea_level=400_000.0, isp_vacuum=isp, diameter=1.0)
+    upper = Stage(name='upper', ignition_time=separation, dry_mass=1_000.0,
+                  propellant_mass=6_000.0, thrust_vacuum=100_000.0,
+                  thrust_sea_level=100_000.0, isp_vacuum=isp, diameter=1.0)
+    vehicle = LaunchVehicle(name='two stages', stages=[lower, upper],
+                            drag_coefficient={0.0: 0.0, 10.0: 0.0})
     mission = Mission(vehicle, Horizontal(300.0), CutoffAtTime(400.0),
                       target_altitude=0.0, duration=300.0, steps_per_second=10,
                       latitude_deg=0.0, azimuth_deg=0.0)
     telemetry = mission.run()
 
-    stage = vehicle.stages[0]
-    exhausted = stage.propellant_mass / stage.mass_flow(0.0, 1.0)
-    burning = telemetry.t[telemetry.thrust > 0.0]
-    assert abs(burning[-1] - exhausted) <= 1 / mission.steps_per_second
+    # the lower stage is dropped with propellant still in it, and the upper one
+    # empties its own tank well inside the flight, so the closed form applies
+    spent = lower.mass_flow(0.0, 1.0) * separation
+    assert spent < lower.propellant_mass
+    assert separation + upper.propellant_mass / upper.mass_flow(0.0, 1.0) < 300.0
+
+    stack = vehicle.lift_off_mass
+    above = upper.dry_mass + upper.propellant_mass
+    expected = isp * STANDARD_GRAVITY * (
+        math.log(stack / (stack - spent)) + math.log(above / upper.dry_mass))
+    assert abs(mission.final_state.speed - expected) < 0.01
+    # and no mass appears or disappears while the lower stage is still flying
+    before = telemetry.mass[telemetry.t < separation]
+    assert before[-1] == pytest.approx(stack - spent + lower.mass_flow(0.0, 1.0) * 0.1)
+
+
+def test_a_speed_cut_off_fires_once_and_stays_fired():
+    """Cut-off is an event, not a condition re-read every step.
+
+    The inertial speed is the quantity that fixes the orbit, but it falls again
+    as soon as the vehicle coasts uphill. A threshold that is compared afresh
+    each step and never remembered hands the throttle back there and relights a
+    stage that still has propellant in it.
+    """
+    threshold = 1_000.0
+    vehicle = vacuum_vehicle(propellant=9_000.0, thrust=300_000.0)
+    mission = Mission(vehicle, Vertical(200.0), CutoffAtInertialSpeed(threshold),
+                      target_altitude=0.0, duration=120.0, steps_per_second=10,
+                      latitude_deg=0.0, azimuth_deg=0.0)
+    telemetry = mission.run()
+
+    # the flight has to actually fall back through the threshold, or the test
+    # would pass on a vehicle that never gets the chance to relight
+    assert telemetry.inertial_speed.max() >= threshold
+    assert telemetry.inertial_speed[-1] < threshold
+    # and it has to have propellant left to relight on
+    assert telemetry.mass[-1] > vehicle.stages[0].dry_mass
+
+    powered = np.flatnonzero(telemetry.thrust > 0.0)
+    assert len(powered)
+    assert np.array_equal(powered, np.arange(powered[0], powered[-1] + 1))
 
 
 def test_halving_the_step_barely_moves_the_answer():
@@ -100,6 +191,19 @@ def test_configuration_files_load():
         assert mission.vehicle.stages
         assert mission.pitch_programme.end_time > 0
         assert mission.target_altitude > 0
+
+
+class Vertical(PitchProgramme):
+    """Points the velocity straight up for the whole flight."""
+
+    def __init__(self, end_time: float) -> None:
+        t = self._grid(end_time)
+        angle = np.full_like(t, math.pi / 2)
+        zero = np.zeros_like(t)
+        self._tabulate(t, angle, zero, zero)
+
+    def describe(self) -> str:
+        return 'vertical'
 
 
 class StraightDown(PitchProgramme):
