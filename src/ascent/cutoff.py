@@ -78,10 +78,13 @@ class LatchedCutoff(Cutoff):
     the order of accuracy. `Mission.run` clears it before each flight.
     """
 
-    watches = True
-
     def __init__(self) -> None:
         self._cut = False
+
+    @property
+    def watches(self) -> bool:
+        """Still worth watching: one that has fired has nothing left to see."""
+        return not self._cut
 
     def reset(self) -> None:
         self._cut = False

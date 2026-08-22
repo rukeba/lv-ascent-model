@@ -178,7 +178,10 @@ class Mission:
         # thing that says the tank empties inside the piece, and where
         if y[-1] < capacity < advanced[-1]:
             dry = self._solve_exhaustion(rates, y, begin, end, advanced[-1], capacity)
-        if segment.throttle > 0 and self.cutoff.watches:
+        # watched whether or not this piece is under thrust: a threshold that
+        # is crossed and fallen back through during a coast would otherwise
+        # never fire, and a later stage would light against it
+        if self.cutoff.watches:
             cut = self._solve_cut_off(rates, y, begin, end)
 
         inside = [(t, t is dry) for t in (dry, cut) if t is not None and begin < t < end]
@@ -262,9 +265,24 @@ class Mission:
 
         return min(max(dry, begin), end)
 
+    def _check_speed(self, t: float, speed: float) -> None:
+        """A magnitude has no sign to turn round.
+
+        Reported as a zero it would read as a vehicle at rest while its radius
+        went on falling, and the orbit at the end would be built out of that.
+        Asked at the handover as well, which can fall inside a step and hand
+        free flight a negative magnitude before anything else looks at it.
+        """
+        if speed < 0.0:
+            raise ValueError(
+                f'the vehicle has run out of speed against its programme at '
+                f't = {t:.1f} s ({speed:.1f} m/s). This pitch programme cannot '
+                f'be flown by this vehicle.')
+
     def _release_guidance(self, t: float) -> None:
         """Hand the vehicle over from the programme to free flight."""
         speed, radius, polar_angle = self._y
+        self._check_speed(t, speed)
         self._attitude = self.pitch_programme.sample(t)[0]
         self._y = (radius, polar_angle,
                    speed * math.sin(self._attitude),
@@ -341,13 +359,7 @@ class Mission:
         if self._guided:
             speed, radius, polar_angle = self._y
             angle, rate, _ = self.pitch_programme.sample(t)
-            # a magnitude has no sign to turn round: reported as zero this
-            # would read as a vehicle at rest while its radius went on falling
-            if speed < 0.0:
-                raise ValueError(
-                    f'the vehicle has run out of speed against its programme at '
-                    f't = {t:.1f} s ({speed:.1f} m/s). This pitch programme '
-                    f'cannot be flown by this vehicle.')
+            self._check_speed(t, speed)
             state.speed = speed
             state.flight_path_angle, state.flight_path_rate = angle, rate
         else:
