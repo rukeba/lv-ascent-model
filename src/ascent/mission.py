@@ -273,6 +273,11 @@ class Mission:
             state.flight_path_angle = math.atan2(vertical, horizontal)
             state.flight_path_rate = \
                 (state.flight_path_angle - previous.flight_path_angle) / self.dt
+        if radius <= 1.0:
+            raise ValueError(
+                f'the trajectory has left the model at t = {t:.1f} s: it fell '
+                f'through the centre of the Earth. The pitch programme cannot '
+                f'be flown by this vehicle.')
         state.radius = radius
         state.polar_angle = polar_angle
         state.inertial_speed = math.hypot(

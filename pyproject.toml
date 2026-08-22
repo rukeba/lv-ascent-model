@@ -5,7 +5,7 @@ description = "Two-dimensional ascent model of a launch vehicle with parametric 
 readme = "README.md"
 requires-python = ">=3.11"
 license = { file = "LICENSE" }
-authors = [{ name = "Ruslan Keba", email = "rukeba@gmail.com" }]
+authors = [{ name = "Ruslan Keba", email = "phd@kebamail.com" }]
 keywords = ["launch vehicle", "ascent trajectory", "pitch programme", "astrodynamics"]
 classifiers = [
     "License :: OSI Approved :: MIT License",
