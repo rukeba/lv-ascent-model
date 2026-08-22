@@ -31,7 +31,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument('--csv', metavar='FILE', help='write the whole trajectory to a CSV file')
     parser.add_argument('--report', metavar='DIR', help='write an HTML report with plots')
     parser.add_argument('--config-dir', default='config', metavar='DIR',
-                        help='where mission, vehicle and catalogue files live')
+                        help='where short mission names and the catalogue are '
+                             'looked up; a mission given by path is read where '
+                             'it lies, along with the vehicle beside it')
     arguments = parser.parse_args(argv)
 
     directory = Path(arguments.config_dir)
