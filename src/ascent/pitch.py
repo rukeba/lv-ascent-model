@@ -175,6 +175,9 @@ class BilinearTangentProgramme(PitchProgramme):
     """
 
     def __init__(self, t1: float, a: float, b: float, c: float, te: float) -> None:
+        if te <= t1:
+            raise ValueError(f'the turn has to end after it starts, and not '
+                             f't1={t1:g}, te={te:g}')
         self.t1, self.a, self.b, self.c, self.te = t1, a, b, c, te
 
         t = self._grid(te)

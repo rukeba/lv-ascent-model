@@ -73,6 +73,16 @@ def test_a_programme_that_cannot_be_built_says_so():
             VelocityShareProgramme(**{'t1': 20.0, 'tf': 480.0, 'te': 500.0,
                                       's': 0.9, **bad})
 
+    # the bilinear tangent turns from t1 to te, so those two have an order too
+    for bad in ({'te': 20.0}, {'te': 10.0}):
+        with pytest.raises(ValueError, match='end after it starts'):
+            BilinearTangentProgramme(**{'t1': 20.0, 'a': -0.06, 'b': 28.6,
+                                        'c': 0.15, 'te': 490.0, **bad})
+
+    # and none of them can be shorter than the grid they are tabulated on
+    with pytest.raises(ValueError, match='one grid step'):
+        BilinearTangentProgramme(t1=0.0, a=-0.06, b=28.6, c=0.15, te=0.05)
+
 
 def test_bilinear_tangent_passes_through_its_three_points():
     a, b, c = bilinear_coefficients(t1=20.0, angle_1_deg=89.0, t_mid=150.0,

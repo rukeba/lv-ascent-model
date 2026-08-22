@@ -1,10 +1,15 @@
 """The velocity budget of the ascent: where the propellant went.
 
-The ideal velocity a vehicle could reach is spent on three things besides the
-orbit itself - lifting against gravity, pushing through the air, and pointing
-the thrust away from the velocity in order to fly the programme. The third one
-is what a pitch programme is judged by, and the first one is what it trades
-against: a flatter turn steers less but climbs longer.
+Two of these the trajectory pays as it flies: lifting against gravity and
+pushing through the air. What the propellant delivered, less those two, is the
+speed reached, and the projection here is the one the equations of motion carry
+so that it adds up.
+
+The third is not in that sum. The guided phase puts the whole of the thrust
+along the velocity and asks nothing of the direction, so the steering loss is
+the price of holding the programme, recovered from the normal equation after
+the fact. It is what a pitch programme is judged by, and gravity is what it
+trades against: a flatter turn steers less but climbs longer.
 
 All three are integrated over the powered part of the flight only, which ends
 at the last instant the engines were producing thrust.

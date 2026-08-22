@@ -50,8 +50,10 @@ them equal.
 ambient pressure; gravity as a central field, less the centrifugal term of the
 rotating frame; drag from a Mach-dependent coefficient and the ICAO standard
 atmosphere, taken as zero above 100 km. The velocity budget is projected the
-same way the equations of motion are, so the three losses and the speed reached
-add back up to what the propellant delivered, to within a metre or two.
+same way the equations of motion are: what the propellant delivered, less the
+gravity and aerodynamic losses, is the speed reached, to within a metre or two.
+The steering loss is not in that sum - it is the price of holding the
+programme, recovered afterwards rather than paid by the trajectory.
 Thrust and drag act along the axis of the vehicle, which is the zero-lift
 assumption of a vehicle flying at a small angle of attack.
 
