@@ -1,5 +1,7 @@
-# H3-22S: LE-9 core with two SRB-3 solid boosters. As with Ariane, the
-# boosters are folded into the first stage and the core alone continues.
+# H3-22S: LE-9 core with two SRB-3 solid boosters. As with Ariane, the boosted
+# phase is one entry and the core alone continues as the next, and each entry
+# holds only what it adds to the stack: the first is the two boosters plus the
+# core propellant spent before separation, the second the core itself.
 name: H3-22S
 
 drag_coefficient:
@@ -18,10 +20,12 @@ design_dynamic_pressure: 35_000
 stages:
   - name: core and two boosters
     ignition_time: 0
-    dry_mass: 44_400
-    propellant_mass: 357_000   # core ~225 t + 2 x ~66 t of solid propellant
-    thrust_sea_level: 7_542_000
-    thrust_vacuum: 7_900_000
+    dry_mass: 21_200           # 2 x ~10.6 t of booster structure: all that is dropped
+    propellant_mass: 215_077   # 2 x ~66 t, and the 83.077 t of core spent by then
+    # the mean thrust over the boosted phase: at a constant thrust this is what
+    # empties that propellant in the 120 s the boosters burn for
+    thrust_sea_level: 7_255_000
+    thrust_vacuum: 7_600_000
     isp_sea_level: 426
     isp_vacuum: 426
     length: 33.0
@@ -29,8 +33,8 @@ stages:
 
   - name: core after booster separation
     ignition_time: 120
-    dry_mass: 23_200
-    propellant_mass: 141_923
+    dry_mass: 23_200           # the core structure, carried from lift-off
+    propellant_mass: 141_923   # what is left of the ~225 t core tank
     thrust_sea_level: 2_944_000
     thrust_vacuum: 2_942_000
     isp_sea_level: 426

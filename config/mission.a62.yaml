@@ -11,15 +11,15 @@ launch_site:
 pitch_programme:
   type: bilinear-tangent
   t1: 25.0
-  a: -0.5094575
-  b: 550.8254632
-  c: 2.3441821
-  te: 1106.3
+  a: -0.4759222988
+  b: 550.8329256
+  c: 1.981034869
+  te: 1182.40096
 
 cutoff:
   type: time
-  time: 1106.3
+  time: 1182.40096
 
 simulation:
-  duration: 1200
+  duration: 1250
   steps_per_second: 10

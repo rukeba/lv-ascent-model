@@ -113,7 +113,12 @@ simulation:
 
 A vehicle file lists the stages in the order they burn, each taking over at its
 own `ignition_time`, along with the drag coefficient against Mach number. The
-last stage carries no propellant: it is the payload. See `config/lv.f9.yaml`.
+mass of the vehicle is the sum over the stages still on it, so an entry holds
+only what it adds to the stack - which for the two vehicles with strap-on
+boosters means the boosted phase carries the boosters and the core propellant
+it spends, and the core itself belongs to the entry that flies on after
+separation. The last stage carries no propellant: it is the payload. See
+`config/lv.f9.yaml` for the simple case and `config/lv.a62.yaml` for the other.
 
 The three programmes take these parameters:
 
@@ -127,8 +132,8 @@ The three programmes take these parameters:
 
 `config/catalogue.yaml` holds parameters that place each vehicle on a circular
 orbit of a given altitude - one set per vehicle, pitch programme and altitude,
-43 in all. Falcon 9 is covered from 400 to 700 km, Ariane 62 from 500 to
-1000 km and H3 from 1000 to 1200 km.
+40 in all. Falcon 9 is covered from 400 to 700 km, Ariane 62 from 500 to
+900 km and H3 from 1000 to 1200 km.
 
 Each set is defined by its terminal condition: perigee and apogee both at the
 target. The vertical rise `t1` is held at 20 s and the programme ends at
@@ -151,13 +156,15 @@ precision because near a circular orbit the apogee answers to the cut-off time
 at some 80 km per second, and the bilinear tangent is more delicate still - its
 numerator cancels to almost nothing at the end of the turn, which is what makes
 the vehicle level out, so the last digits of `a` and `b` carry the terminal
-angle. And the table has gaps, which are properties of the programmes rather
-than unfinished work: the bilinear tangent reaches every orbit here, the
-velocity-share quartic stops at 600 km on Falcon 9, and the five-phase turn
-covers only the middle of each range, having no freedom left to stretch to the
-ends once `k2` is fixed. It places no orbit at all for Ariane 62, whose turn
-would have to be one continuous manoeuvre while the vehicle spends its last
-several hundred seconds on a low-thrust upper stage.
+angle. And the table has gaps, which are properties of the programmes and of
+the vehicles rather than unfinished work: Ariane 62 gives out a little above
+900 km, having all but emptied its upper stage by cut-off; the velocity-share
+quartic gives out a hundred kilometres earlier still, as it does at 600 km on
+Falcon 9; and the five-phase turn covers only the middle of each range, having
+no freedom left to stretch to the ends once `k2` is fixed. It places no orbit
+at all for Ariane 62, whose turn would have to be one continuous manoeuvre
+while the vehicle spends its last several hundred seconds on a low-thrust upper
+stage.
 
 ## Reproducing a published result
 
@@ -174,7 +181,7 @@ uv run python examples/steering_loss_comparison.py
 programme                gravity  aerodynamic  steering     total   perigee   apogee
 five-phase                2326.7         29.3     579.0    2935.0     500.1    501.0
 velocity-share            2290.9         29.7     460.2    2780.8     500.4    507.6
-bilinear-tangent          2242.1         29.6     485.8    2757.5     500.1    500.5
+bilinear-tangent          2242.1         29.6     485.7    2757.4     500.1    500.5
 
 largest deviation from the published figures: 0.04 m/s
 ```

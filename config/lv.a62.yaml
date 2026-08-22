@@ -1,6 +1,10 @@
-# Ariane 62: core stage with two P120C solid boosters. The boosters are not
-# modelled separately - the first stage is the two of them plus the core
-# burning together, and the core alone continues as the second stage.
+# Ariane 62: core stage with two P120C solid boosters. The boosters burn
+# alongside the core rather than under it, which this model has no stage
+# sequence for, so the boosted phase is one entry and the core alone continues
+# as the next. The entries are summed over everything still on the vehicle, so
+# each of them holds only what it adds: the first is the two boosters plus the
+# core propellant spent before separation, and the core itself - structure and
+# the propellant it has left - is in the second and nowhere else.
 name: Ariane 62
 
 drag_coefficient:
@@ -19,19 +23,22 @@ design_dynamic_pressure: 35_000
 stages:
   - name: core and two boosters
     ignition_time: 0
-    dry_mass: 45_000          # core 23 t + 2 x 11 t of booster structure
-    propellant_mass: 424_000  # core 140 t + 2 x 142 t
-    thrust_sea_level: 7_960_000
-    thrust_vacuum: 10_371_000
-    isp_sea_level: 265
+    dry_mass: 22_000          # 2 x 11 t of booster structure: all that is dropped
+    propellant_mass: 324_384  # 2 x 142 t, and the 40.384 t of core spent by then
+    # the mean thrust over the boosted phase rather than the peak of the solids:
+    # at a constant thrust this is what empties that propellant in the 130 s the
+    # boosters burn for
+    thrust_sea_level: 5_925_000
+    thrust_vacuum: 7_720_000
+    isp_sea_level: 265        # the two propellants together, weighted by flow
     isp_vacuum: 295
     length: 63.0
     diameter: 12.2            # core and boosters side by side
 
   - name: core after booster separation
     ignition_time: 130
-    dry_mass: 23_000
-    propellant_mass: 99_616
+    dry_mass: 23_000          # the core structure, carried from lift-off
+    propellant_mass: 99_616   # what is left of the 140 t core tank
     thrust_sea_level: 960_000
     thrust_vacuum: 1_371_000
     isp_sea_level: 318
