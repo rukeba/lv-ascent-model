@@ -29,7 +29,7 @@ def test_catalogue_entry_is_flown_when_asked_for():
     assert main(['f9', '--altitude', '650', '--programme', 'bilinear-tangent']) == 0
 
 
-def test_altitude_absent_from_the_catalogue_is_reported(capsys):
+def test_altitude_absent_from_the_catalogue_is_reported():
     with pytest.raises(LookupError, match='altitudes available'):
         main(['f9', '--altitude', '999'])
 
