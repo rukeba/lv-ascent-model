@@ -59,8 +59,7 @@ class Mission:
     # a tank running dry is solved to this share of its capacity, in this many passes
     EXHAUSTION_TOLERANCE = 1e-12
     EXHAUSTION_PASSES = 8
-    # a watched cut-off threshold is looked for at this many points across the
-    # piece, and the crossing then closed in on by this many halvings
+    # a watched threshold is looked for at this many points, then halved down
     CUT_OFF_SAMPLES = 8
     CUT_OFF_PASSES = 40
 
@@ -93,8 +92,7 @@ class Mission:
         self._y = (0.0, EARTH_RADIUS, 0.0)
 
         state = FlightState(mass=self.vehicle.lift_off_mass)
-        # a magnitude, as it is at every other instant: omega is negative for a
-        # launch to the west, and a sign here would be a jump at the second row
+        # a magnitude, as at every other instant: omega is negative to the west
         state.inertial_speed = abs(self.omega) * EARTH_RADIUS
         self.telemetry.record(state)
 
@@ -133,19 +131,15 @@ class Mission:
     def _integrate(self, begin: float, end: float) -> None:
         """Advance one smooth piece, cutting it again at an event inside it.
 
-        Two events cannot be put on the bounds beforehand, because where they
-        fall is what the integration is for: a tank running dry, and a
-        threshold that a cut-off policy watches. Either is solved for, the
-        piece is cut there, and what is left of it is advanced as a piece of
-        its own - with the stage, the throttle and the tank all read again.
+        A tank running dry and a watched cut-off threshold cannot be put on the
+        bounds beforehand: where they fall is what the integration is for. Each
+        is solved for, the piece cut there, and the rest advanced as a piece of
+        its own, with stage, throttle and tank all read again.
         """
         index, stage = self.vehicle.active_stage(begin)
-        # the throttle is read at the start of the piece, in both senses: the
-        # instant and the state. A scheduled cut-off is already a bound, so no
-        # piece straddles its switching instant and the start is never the
-        # ambiguous side of it; a watched threshold is a question about the
-        # state the piece begins in, and asking it at any other instant would
-        # pair that state with a pitch angle that does not belong to it
+        # read at the start of the piece, instant and state alike: no piece
+        # straddles a scheduled switching instant, and a watched threshold asks
+        # about the state the piece begins in
         capacity = stage.propellant_mass
         segment = Segment(stage, index, self._probe_throttle(begin),
                           self._attitude, self._burned[index] < capacity)
@@ -167,8 +161,7 @@ class Mission:
 
         at_event = rk4_step(rates, begin, y, event - begin)
         self._y = at_event[:-1]
-        # a tank solved dry is dry to the last bit: what is left of the step
-        # must not find a drop in it and light the engine again
+        # dry to the last bit, or the rest of the step relights on the remainder
         self._burned[index] = capacity if emptied else min(at_event[-1], capacity)
         self._integrate(event, end)
 
@@ -176,9 +169,8 @@ class Mission:
                       segment: Segment, capacity: float) -> tuple[float | None, bool]:
         """The first instant strictly inside the piece at which it stops holding."""
         dry = cut = None
-        # the propellant the piece would take is allowed to run past the tank,
-        # because that overshoot is the only thing that says the tank empties
-        # inside the piece and where
+        # the burn is allowed to run past the tank: that overshoot is the only
+        # thing that says the tank empties inside the piece, and where
         if y[-1] < capacity < advanced[-1]:
             dry = self._solve_exhaustion(rates, y, begin, end, advanced[-1], capacity)
         if segment.throttle > 0 and self.cutoff.watches:
@@ -188,11 +180,10 @@ class Mission:
         return min(inside) if inside else (None, False)
 
     def _watched(self, t: float, y) -> tuple[float, float]:
-        """Altitude and inertial speed at a point of the trajectory.
+        """Altitude and inertial speed at a trial point, for a cut-off to read.
 
-        The two quantities a cut-off policy can watch, read off a state handed
-        in rather than off the flight, so that the instant a threshold is met
-        can be solved for inside a step.
+        Off a state handed in rather than off the flight, so that the instant a
+        threshold is met can be solved for inside a step.
         """
         if self._guided:
             speed, radius = y[0], y[1]
@@ -209,15 +200,11 @@ class Mission:
     def _solve_cut_off(self, rates, y, begin: float, end: float) -> float | None:
         """The first instant inside the piece at which a watched threshold is met.
 
-        Walked, not simply tested at the end: the quantity a policy watches can
-        rise through its threshold and fall back under it inside one piece -
-        the inertial speed does exactly that near the top of a lofted ascent -
-        and the end of the piece would then show nothing at all.
-
-        The crossing found is then closed in on by bisection rather than by the
-        regula falsi a dry tank gets: a policy says whether it has fired, not
-        by how much, so there is no residual to interpolate on. Both cost a
-        handful of steps, and only for a policy that has to be watched.
+        Walked rather than tested at the end alone: the inertial speed can rise
+        through a threshold and fall back under it inside one piece, near the
+        top of a lofted ascent, and the end would then show nothing. Bisection
+        rather than the regula falsi a dry tank gets, because a policy says
+        whether it has fired and not by how much. Only a watched policy pays.
         """
         low = begin
         for i in range(1, self.CUT_OFF_SAMPLES + 1):
@@ -330,12 +317,10 @@ class Mission:
     def _propulsion(self, segment: Segment, air: Air) -> tuple[float, float]:
         """Thrust (N) and propellant flow (kg/s) over one piece of a step.
 
-        Whether the tank still has anything in it is settled once, for the
-        whole piece, and never at a trial point. A trial point that overshoots
-        the capacity would drop the thrust in the middle of the step - the very
-        step change that cutting the step at the instant the tank runs dry
-        exists to keep out - and it would do so for the four-stage weights
-        rather than for the part of the step that is really still burning.
+        Whether the tank has anything in it is settled once for the piece and
+        never at a trial point: a trial point that overshoots the capacity
+        would drop the thrust in the middle of the step, which is the step
+        change that cutting the step at the dry instant exists to keep out.
         """
         if not segment.burning or segment.throttle <= 0:
             return 0.0, 0.0
@@ -351,14 +336,12 @@ class Mission:
         if self._guided:
             speed, radius, polar_angle = self._y
             angle, rate, _ = self.pitch_programme.sample(t)
-            # the guided phase integrates the magnitude of the velocity, which
-            # has no sign to turn round. Clamping a negative one to zero would
-            # report a vehicle at rest while its radius went on falling, and
-            # would build the orbit at the end out of that clamped state
+            # a magnitude has no sign to turn round: reported as zero this
+            # would read as a vehicle at rest while its radius went on falling
             if speed < 0.0:
                 raise ValueError(
-                    f'the vehicle has run out of speed against its programme '
-                    f'at t = {t:.1f} s ({speed:.1f} m/s). This pitch programme '
+                    f'the vehicle has run out of speed against its programme at '
+                    f't = {t:.1f} s ({speed:.1f} m/s). This pitch programme '
                     f'cannot be flown by this vehicle.')
             state.speed = speed
             state.flight_path_angle, state.flight_path_rate = angle, rate
