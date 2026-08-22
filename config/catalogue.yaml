@@ -33,6 +33,17 @@
 # without being the smallest steering loss all over again. The Falcon 9 sets are
 # untouched, and its vehicle file never had the fault.
 #
+# One caveat on the H3 sets. The steering loss prices the thrust deflection that
+# holding a programme would take, as the sine of that deflection, and where that
+# sine passes one there is no such deflection: the thrust cannot hold the
+# programme, and the price saturates at the whole of it. H3's second stage runs
+# at some 4.6 m/s^2 and has to finish its turn at over 4 km/s, so it saturates
+# over 16 to 54 per cent of the burn at every altitude here - which means its
+# steering loss cannot be used to rank one programme against another. Its
+# trajectory and the orbit it reaches do not depend on that figure and are
+# unaffected. Falcon 9 and Ariane 62 stay well under, and `ascent <mission>`
+# reports the peak demand and the saturated share for any run.
+#
 # The gaps are properties of the programmes and of the vehicles rather than
 # unfinished work. Ariane 62 gives out a little above 900 km: by the cut-off its
 # upper stage has all but run dry, and no programme here closes a circular orbit
