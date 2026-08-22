@@ -32,6 +32,7 @@ COLUMNS = (
     ('drag', 'N', lambda s: s.drag),
     ('dynamic_pressure', 'Pa', lambda s: s.dynamic_pressure),
     ('steering_angle', 'deg', lambda s: s.steering_angle * DEGREES),
+    ('steering_demand', '', lambda s: s.steering_demand),
     ('steering_loss', 'm/s', lambda s: s.steering_loss),
     ('stage', '', lambda s: s.stage),
 )

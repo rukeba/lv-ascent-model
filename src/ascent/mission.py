@@ -400,6 +400,7 @@ class Mission:
         if state.thrust > 1.0:
             demanded = (state.mass / state.thrust) \
                 * (speed * state.flight_path_rate + normal)
+            state.steering_demand = demanded
             state.steering_angle = math.asin(max(-1.0, min(1.0, demanded)))
             self._steering_loss += (state.thrust / state.mass) \
                 * (1.0 - math.cos(state.steering_angle)) * self.dt
