@@ -1,0 +1,28 @@
+# Add the DOI of the archived release under `identifiers` once Zenodo has
+# minted it, and keep `version` and `date-released` in step with the git tag.
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "lv-ascent-model: a two-dimensional ascent model of a launch vehicle with parametric pitch programmes"
+abstract: >-
+  A model of the powered ascent of a launch vehicle from lift-off to orbit
+  insertion. The vehicle flies a prescribed pitch programme; the model
+  integrates the resulting trajectory, reports the orbit reached, and accounts
+  for the velocity spent against gravity, against the air, and on steering the
+  thrust away from the velocity in order to fly the programme. Three pitch
+  programmes and three launch vehicles are included.
+type: software
+authors:
+  - family-names: Keba
+    given-names: Ruslan
+    email: rukeba@gmail.com
+    affiliation: "Oles Honchar Dnipro National University"
+version: 1.0.0
+date-released: 2026-08-22
+license: MIT
+repository-code: "https://github.com/rukeba/lv-ascent-model"
+keywords:
+  - launch vehicle
+  - ascent trajectory
+  - pitch programme
+  - steering loss
+  - astrodynamics

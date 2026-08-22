@@ -1,0 +1,168 @@
+# lv-ascent-model
+
+A two-dimensional model of the powered ascent of a launch vehicle, from
+lift-off to orbit insertion. The vehicle flies a prescribed pitch programme;
+the model integrates the trajectory that results, reports the orbit it reaches,
+and accounts for the velocity spent on the way — against gravity, against the
+air, and on steering the thrust away from the velocity in order to fly the
+programme. That last figure is what different pitch programmes are compared by.
+
+Three programmes are implemented — a five-phase turn, a turn parametrised by
+the vertical share of the velocity, and a bilinear tangent — and three vehicles
+are configured: Falcon 9, Ariane 62 and H3-22S.
+
+## Installing and running
+
+```sh
+uv sync
+
+uv run ascent f9                            # summary of the flight on the console
+uv run ascent f9 --csv out/f9.csv           # and the whole trajectory as CSV
+uv run ascent f9 --report out/f9            # and an HTML report with plots
+uv run ascent config/mission.a62.yaml       # a mission file by path
+```
+
+`f9`, `a62` and `h3` are short names for `config/mission.<name>.yaml`.
+
+The console summary lists the set-up, the notable instants of the flight, the
+state at engine cut-off, the orbit reached and the velocity budget. The HTML
+report shows the same figures plus plots and a flight log.
+
+## The model
+
+The flight is planar and written in polar coordinates about the centre of the
+Earth: the distance `r` and the angle `psi` travelled from the pad.
+
+**Two velocities.** The state is integrated in the frame that rotates with the
+Earth, so the speed the model carries is the speed relative to the atmosphere
+and to the launch site. The inertial speed adds the rotation the pad already
+had, and it is the one the orbit is built from. Earth rotation is never added
+as an initial jump: the vehicle stands still on the pad while the equations
+carry the centrifugal and Coriolis terms of the rotating frame, so the two
+velocities stay consistent throughout. Launching due north (`azimuth: 0`) makes
+them equal.
+
+**Forces.** Thrust interpolated between the sea-level and vacuum figures by
+ambient pressure; gravity as a central field; drag from a Mach-dependent
+coefficient and the ICAO standard atmosphere, taken as zero above 100 km.
+Thrust and drag act along the axis of the vehicle, which is the zero-lift
+assumption of a vehicle flying at a small angle of attack.
+
+**Guidance.** While the pitch programme runs it fixes the direction of the
+velocity and only the magnitude is integrated; the thrust deflection that would
+be needed to hold that direction is recovered from the normal equation of
+motion, and the share of thrust it points away from the velocity is accumulated
+as the steering loss. When the programme ends the vehicle holds the attitude it
+reached and both velocity components are integrated to the end of the flight.
+
+**Integration.** Fourth-order Runge-Kutta at a fixed step, typically 10 Hz. The
+step is cut exactly at every discontinuity inside it — stage separation, engine
+cut-off, the end of the programme — and a tank running dry is solved for by
+regula falsi rather than estimated. This matters more than the order of the
+scheme: at around 60 m/s² an event misplaced by one step at 10 Hz is worth
+several m/s, far more than the error of the scheme itself.
+
+## Modules
+
+| Module | What is in it |
+|---|---|
+| `mission.py` | the equations of motion, the stepping that solves them, the cutting of the step at events, and the steering-loss accounting |
+| `pitch.py` | the three pitch programmes and the tabulation they share |
+| `vehicle.py` | stages, propulsion, mass and drag of the launch vehicle |
+| `atmosphere.py` | ICAO standard atmosphere and the gravity field |
+| `orbit.py` | the osculating orbit recovered from a position and an inertial velocity |
+| `losses.py` | the velocity budget: gravity, aerodynamic and steering losses |
+| `integrators.py` | the Runge-Kutta step, knowing nothing about rockets |
+| `cutoff.py` | when the engines stop — by time, by altitude or by inertial speed |
+| `state.py` | one sample of the flight |
+| `telemetry.py` | the recorded flight and its CSV form |
+| `summary.py` | the console summary |
+| `report.py` | the HTML report with plots |
+| `config.py` | building a mission from YAML |
+| `cli.py` | the `ascent` command |
+| `constants.py` | constants of the Earth model |
+
+## Configuration
+
+A mission file names the vehicle file beside it, the pitch programme and its
+parameters, when the engines stop, and where the launch site is:
+
+```yaml
+vehicle: lv.f9
+target_altitude: 500_000       # altitude of the circular orbit aimed for, m
+launch_site:
+  latitude: 28.5
+  azimuth: 90                  # degrees from north: 90 is due east
+pitch_programme:
+  type: five-phase             # or velocity-share, or bilinear-tangent
+  t1: 20.0
+  t4: 502.8
+  k2: 0.056178
+  k3: 0.522859
+cutoff:
+  type: time                   # or altitude, or inertial-speed
+  time: 502.8
+simulation:
+  duration: 600
+  steps_per_second: 10
+```
+
+A vehicle file lists the stages in the order they burn, each taking over at its
+own `ignition_time`, along with the drag coefficient against Mach number. The
+last stage carries no propellant: it is the payload. See `config/lv.f9.yaml`.
+
+The three programmes take these parameters:
+
+| Programme | Parameters |
+|---|---|
+| `five-phase` | `t1` end of the vertical rise, `t4` end of the programme, `k2` and `k3` the shares of the turn spent building up and holding the pitch rate |
+| `velocity-share` | `t1` end of the vertical rise, `tf` end of the turn, `te` end of the burn, `s` how much of the turn is done early |
+| `bilinear-tangent` | `t1` start of the turn, `a`, `b`, `c` of `tan(gamma) = (a*tau + b) / (c*tau + 1)`, `te` end of the programme |
+
+## Reproducing a published result
+
+`examples/steering_loss_comparison.py` flies Falcon 9 into a 500 km circular
+orbit from Cape Canaveral three times, once per pitch programme, each with the
+parameters that minimise its steering loss subject to reaching that orbit, and
+prints the velocity budget next to the published figures:
+
+```sh
+uv run python examples/steering_loss_comparison.py
+```
+
+```
+programme                gravity  aerodynamic  steering     total   perigee   apogee
+five-phase                2326.7         29.3     579.0    2935.0     500.1    501.0
+velocity-share            2290.9         29.7     460.2    2780.8     500.4    507.6
+bilinear-tangent          2242.1         29.6     485.8    2757.5     500.1    500.5
+
+largest deviation from the published figures: 0.04 m/s
+```
+
+The programme with the smallest steering loss is not the one with the smallest
+total: it pays for the saving in gravity losses.
+
+## Tests
+
+```sh
+uv run pytest
+```
+
+The atmosphere, the orbit determination and the pitch programmes are checked
+against closed forms. The integration is checked against the rocket equation,
+which horizontal drag-free flight satisfies exactly, and against itself at half
+the step — how far a result moves under refinement is its numerical error, and
+a mis-timed event looks exactly like that. `tests/test_reference.py` pins the
+published velocity budget above to one decimal place, which ties the whole
+chain down at once.
+
+## Citing
+
+If you use this model, please cite the archived version — see `CITATION.cff`
+for the current DOI and the BibTeX entry.
+
+## Licence
+
+MIT, see `LICENSE`. The vehicle data in `config/` is taken from published
+specifications; the drag coefficient profiles are generic ones for a slender
+launch vehicle rather than measured data.
