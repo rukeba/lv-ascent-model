@@ -30,8 +30,10 @@
 # carrying their core stage twice over. The search behind them was not repeated:
 # each of those sets is the smallest move away from the set it replaces that
 # meets the terminal condition again, so it holds the shape that search chose
-# without being the smallest steering loss all over again. The Falcon 9 sets are
-# untouched, and its vehicle file never had the fault.
+# without being the smallest steering loss all over again. The Falcon 9 vehicle
+# file never had the fault, and fifteen of its seventeen sets are as they were.
+# The other two - the bilinear tangents at 400 and 450 km - were solved again for
+# the reason given below.
 #
 # One caveat on the H3 sets. The steering loss prices the thrust deflection that
 # holding a programme would take, as the sine of that deflection, and where that
@@ -41,8 +43,16 @@
 # over 16 to 54 per cent of the burn at every altitude here - which means its
 # steering loss cannot be used to rank one programme against another. Its
 # trajectory and the orbit it reaches do not depend on that figure and are
-# unaffected. Falcon 9 and Ariane 62 stay well under, and `ascent <mission>`
+# unaffected. Ariane 62 stays well under throughout, and `ascent <mission>`
 # reports the peak demand and the saturated share for any run.
+#
+# Falcon 9 stays under too, and that is what moved its two bilinear sets. Both
+# asked for a peak of 1.027 and stood on the clamp over half a per cent of the
+# burn; the family has a parameter to spare, and a smaller c takes them to 0.93
+# and 0.94 with nothing saturated - and with a smaller steering loss, which is
+# what the rule here prefers anyway. The five-phase set at 450 km peaks at 1.053
+# and has nothing to spare, k3 and the cut-off both answering to the two
+# conditions while k2 is held across the block, so it stands as it is.
 #
 # The gaps are properties of the programmes and of the vehicles rather than
 # unfinished work. Ariane 62 gives out a little above 900 km: by the cut-off its

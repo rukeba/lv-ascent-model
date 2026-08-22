@@ -56,6 +56,24 @@ def test_a_velocity_share_outside_its_range_is_not_a_turn():
             VelocityShareProgramme(t1=20.0, tf=480.0, te=500.0, s=s)
 
 
+def test_a_programme_that_cannot_be_built_says_so():
+    """The parameters that divide something have to be checked before they do.
+
+    Every fraction of the five-phase turn ends up under a division bar, and the
+    velocity share needs a turn with something in it. Left unchecked they raise
+    out of the arithmetic, or quietly build a turn that runs backwards or one
+    that has no interior point at all and steps from vertical to horizontal.
+    """
+    for bad in ({'t4': 20.0}, {'k2': 0.0}, {'k3': -0.1}, {'k2': 0.6, 'k3': 0.5}):
+        with pytest.raises(ValueError, match='five phases'):
+            FivePhaseProgramme(**{'t1': 20.0, 't4': 500.0, 'k2': 0.06, 'k3': 0.5, **bad})
+
+    for bad in ({'tf': 20.0}, {'tf': 10.0}, {'te': 15.0}):
+        with pytest.raises(ValueError, match='vertical rise'):
+            VelocityShareProgramme(**{'t1': 20.0, 'tf': 480.0, 'te': 500.0,
+                                      's': 0.9, **bad})
+
+
 def test_bilinear_tangent_passes_through_its_three_points():
     a, b, c = bilinear_coefficients(t1=20.0, angle_1_deg=89.0, t_mid=150.0,
                                     angle_mid_deg=50.0, te=500.0, angle_e_deg=0.0)

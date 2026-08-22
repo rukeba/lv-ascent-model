@@ -70,6 +70,13 @@ class FivePhaseProgramme(PitchProgramme):
 
     def __init__(self, t1: float, t4: float, k2: float, k3: float,
                  final_angle_deg: float = 0.0) -> None:
+        # every one of these divides something below, and the phases have to
+        # come in order: a bad set would otherwise raise out of the arithmetic
+        # or build a turn that runs backwards
+        if not (t4 > t1 and k2 > 0.0 and k3 >= 0.0 and k2 + k3 < 1.0):
+            raise ValueError(
+                f'the five phases need t4 > t1, k2 > 0, k3 >= 0 and k2 + k3 < 1, '
+                f'not t1={t1:g}, t4={t4:g}, k2={k2:g}, k3={k3:g}')
         self.t1, self.t4, self.k2, self.k3 = t1, t4, k2, k3
         self.final_angle = np.deg2rad(final_angle_deg)
 
@@ -131,10 +138,12 @@ class VelocityShareProgramme(PitchProgramme):
                 f'the velocity share is a turn only for '
                 f'|s| <= {self.SHARE_LIMIT:g}, and s = {s:g}')
         self.t1, self.te, self.s = t1, te, s
-        # the turn cannot outlast the burn, nor precede the vertical rise
+        # the turn cannot outlast the burn
         self.tf = min(tf, te)
         if self.tf <= t1:
-            self.tf = t1 + GRID_STEP
+            raise ValueError(
+                f'the turn has to start after the vertical rise and end before '
+                f'the burn, not t1={t1:g}, tf={tf:g}, te={te:g}')
 
         t = self._grid(te)
         share = np.ones_like(t)
