@@ -355,11 +355,11 @@ class Mission:
         # not finite covers the case this guard exists for: once anything goes
         # to NaN the comparison below is false and the run would carry on
         # producing numbers that are not numbers
-        if not math.isfinite(radius) or radius <= 1.0:
+        if not math.isfinite(radius) or radius < EARTH_RADIUS - 1.0:
             raise ValueError(
                 f'the trajectory has left the model at t = {t:.1f} s '
-                f'(radius {radius}). This pitch programme cannot be flown by '
-                f'this vehicle.')
+                f'({radius - EARTH_RADIUS:.0f} m below the ground). This pitch '
+                f'programme cannot be flown by this vehicle.')
         state.radius = radius
         state.polar_angle = polar_angle
         state.inertial_speed = math.hypot(
@@ -390,11 +390,12 @@ class Mission:
         figure of merit by which pitch programmes are compared.
         """
         radius, speed = state.radius, state.speed
-        # the centripetal balance is set by the inertial speed, and cancels
-        # gravity exactly once in orbit
-        effective_gravity = gravity(radius) - state.inertial_speed**2 / radius
-        # Coriolis appears on the trajectory normal as 2*omega*v and unloads
-        # the steering for a launch to the east
+        # the same projection the free-flight equations carry: gravity less the
+        # curvature of the path and the centrifugal term of the frame, with
+        # Coriolis on the normal as 2*omega*v, which unloads the steering for a
+        # launch to the east
+        effective_gravity = gravity(radius) - speed**2 / radius \
+            - self.omega**2 * radius
         normal = effective_gravity * math.cos(state.flight_path_angle) \
             - 2.0 * self.omega * speed
 

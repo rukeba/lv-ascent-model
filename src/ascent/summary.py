@@ -16,7 +16,7 @@ LABEL_WIDTH = 24
 
 
 def summarise(mission: Mission, telemetry: Telemetry) -> str:
-    budget = velocity_budget(telemetry)
+    budget = velocity_budget(telemetry, mission.omega)
     cut_off = telemetry.at(budget.burnout_time)
     vehicle = mission.vehicle
     first_stage = vehicle.stages[0]

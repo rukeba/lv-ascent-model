@@ -47,8 +47,11 @@ velocities stay consistent throughout. Launching due north (`azimuth: 0`) makes
 them equal.
 
 **Forces.** Thrust interpolated between the sea-level and vacuum figures by
-ambient pressure; gravity as a central field; drag from a Mach-dependent
-coefficient and the ICAO standard atmosphere, taken as zero above 100 km.
+ambient pressure; gravity as a central field, less the centrifugal term of the
+rotating frame; drag from a Mach-dependent coefficient and the ICAO standard
+atmosphere, taken as zero above 100 km. The velocity budget is projected the
+same way the equations of motion are, so the three losses and the speed reached
+add back up to what the propellant delivered, to within a metre or two.
 Thrust and drag act along the axis of the vehicle, which is the zero-lift
 assumption of a vehicle flying at a small angle of attack.
 
@@ -179,9 +182,9 @@ uv run python examples/steering_loss_comparison.py
 
 ```
 programme                gravity  aerodynamic  steering     total   perigee   apogee
-five-phase                2326.7         29.3     578.7    2934.7     500.1    501.0
-velocity-share            2290.9         29.7     460.0    2780.6     500.4    507.6
-bilinear-tangent          2242.1         29.6     485.2    2757.0     500.1    500.5
+five-phase                2568.7         29.3     526.5    3124.6     500.1    501.0
+velocity-share            2537.9         29.7     411.1    2978.7     500.4    507.6
+bilinear-tangent          2500.0         29.6     433.1    2962.7     500.1    500.5
 
 largest deviation from the published figures: 0.04 m/s
 ```

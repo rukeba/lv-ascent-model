@@ -15,13 +15,13 @@ from ascent import (BilinearTangentProgramme, CutoffAtTime, FivePhaseProgramme,
 CASES = (
     ('five-phase',
      FivePhaseProgramme(t1=20.0, t4=502.8, k2=0.056178, k3=0.522859),
-     502.8, (2326.7, 29.3, 578.7)),
+     502.8, (2568.7, 29.3, 526.5)),
     ('velocity-share',
      VelocityShareProgramme(t1=20.0, tf=491.691775, te=502.1492, s=0.995106),
-     502.1492, (2290.9, 29.7, 460.0)),
+     502.1492, (2537.9, 29.7, 411.1)),
     ('bilinear-tangent',
      BilinearTangentProgramme(t1=20.0, a=-1.097246, b=527.99193, c=1.927467, te=501.2),
-     501.2, (2242.1, 29.6, 485.2)),
+     501.2, (2500.0, 29.6, 433.1)),
 )
 
 
@@ -38,7 +38,7 @@ def test_published_velocity_budget(name, programme, cutoff_time, published):
         latitude_deg=28.5,
         azimuth_deg=90.0,
     )
-    budget = velocity_budget(mission.run())
+    budget = velocity_budget(mission.run(), mission.omega)
     gravity, aerodynamic, steering = published
 
     assert budget.gravity == pytest.approx(gravity, abs=0.1)

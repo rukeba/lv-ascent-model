@@ -34,7 +34,14 @@ class VelocityBudget:
         return self.gravity + self.aerodynamic + self.steering
 
 
-def velocity_budget(telemetry: Telemetry) -> VelocityBudget:
+def velocity_budget(telemetry: Telemetry, omega: float) -> VelocityBudget:
+    """What the propellant bought and what it was spent on, m/s.
+
+    `omega` is the Earth rotation projected on to the launch plane, the same
+    figure the flight was integrated with. Asked for rather than defaulted: a
+    zero would quietly cost a launch to the east some hundreds of metres per
+    second of gravity loss.
+    """
     powered = np.flatnonzero(telemetry.thrust > 0.0)
     if not len(powered):
         # nothing was ever spent, so nothing was spent on anything. Integrating
@@ -46,9 +53,9 @@ def velocity_budget(telemetry: Telemetry) -> VelocityBudget:
     t = telemetry.t[:end]
     radius = telemetry.radius[:end]
     sin_angle = np.sin(np.radians(telemetry.flight_path_angle[:end]))
-    # the centripetal term of the inertial motion relieves gravity, and cancels
-    # it exactly once the vehicle is in orbit
-    effective_gravity = MU / radius**2 - telemetry.inertial_speed[:end]**2 / radius
+    # gravity less the centrifugal term of the rotating frame, which is what the
+    # along-track equation of motion carries and so what the budget is spent on
+    effective_gravity = MU / radius**2 - omega**2 * radius
 
     return VelocityBudget(
         gravity=float(np.trapezoid(effective_gravity * sin_angle, t)),

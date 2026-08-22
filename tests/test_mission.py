@@ -190,7 +190,7 @@ def test_a_flight_that_never_lights_an_engine_spends_nothing():
                       target_altitude=0.0, duration=300.0, steps_per_second=10,
                       latitude_deg=0.0, azimuth_deg=0.0)
     telemetry = mission.run()
-    budget = velocity_budget(telemetry)
+    budget = velocity_budget(telemetry, mission.omega)
 
     assert not telemetry.thrust.any()
     assert (budget.gravity, budget.aerodynamic, budget.steering) == (0.0, 0.0, 0.0)
@@ -209,6 +209,31 @@ def test_halving_the_step_barely_moves_the_answer():
 
     assert abs(coarse.final_state.inertial_speed - fine.final_state.inertial_speed) < 0.05
     assert abs(coarse.orbit.apogee_altitude - fine.orbit.apogee_altitude) < 100.0
+
+
+def test_the_velocity_budget_adds_back_up():
+    """What the propellant delivered is what the flight spent.
+
+    The along-track equation loses `(g - omega^2 r) sin gamma` to gravity and
+    `D/m` to the air, and nothing else - the guided phase puts the whole of the
+    thrust along the velocity, and the steering loss is a price recovered
+    afterwards rather than something the trajectory pays. So the ideal velocity
+    delivered over the powered flight, less those two, is the speed reached.
+
+    It only closes if both loss integrands are projected in the frame the
+    equations are written in. Taking the centripetal term from the inertial
+    speed instead leaves Falcon 9 out by some 240 m/s and H3 by 820.
+    """
+    for name in ('f9', 'a62', 'h3'):
+        mission = load_mission(f'config/mission.{name}.yaml')
+        telemetry = mission.run()
+        budget = velocity_budget(telemetry, mission.omega)
+
+        end = int(np.flatnonzero(telemetry.thrust > 0.0)[-1]) + 1
+        delivered = float(np.trapezoid(telemetry.thrust[:end] / telemetry.mass[:end],
+                                       telemetry.t[:end]))
+        spent = budget.gravity + budget.aerodynamic + telemetry.speed[end - 1]
+        assert abs(delivered - spent) < 5.0, name
 
 
 def test_launching_east_gains_the_rotation_of_the_earth():

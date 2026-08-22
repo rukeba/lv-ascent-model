@@ -27,6 +27,10 @@ class PitchProgramme:
 
     @staticmethod
     def _grid(end_time: float) -> np.ndarray:
+        # two points at least: the tabulation reads its step off the first pair
+        if not end_time >= GRID_STEP:
+            raise ValueError(f'a programme has to last at least one grid step '
+                             f'of {GRID_STEP:g} s, and not {end_time:g} s')
         grid = np.arange(0.0, end_time + GRID_STEP, GRID_STEP)
         return grid[grid <= end_time + 1e-9]
 
