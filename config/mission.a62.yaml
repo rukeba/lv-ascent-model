@@ -1,0 +1,25 @@
+# Ariane 62 into an 800 km circular orbit from Kourou, flying a bilinear
+# tangent programme.
+vehicle: lv.a62
+
+target_altitude: 800_000
+
+launch_site:
+  latitude: 5.2    # Guiana Space Centre, ELA-4
+  azimuth: 90
+
+pitch_programme:
+  type: bilinear-tangent
+  t1: 25.0
+  a: -0.4759856552
+  b: 550.8311338
+  c: 1.981749611
+  te: 1182.243139
+
+cutoff:
+  type: time
+  time: 1182.243139
+
+simulation:
+  duration: 1250
+  steps_per_second: 10

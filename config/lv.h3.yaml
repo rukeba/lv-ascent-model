@@ -1,0 +1,67 @@
+# H3-22S: LE-9 core with two SRB-3 solid boosters. As with Ariane, the boosted
+# phase is one entry and the core alone continues as the next, and each entry
+# holds only what it adds to the stack: the first is the two boosters plus the
+# core propellant spent before separation, the second the core itself.
+name: H3-22S
+
+drag_coefficient:
+  0.0: 0.16
+  0.7: 0.16
+  0.9: 0.22
+  1.0: 0.40
+  1.2: 0.48
+  1.5: 0.38
+  2.0: 0.30
+  3.0: 0.25
+  5.0: 0.20
+
+design_dynamic_pressure: 35_000
+
+stages:
+  - name: core and two boosters
+    ignition_time: 0
+    dry_mass: 21_200           # 2 x ~10.6 t of booster structure: all that is dropped
+    propellant_mass: 215_077   # 2 x ~66 t, and the 83.077 t of core spent by then
+    # the mean thrust over the boosted phase: at a constant thrust this is what
+    # empties that propellant in the 120 s the boosters burn for
+    thrust_sea_level: 7_255_000
+    thrust_vacuum: 7_600_000
+    isp_sea_level: 426
+    isp_vacuum: 426
+    length: 33.0
+    diameter: 10.0             # core and boosters side by side
+
+  - name: core after booster separation
+    ignition_time: 120
+    dry_mass: 23_200           # the core structure, carried from lift-off
+    propellant_mass: 141_923   # what is left of the ~225 t core tank
+    # equal, as the equal specific impulses below say: this stage only ever
+    # burns in near-vacuum. A vacuum figure below the sea-level one would make
+    # the nozzle area negative and the thrust rise with ambient pressure
+    thrust_sea_level: 2_942_000
+    thrust_vacuum: 2_942_000
+    isp_sea_level: 426
+    isp_vacuum: 426
+    length: 33.0
+    diameter: 5.27
+
+  - name: second stage
+    ignition_time: 325
+    dry_mass: 3_000           # the stage alone: the satellite is the entry below
+    propellant_mass: 23_000
+    thrust_sea_level: 137_000
+    thrust_vacuum: 137_000
+    isp_sea_level: 426
+    isp_vacuum: 448
+    length: 12.6
+    diameter: 5.27
+
+  - name: payload
+    ignition_time: 1724
+    dry_mass: 4_000
+    propellant_mass: 0
+    thrust_sea_level: 0
+    thrust_vacuum: 0
+    isp_vacuum: 0
+    length: 3.5
+    diameter: 3.0

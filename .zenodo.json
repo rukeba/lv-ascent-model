@@ -1,0 +1,23 @@
+{
+  "title": "lv-ascent-model: a two-dimensional ascent model of a launch vehicle with parametric pitch programmes",
+  "description": "<p>A model of the powered ascent of a launch vehicle from lift-off to orbit insertion. The vehicle flies a prescribed pitch programme; the model integrates the resulting trajectory, reports the orbit reached, and accounts for the velocity spent against gravity, against the air, and on steering the thrust away from the velocity in order to fly the programme.</p><p>Three pitch programmes are implemented &mdash; a five-phase turn, a turn parametrised by the vertical share of the velocity, and a bilinear tangent &mdash; and three launch vehicles are configured: Falcon 9, Ariane 62 and H3-22S. A worked example reproduces the published velocity budget of the three programmes to within 0.05 m/s.</p>",
+  "upload_type": "software",
+  "access_right": "open",
+  "license": "mit-license",
+  "version": "1.0.0",
+  "language": "eng",
+  "creators": [
+    {
+      "name": "Keba, Ruslan",
+      "affiliation": "Oles Honchar Dnipro National University"
+    }
+  ],
+  "keywords": [
+    "launch vehicle",
+    "ascent trajectory",
+    "pitch programme",
+    "steering loss",
+    "trajectory optimisation",
+    "astrodynamics"
+  ]
+}

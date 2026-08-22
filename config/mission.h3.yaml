@@ -1,0 +1,25 @@
+# H3-22S into a 1200 km circular orbit from Tanegashima, flying the five-phase
+# programme. The programme ends just before cut-off; over that last stretch the
+# vehicle holds the attitude it reached.
+vehicle: lv.h3
+
+target_altitude: 1_200_000
+
+launch_site:
+  latitude: 30.4   # Tanegashima Space Center, LA-Y
+  azimuth: 90
+
+pitch_programme:
+  type: five-phase
+  t1: 20.0
+  t4: 706.1083083
+  k2: 0.103230
+  k3: 0.6118929464
+
+cutoff:
+  type: time
+  time: 706.8083083
+
+simulation:
+  duration: 1100
+  steps_per_second: 10
