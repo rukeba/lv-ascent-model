@@ -94,8 +94,12 @@ class LaunchVehicle:
         return stack - min(propellant_burned, stage.propellant_mass)
 
     def drag(self, air: Air, altitude: float, speed: float) -> float:
-        """Aerodynamic drag, N. Taken as zero above 100 km."""
-        if altitude > 100_000:
+        """Aerodynamic drag, N. Taken as zero above 100 km.
+
+        A vehicle given no drag profile flies without drag, rather than through
+        an interpolation with nothing to interpolate between.
+        """
+        if altitude > 100_000 or not len(self._mach):
             return 0.0
         mach = speed / air.speed_of_sound
         cd = float(np.interp(mach, self._mach, self._cd))

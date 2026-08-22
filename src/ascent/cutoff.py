@@ -24,6 +24,16 @@ class Cutoff:
     def reset(self) -> None:
         """Forget anything held from an earlier flight. Called before each run."""
 
+    def fired(self, altitude: float, inertial_speed: float) -> bool:
+        """Whether a policy that watches the flight has fired at this state.
+
+        Asked at trial points that are never reached, so it answers without
+        being told. A policy that knows its own instant watches nothing, and
+        that instant is already a bound of the piece being integrated, so a
+        crossing of its can never fall strictly inside one: it answers no.
+        """
+        return False
+
     def describe(self) -> str:
         return 'no cut-off'
 
@@ -51,6 +61,12 @@ class LatchedCutoff(Cutoff):
     there, on a stage that has propellant left, which is not what a cut-off
     means. So the first crossing is remembered instead.
 
+    Where the threshold is crossed is not known before the step, so it cannot
+    be put on the bounds of one the way a scheduled cut-off can. `Mission`
+    solves for the instant instead and cuts the step there, asking `reached`
+    at trial points - which is why the question of whether the threshold is met
+    is kept apart from the act of firing on it.
+
     Holding that state is safe because the throttle is read once per piece of a
     step, before the piece is integrated and in flight order - never at a trial
     point of the scheme, which is where remembering anything would quietly cost
@@ -64,8 +80,11 @@ class LatchedCutoff(Cutoff):
         self._cut = False
 
     def throttle(self, t: float, altitude: float, inertial_speed: float) -> float:
-        self._cut = self._cut or self.reached(altitude, inertial_speed)
+        self._cut = self.fired(altitude, inertial_speed)
         return 0.0 if self._cut else 1.0
+
+    def fired(self, altitude: float, inertial_speed: float) -> bool:
+        return self._cut or self.reached(altitude, inertial_speed)
 
     def reached(self, altitude: float, inertial_speed: float) -> bool:
         """Whether the threshold is met at this instant, taken on its own."""

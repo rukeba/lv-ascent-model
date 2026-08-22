@@ -19,7 +19,7 @@ around 60 m/s^2 an event misplaced by one step at 10 Hz is worth several m/s.
 """
 
 import math
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 
 from .atmosphere import Air, air_at, gravity
 from .constants import EARTH_OMEGA, EARTH_RADIUS
@@ -59,6 +59,8 @@ class Mission:
     # a tank running dry is solved to this share of its capacity, in this many passes
     EXHAUSTION_TOLERANCE = 1e-12
     EXHAUSTION_PASSES = 8
+    # halvings of the step a watched cut-off threshold is bracketed by
+    CUT_OFF_PASSES = 40
 
     def __init__(self, vehicle: LaunchVehicle, pitch_programme: PitchProgramme,
                  cutoff: Cutoff, target_altitude: float, duration: float,
@@ -125,10 +127,19 @@ class Mission:
         return [(a, b) for a, b in zip(bounds, bounds[1:]) if b > a]
 
     def _integrate(self, begin: float, end: float) -> None:
-        """Advance one smooth piece and commit the propellant it burned."""
+        """Advance one smooth piece, cutting it again at an event inside it.
+
+        Two events cannot be put on the bounds beforehand, because where they
+        fall is what the integration is for: a tank running dry, and a
+        threshold that a cut-off policy watches. Either is solved for, the
+        piece is cut there, and what is left of it is advanced as a piece of
+        its own - with the stage, the throttle and the tank all read again.
+        """
         index, stage = self.vehicle.active_stage(begin)
-        # the throttle is read in the middle: the bounds sit exactly on the
-        # switching instants, where the setting is ambiguous
+        # the throttle is read at the middle of the piece, from the state at
+        # its start: the bounds sit exactly on the switching instant of a
+        # scheduled cut-off, where the setting is ambiguous, while a watched
+        # threshold is a question about the state the piece begins in
         middle = 0.5 * (begin + end)
         capacity = stage.propellant_mass
         segment = Segment(stage, index, self._probe_throttle(middle),
@@ -141,30 +152,72 @@ class Mission:
 
         y = (*self._y, self._burned[index])
         advanced = rk4_step(rates, begin, y, end - begin)
+        event, emptied = self._event_within(rates, y, begin, end, advanced,
+                                            segment, capacity)
 
+        if event is None:
+            self._y = advanced[:-1]
+            self._burned[index] = min(advanced[-1], capacity)
+            return
+
+        at_event = rk4_step(rates, begin, y, event - begin)
+        self._y = at_event[:-1]
+        # a tank solved dry is dry to the last bit: what is left of the step
+        # must not find a drop in it and light the engine again
+        self._burned[index] = capacity if emptied else min(at_event[-1], capacity)
+        self._integrate(event, end)
+
+    def _event_within(self, rates, y, begin: float, end: float, advanced,
+                      segment: Segment, capacity: float) -> tuple[float | None, bool]:
+        """The first instant strictly inside the piece at which it stops holding."""
+        dry = cut = None
         # the propellant the piece would take is allowed to run past the tank,
         # because that overshoot is the only thing that says the tank empties
         # inside the piece and where
         if y[-1] < capacity < advanced[-1]:
             dry = self._solve_exhaustion(rates, y, begin, end, advanced[-1], capacity)
-            at_dry = rk4_step(rates, begin, y, dry - begin)
-            spent = replace(segment, burning=False)
-            def coasting(t, y):
-                return derivatives(t, y, spent)
-            advanced = rk4_step(coasting, dry, (*at_dry[:-1], capacity), end - dry)
+        if segment.throttle > 0 and self.cutoff.fired(*self._watched(end, advanced)):
+            cut = self._solve_cut_off(rates, y, begin, end)
 
-        self._y = advanced[:-1]
-        self._burned[index] = min(advanced[-1], capacity)
+        inside = [(t, t is dry) for t in (dry, cut) if t is not None and begin < t < end]
+        return min(inside) if inside else (None, False)
 
-    def _probe_throttle(self, t: float) -> float:
+    def _watched(self, t: float, y) -> tuple[float, float]:
+        """Altitude and inertial speed at a point of the trajectory.
+
+        The two quantities a cut-off policy can watch, read off a state handed
+        in rather than off the flight, so that the instant a threshold is met
+        can be solved for inside a step.
+        """
         if self._guided:
-            speed, radius, _ = self._y
+            speed, radius = y[0], y[1]
             angle = self.pitch_programme.sample(t)[0]
             horizontal, vertical = speed * math.cos(angle), speed * math.sin(angle)
         else:
-            radius, _, vertical, horizontal = self._y
-        inertial = math.hypot(horizontal + self.omega * radius, vertical)
-        return self.cutoff.throttle(t, radius - EARTH_RADIUS, inertial)
+            radius, _, vertical, horizontal = y[:4]
+        return (radius - EARTH_RADIUS,
+                math.hypot(horizontal + self.omega * radius, vertical))
+
+    def _probe_throttle(self, t: float) -> float:
+        return self.cutoff.throttle(t, *self._watched(t, self._y))
+
+    def _solve_cut_off(self, rates, y, begin: float, end: float) -> float:
+        """The instant inside the piece at which a watched threshold is met.
+
+        Bisection rather than the regula falsi a dry tank gets: a policy says
+        whether it has fired, not by how much, so there is no residual to
+        interpolate on. It costs a handful of steps once in a flight, and it
+        takes the instant far below the precision the trajectory is carried at.
+        """
+        low, high = begin, end
+        for _ in range(self.CUT_OFF_PASSES):
+            middle = 0.5 * (low + high)
+            trial = rk4_step(rates, begin, y, middle - begin)
+            if self.cutoff.fired(*self._watched(middle, trial)):
+                high = middle
+            else:
+                low = middle
+        return high
 
     def _solve_exhaustion(self, rates, y, begin: float, end: float,
                           burned_at_end: float, capacity: float) -> float:

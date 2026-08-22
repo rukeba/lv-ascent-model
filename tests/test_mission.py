@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 
 from ascent import (CutoffAtInertialSpeed, CutoffAtTime, LaunchVehicle, Mission,
-                    Stage, load_mission)
+                    Stage, load_mission, velocity_budget)
 from ascent.constants import EARTH_RADIUS, STANDARD_GRAVITY
 from ascent.pitch import PitchProgramme
 
@@ -145,16 +145,56 @@ def test_a_speed_cut_off_fires_once_and_stays_fired():
                       latitude_deg=0.0, azimuth_deg=0.0)
     telemetry = mission.run()
 
-    # the flight has to actually fall back through the threshold, or the test
-    # would pass on a vehicle that never gets the chance to relight
-    assert telemetry.inertial_speed.max() >= threshold
-    assert telemetry.inertial_speed[-1] < threshold
-    # and it has to have propellant left to relight on
+    # the flight has to fall back through the threshold, or the test would pass
+    # on a vehicle that never gets the chance to relight, and it has to have
+    # propellant left to relight on
+    assert telemetry.inertial_speed[-1] < threshold - 100.0
     assert telemetry.mass[-1] > vehicle.stages[0].dry_mass
 
     powered = np.flatnonzero(telemetry.thrust > 0.0)
     assert len(powered)
     assert np.array_equal(powered, np.arange(powered[0], powered[-1] + 1))
+
+
+def test_a_speed_cut_off_is_placed_at_the_crossing():
+    """A watched threshold is an event too, and cannot be put on the bounds.
+
+    Where the speed crosses is not known until the step has been taken, so the
+    step cannot be cut there in advance the way it is for a scheduled cut-off.
+    Solved for instead: the burn ends at the crossing rather than at the next
+    step of the grid, which under 20 m/s^2 is worth some 2 m/s of overshoot.
+    """
+    threshold = 1_000.0
+    vehicle = vacuum_vehicle(propellant=9_000.0, thrust=300_000.0)
+    mission = Mission(vehicle, Vertical(200.0), CutoffAtInertialSpeed(threshold),
+                      target_altitude=0.0, duration=120.0, steps_per_second=10,
+                      latitude_deg=0.0, azimuth_deg=0.0)
+    telemetry = mission.run()
+
+    # never past the threshold - the burn stops exactly on it
+    assert telemetry.inertial_speed.max() <= threshold + 1e-6
+    # and not short of it by more than the gravity of the part of a step left
+    # over, which is what says the crossing was solved for and not rounded down
+    assert telemetry.inertial_speed.max() > threshold - 1.0
+
+
+def test_a_flight_that_never_lights_an_engine_spends_nothing():
+    """A coast is not a loss.
+
+    The budget accounts for the velocity the propellant paid for, and a flight
+    that burns none of it has nothing to account for. Integrating the whole
+    flight instead would report the gravity and the drag of the coast as
+    losses, and its last instant as a burnout that never happened.
+    """
+    mission = Mission(vacuum_vehicle(), Horizontal(300.0), CutoffAtTime(0.0),
+                      target_altitude=0.0, duration=300.0, steps_per_second=10,
+                      latitude_deg=0.0, azimuth_deg=0.0)
+    telemetry = mission.run()
+    budget = velocity_budget(telemetry)
+
+    assert not telemetry.thrust.any()
+    assert (budget.gravity, budget.aerodynamic, budget.steering) == (0.0, 0.0, 0.0)
+    assert budget.burnout_time == 0.0
 
 
 def test_halving_the_step_barely_moves_the_answer():
