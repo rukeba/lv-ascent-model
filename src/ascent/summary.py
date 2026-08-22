@@ -16,7 +16,7 @@ LABEL_WIDTH = 24
 
 
 def summarise(mission: Mission, telemetry: Telemetry) -> str:
-    budget = velocity_budget(telemetry)
+    budget = velocity_budget(telemetry, mission.omega)
     cut_off = telemetry.at(budget.burnout_time)
     vehicle = mission.vehicle
     first_stage = vehicle.stages[0]
@@ -84,8 +84,33 @@ def summarise(mission: Mission, telemetry: Telemetry) -> str:
         ('aerodynamic loss', f'{budget.aerodynamic:.1f} m/s'),
         ('steering loss', f'{budget.steering:.1f} m/s'),
         ('total', f'{budget.total:.1f} m/s'),
+        ('steering demand', _demand(telemetry, mission.pitch_programme.end_time)),
     ])
     return '\n'.join(lines)
+
+
+def _demand(telemetry: Telemetry, guided_until: float) -> str:
+    """How hard the programme leaned on the guidance, and whether it could.
+
+    The steering loss prices the deflection that holding the programme would
+    take, as the sine of that deflection. Where the sine passes one there is no
+    such deflection - the thrust cannot hold the programme - and the price
+    saturates at the whole of the thrust. Two sets that both saturate cannot be
+    told apart by their steering loss, so the share that saturates says how far
+    the figure above is a measurement at all.
+    """
+    # only while the programme runs: there is no demand to meet once the
+    # vehicle holds the attitude it reached, and rows past the handover would
+    # dilute the share below with zeros that mean nothing
+    guided = (telemetry.thrust > 0.0) & (telemetry.t <= guided_until)
+    demand = np.abs(telemetry.steering_demand[guided])
+    if not len(demand):
+        return 'no powered flight under guidance'
+    saturated = float(np.mean(demand >= 1.0))
+    peak = f'peak {demand.max():.3f} of the 1.0 the thrust can give'
+    if not saturated:
+        return peak
+    return f'{peak}, unreachable over {saturated * 100:.0f}% of the burn'
 
 
 def _block(lines: list[str], title: str, rows: list[tuple[str, str]]) -> None:

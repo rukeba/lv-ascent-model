@@ -40,3 +40,22 @@ def test_escape_trajectory_is_not_closed():
     assert not orbit.is_closed
     assert orbit.apogee_altitude is None
     assert orbit.period is None
+
+
+def test_circularising_does_not_care_which_way_round():
+    """The impulse that circularises an orbit has no direction in it.
+
+    Energy and eccentricity are built from squares and do not know whether the
+    vehicle is going east or west, and neither should this: the same ellipse
+    flown backwards needs the same impulse at apogee. Taken from the signed
+    angular momentum it came back as the sum of the two speeds instead of the
+    difference, which for a low orbit is out by some fifteen kilometres a second.
+    """
+    radius = EARTH_RADIUS + 200_000
+    east = orbit_from_state(radius, 0.95 * circular_velocity(200_000), 0.0)
+    west = orbit_from_state(radius, -0.95 * circular_velocity(200_000), 0.0)
+
+    assert east.apogee_altitude == west.apogee_altitude
+    assert east.perigee_altitude == west.perigee_altitude
+    assert east.circularisation_dv > 0.0
+    assert west.circularisation_dv == east.circularisation_dv

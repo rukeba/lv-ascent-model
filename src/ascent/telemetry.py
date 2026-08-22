@@ -32,6 +32,7 @@ COLUMNS = (
     ('drag', 'N', lambda s: s.drag),
     ('dynamic_pressure', 'Pa', lambda s: s.dynamic_pressure),
     ('steering_angle', 'deg', lambda s: s.steering_angle * DEGREES),
+    ('steering_demand', '', lambda s: s.steering_demand),
     ('steering_loss', 'm/s', lambda s: s.steering_loss),
     ('stage', '', lambda s: s.stage),
 )
@@ -63,7 +64,14 @@ class Telemetry:
 
     def at(self, t: float) -> int:
         """Index of the last row recorded at or before the given instant."""
-        return int(np.searchsorted(self.t, t + 1e-9, side='right') - 1)
+        index = int(np.searchsorted(self.t, t + 1e-9, side='right') - 1)
+        if index < 0:
+            # an index of -1 is a valid row and the wrong one: the last of the
+            # flight, handed back for an instant before its first
+            raise ValueError(
+                f'nothing was recorded at or before t = {t:g} s'
+                + (f'; the flight starts at {self.t[0]:g} s' if len(self) else ''))
+        return index
 
     def write_csv(self, path: str) -> None:
         with open(path, 'w', newline='', encoding='utf-8') as handle:

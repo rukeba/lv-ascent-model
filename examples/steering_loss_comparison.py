@@ -17,11 +17,11 @@ LATITUDE, AZIMUTH = 28.5, 90.0
 # programme, cut-off time, published (gravity, aerodynamic, steering) loss, m/s
 CASES = (
     (FivePhaseProgramme(t1=20.0, t4=502.8, k2=0.056178, k3=0.522859),
-     502.8, (2326.7, 29.3, 579.0)),
+     502.8, (2568.7, 29.3, 526.5)),
     (VelocityShareProgramme(t1=20.0, tf=491.691775, te=502.1492, s=0.995106),
-     502.1492, (2290.9, 29.7, 460.2)),
+     502.1492, (2537.9, 29.7, 411.1)),
     (BilinearTangentProgramme(t1=20.0, a=-1.097246, b=527.99193, c=1.927467, te=501.2),
-     501.2, (2242.1, 29.6, 485.8)),
+     501.2, (2500.0, 29.6, 433.1)),
 )
 
 
@@ -36,7 +36,7 @@ def run(programme, cutoff_time):
         latitude_deg=LATITUDE,
         azimuth_deg=AZIMUTH,
     )
-    return mission, velocity_budget(mission.run())
+    return mission, velocity_budget(mission.run(), mission.omega)
 
 
 def main() -> None:

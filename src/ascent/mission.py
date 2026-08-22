@@ -49,6 +49,8 @@ class Segment:
     throttle: float
     # attitude flown once the programme has ended, rad; None while it runs
     attitude: float | None
+    # False once the tank is dry: the piece is flown on what the vehicle has
+    burning: bool = True
 
 
 class Mission:
@@ -57,6 +59,9 @@ class Mission:
     # a tank running dry is solved to this share of its capacity, in this many passes
     EXHAUSTION_TOLERANCE = 1e-12
     EXHAUSTION_PASSES = 8
+    # a watched threshold is looked for at this many points, then halved down
+    CUT_OFF_SAMPLES = 8
+    CUT_OFF_PASSES = 40
 
     def __init__(self, vehicle: LaunchVehicle, pitch_programme: PitchProgramme,
                  cutoff: Cutoff, target_altitude: float, duration: float,
@@ -76,9 +81,11 @@ class Mission:
         """Fly the mission and return the recorded flight."""
         self.dt = 1.0 / self.steps_per_second
         self.omega = rotation_in_plane(self.latitude_deg, self.azimuth_deg)
+        self.cutoff.reset()
         self.telemetry = Telemetry()
         self._burned = [0.0] * len(self.vehicle.stages)
         self._steering_loss = 0.0
+        self._steering_rate, self._was_powered = 0.0, True
         self._throttle = 1.0
         self._attitude = None
         self._guided = True
@@ -86,7 +93,14 @@ class Mission:
         self._y = (0.0, EARTH_RADIUS, 0.0)
 
         state = FlightState(mass=self.vehicle.lift_off_mass)
-        state.inertial_speed = self.omega * EARTH_RADIUS
+        # a magnitude, as at every other instant: omega is negative to the west
+        state.inertial_speed = abs(self.omega) * EARTH_RADIUS
+        # the engine is alight on the pad and the first row has to say so: the
+        # budget reads the powered part of the flight off this column. A first
+        # stage with nothing in its tank is not alight, whatever the policy says
+        throttle = min(1.0, self._probe_throttle(0.0))
+        if self.vehicle.stages[0].propellant_mass > 0.0:
+            state.thrust = self.vehicle.stages[0].thrust(air_at(0.0).pressure) * throttle
         self.telemetry.record(state)
 
         for step in range(int(round(self.duration * self.steps_per_second))):
@@ -122,12 +136,20 @@ class Mission:
         return [(a, b) for a, b in zip(bounds, bounds[1:]) if b > a]
 
     def _integrate(self, begin: float, end: float) -> None:
-        """Advance one smooth piece and commit the propellant it burned."""
+        """Advance one smooth piece, cutting it again at an event inside it.
+
+        A tank running dry and a watched cut-off threshold cannot be put on the
+        bounds beforehand: where they fall is what the integration is for. Each
+        is solved for, the piece cut there, and the rest advanced as a piece of
+        its own, with stage, throttle and tank all read again.
+        """
         index, stage = self.vehicle.active_stage(begin)
-        # the throttle is read in the middle: the bounds sit exactly on the
-        # switching instants, where the setting is ambiguous
-        middle = 0.5 * (begin + end)
-        segment = Segment(stage, index, self._probe_throttle(middle), self._attitude)
+        # read at the start of the piece, instant and state alike: no piece
+        # straddles a scheduled switching instant, and a watched threshold asks
+        # about the state the piece begins in
+        capacity = stage.propellant_mass
+        segment = Segment(stage, index, self._probe_throttle(begin),
+                          self._attitude, self._burned[index] < capacity)
         self._throttle = segment.throttle
 
         derivatives = self._guided_rates if self._guided else self._free_rates
@@ -136,25 +158,82 @@ class Mission:
 
         y = (*self._y, self._burned[index])
         advanced = rk4_step(rates, begin, y, end - begin)
+        event, emptied = self._event_within(rates, y, begin, end, advanced,
+                                            segment, capacity)
 
-        capacity = stage.propellant_mass
+        if event is None:
+            self._y = advanced[:-1]
+            self._burned[index] = min(advanced[-1], capacity)
+            return
+
+        at_event = rk4_step(rates, begin, y, event - begin)
+        self._y = at_event[:-1]
+        # dry to the last bit, or the rest of the step relights on the remainder
+        self._burned[index] = capacity if emptied else min(at_event[-1], capacity)
+        self._integrate(event, end)
+
+    def _event_within(self, rates, y, begin: float, end: float, advanced,
+                      segment: Segment, capacity: float) -> tuple[float | None, bool]:
+        """The first instant strictly inside the piece at which it stops holding."""
+        dry = cut = None
+        # the burn is allowed to run past the tank: that overshoot is the only
+        # thing that says the tank empties inside the piece, and where
         if y[-1] < capacity < advanced[-1]:
             dry = self._solve_exhaustion(rates, y, begin, end, advanced[-1], capacity)
-            at_dry = rk4_step(rates, begin, y, dry - begin)
-            advanced = rk4_step(rates, dry, (*at_dry[:-1], capacity), end - dry)
+        # watched whether or not this piece is under thrust: a threshold that
+        # is crossed and fallen back through during a coast would otherwise
+        # never fire, and a later stage would light against it
+        if self.cutoff.watches:
+            cut = self._solve_cut_off(rates, y, begin, end)
 
-        self._y = advanced[:-1]
-        self._burned[index] = min(advanced[-1], capacity)
+        inside = [(t, t is dry) for t in (dry, cut) if t is not None and begin < t < end]
+        return min(inside) if inside else (None, False)
 
-    def _probe_throttle(self, t: float) -> float:
+    def _watched(self, t: float, y) -> tuple[float, float]:
+        """Altitude and inertial speed at a trial point, for a cut-off to read.
+
+        Off a state handed in rather than off the flight, so that the instant a
+        threshold is met can be solved for inside a step.
+        """
         if self._guided:
-            speed, radius, _ = self._y
+            speed, radius = y[0], y[1]
             angle = self.pitch_programme.sample(t)[0]
             horizontal, vertical = speed * math.cos(angle), speed * math.sin(angle)
         else:
-            radius, _, vertical, horizontal = self._y
-        inertial = math.hypot(horizontal + self.omega * radius, vertical)
-        return self.cutoff.throttle(t, radius - EARTH_RADIUS, inertial)
+            radius, _, vertical, horizontal = y[:4]
+        return (radius - EARTH_RADIUS,
+                math.hypot(horizontal + self.omega * radius, vertical))
+
+    def _probe_throttle(self, t: float) -> float:
+        return self.cutoff.throttle(t, *self._watched(t, self._y))
+
+    def _solve_cut_off(self, rates, y, begin: float, end: float) -> float | None:
+        """The first instant inside the piece at which a watched threshold is met.
+
+        Walked rather than tested at the end alone: the inertial speed can rise
+        through a threshold and fall back under it inside one piece, near the
+        top of a lofted ascent, and the end would then show nothing. Bisection
+        rather than the regula falsi a dry tank gets, because a policy says
+        whether it has fired and not by how much. Only a watched policy pays.
+        """
+        low = begin
+        for i in range(1, self.CUT_OFF_SAMPLES + 1):
+            high = begin + (end - begin) * i / self.CUT_OFF_SAMPLES
+            trial = rk4_step(rates, begin, y, high - begin)
+            if self.cutoff.fired(*self._watched(high, trial)):
+                break
+            low = high
+        else:
+            return None
+
+        for _ in range(self.CUT_OFF_PASSES):
+            middle = 0.5 * (low + high)
+            trial = rk4_step(rates, begin, y, middle - begin)
+            if self.cutoff.fired(*self._watched(middle, trial)):
+                high = middle
+            else:
+                low = middle
+        return high
 
     def _solve_exhaustion(self, rates, y, begin: float, end: float,
                           burned_at_end: float, capacity: float) -> float:
@@ -188,9 +267,24 @@ class Mission:
 
         return min(max(dry, begin), end)
 
+    def _check_speed(self, t: float, speed: float) -> None:
+        """A magnitude has no sign to turn round.
+
+        Reported as a zero it would read as a vehicle at rest while its radius
+        went on falling, and the orbit at the end would be built out of that.
+        Asked at the handover as well, which can fall inside a step and hand
+        free flight a negative magnitude before anything else looks at it.
+        """
+        if speed < 0.0:
+            raise ValueError(
+                f'the vehicle has run out of speed against its programme at '
+                f't = {t:.1f} s ({speed:.1f} m/s). This pitch programme cannot '
+                f'be flown by this vehicle.')
+
     def _release_guidance(self, t: float) -> None:
         """Hand the vehicle over from the programme to free flight."""
         speed, radius, polar_angle = self._y
+        self._check_speed(t, speed)
         self._attitude = self.pitch_programme.sample(t)[0]
         self._y = (radius, polar_angle,
                    speed * math.sin(self._attitude),
@@ -211,9 +305,9 @@ class Mission:
         speed, radius, _, burned = y
         angle = self.pitch_programme.sample(t)[0]
         air = air_at(radius - EARTH_RADIUS)
-        mass = self.vehicle.mass(t, burned)
-        thrust, flow = self._propulsion(segment, air, burned)
-        drag = self.vehicle.drag(air, radius - EARTH_RADIUS, speed)
+        mass = self.vehicle.mass_on(segment.index, burned)
+        thrust, flow = self._propulsion(segment, air)
+        drag = self.vehicle.drag(air, radius - EARTH_RADIUS, speed, segment.index)
 
         acceleration = (thrust - drag) / mass \
             - (gravity(radius) - self.omega**2 * radius) * math.sin(angle)
@@ -232,9 +326,9 @@ class Mission:
         radius, _, vertical, horizontal, burned = y
         speed = math.hypot(vertical, horizontal)
         air = air_at(radius - EARTH_RADIUS)
-        mass = self.vehicle.mass(t, burned)
-        thrust, flow = self._propulsion(segment, air, burned)
-        drag = self.vehicle.drag(air, radius - EARTH_RADIUS, speed)
+        mass = self.vehicle.mass_on(segment.index, burned)
+        thrust, flow = self._propulsion(segment, air)
+        drag = self.vehicle.drag(air, radius - EARTH_RADIUS, speed, segment.index)
 
         axial = (thrust - drag) / mass
         omega = self.omega
@@ -245,13 +339,15 @@ class Mission:
             - vertical * horizontal / radius - 2.0 * omega * vertical
         return (vertical, horizontal / radius, radial, tangential, flow)
 
-    def _propulsion(self, segment: Segment, air: Air, burned: float) -> tuple[float, float]:
-        """Thrust (N) and propellant flow (kg/s) at a trial point.
+    def _propulsion(self, segment: Segment, air: Air) -> tuple[float, float]:
+        """Thrust (N) and propellant flow (kg/s) over one piece of a step.
 
-        Both fall to zero once the tank is empty, so a trial evaluation can
-        never burn propellant that is not there.
+        Whether the tank has anything in it is settled once for the piece and
+        never at a trial point: a trial point that overshoots the capacity
+        would drop the thrust in the middle of the step, which is the step
+        change that cutting the step at the dry instant exists to keep out.
         """
-        if segment.throttle <= 0 or burned >= segment.stage.propellant_mass:
+        if not segment.burning or segment.throttle <= 0:
             return 0.0, 0.0
         throttle = min(1.0, segment.throttle)
         return (segment.stage.thrust(air.pressure) * throttle,
@@ -265,7 +361,8 @@ class Mission:
         if self._guided:
             speed, radius, polar_angle = self._y
             angle, rate, _ = self.pitch_programme.sample(t)
-            state.speed = max(0.0, speed)
+            self._check_speed(t, speed)
+            state.speed = speed
             state.flight_path_angle, state.flight_path_rate = angle, rate
         else:
             radius, polar_angle, vertical, horizontal = self._y
@@ -274,13 +371,15 @@ class Mission:
             state.flight_path_rate = \
                 (state.flight_path_angle - previous.flight_path_angle) / self.dt
         # not finite covers the case this guard exists for: once anything goes
-        # to NaN the comparison below is false and the run would carry on
+        # to NaN every comparison here is false and the run would carry on
         # producing numbers that are not numbers
-        if not math.isfinite(radius) or radius <= 1.0:
+        if not math.isfinite(radius) or not math.isfinite(state.speed) \
+                or radius < EARTH_RADIUS - 1.0:
             raise ValueError(
                 f'the trajectory has left the model at t = {t:.1f} s '
-                f'(radius {radius}). This pitch programme cannot be flown by '
-                f'this vehicle.')
+                f'(altitude {radius - EARTH_RADIUS:.0f} m, speed '
+                f'{state.speed:.0f} m/s). This pitch programme cannot be flown '
+                f'by this vehicle.')
         state.radius = radius
         state.polar_angle = polar_angle
         state.inertial_speed = math.hypot(
@@ -292,7 +391,7 @@ class Mission:
         state.mass = self.vehicle.mass(t, self._burned[index])
         state.thrust = 0.0 if self._burned[index] >= stage.propellant_mass \
             else stage.thrust(air.pressure) * self._throttle
-        state.drag = self.vehicle.drag(air, state.altitude, state.speed)
+        state.drag = self.vehicle.drag(air, state.altitude, state.speed, index)
         state.dynamic_pressure = 0.0 if state.altitude > 100_000 \
             else 0.5 * air.density * state.speed**2
 
@@ -311,17 +410,29 @@ class Mission:
         figure of merit by which pitch programmes are compared.
         """
         radius, speed = state.radius, state.speed
-        # the centripetal balance is set by the inertial speed, and cancels
-        # gravity exactly once in orbit
-        effective_gravity = gravity(radius) - state.inertial_speed**2 / radius
-        # Coriolis appears on the trajectory normal as 2*omega*v and unloads
-        # the steering for a launch to the east
+        # the same projection the free-flight equations carry: gravity less the
+        # curvature of the path and the centrifugal term of the frame, with
+        # Coriolis on the normal as 2*omega*v, which unloads the steering for a
+        # launch to the east
+        effective_gravity = gravity(radius) - speed**2 / radius \
+            - self.omega**2 * radius
         normal = effective_gravity * math.cos(state.flight_path_angle) \
             - 2.0 * self.omega * speed
 
-        if state.thrust > 1.0:
+        powered = state.thrust > 1.0
+        rate = 0.0
+        if powered:
             demanded = (state.mass / state.thrust) \
                 * (speed * state.flight_path_rate + normal)
+            state.steering_demand = demanded
             state.steering_angle = math.asin(max(-1.0, min(1.0, demanded)))
-            self._steering_loss += (state.thrust / state.mass) \
-                * (1.0 - math.cos(state.steering_angle)) * self.dt
+            rate = (state.thrust / state.mass) * (1.0 - math.cos(state.steering_angle))
+        # over the interval, not off its end alone. An interval that begins
+        # unpowered and ends alight spans an ignition and was flown before it,
+        # so it carries nothing: averaging across that step change would charge
+        # the new stage for time the old one flew. Asked of the thrust rather
+        # than of the rate, which is legitimately zero wherever the programme
+        # happens to be a gravity turn
+        span = 0.0 if not self._was_powered else 0.5 * (self._steering_rate + rate)
+        self._steering_loss += span * self.dt
+        self._steering_rate, self._was_powered = rate, powered

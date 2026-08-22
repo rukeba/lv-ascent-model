@@ -33,6 +33,10 @@ class FlightState:
     dynamic_pressure: float = 0.0
     # thrust deflection the programme demands of the guidance, rad
     steering_angle: float = 0.0
+    # the sine of that deflection before it is clamped. Above one no such
+    # deflection exists: the thrust cannot hold the programme, and the loss
+    # below saturates at the whole of it
+    steering_demand: float = 0.0
     # velocity lost to that deflection since lift-off, m/s
     steering_loss: float = 0.0
     # index of the stage burning at this instant

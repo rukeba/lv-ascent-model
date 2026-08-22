@@ -12,13 +12,13 @@ launch_site:
 pitch_programme:
   type: five-phase
   t1: 20.0
-  t4: 992.2
+  t4: 706.1083083
   k2: 0.103230
-  k3: 0.291778
+  k3: 0.6118929464
 
 cutoff:
   type: time
-  time: 992.9
+  time: 706.8083083
 
 simulation:
   duration: 1100

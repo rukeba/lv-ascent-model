@@ -16,7 +16,7 @@ def name(spec):
 @pytest.mark.parametrize('spec', CATALOGUE, ids=[name(s) for s in CATALOGUE])
 def test_entry_flies_as_recorded(spec):
     mission = mission_from_spec(spec, 'config')
-    budget = velocity_budget(mission.run())
+    budget = velocity_budget(mission.run(), mission.omega)
     recorded = spec['reached']
     target = spec['target_altitude'] / 1000
 
