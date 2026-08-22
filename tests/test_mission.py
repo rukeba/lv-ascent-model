@@ -3,6 +3,7 @@
 import math
 
 import numpy as np
+import pytest
 
 from ascent import CutoffAtTime, LaunchVehicle, Mission, Stage, load_mission
 from ascent.constants import EARTH_RADIUS, STANDARD_GRAVITY
@@ -99,3 +100,32 @@ def test_configuration_files_load():
         assert mission.vehicle.stages
         assert mission.pitch_programme.end_time > 0
         assert mission.target_altitude > 0
+
+
+class StraightDown(PitchProgramme):
+    """Points the velocity at the ground for the whole flight."""
+
+    def __init__(self, end_time: float) -> None:
+        t = self._grid(end_time)
+        angle = np.full_like(t, -math.pi / 2)
+        zero = np.zeros_like(t)
+        self._tabulate(t, angle, zero, zero)
+
+    def describe(self) -> str:
+        return 'straight down'
+
+
+def test_a_trajectory_that_leaves_the_model_raises():
+    """Flying into the ground has to fail loudly rather than return numbers.
+
+    Once the radius passes through zero everything downstream is meaningless,
+    and a comparison against a NaN is false, so the run would otherwise carry
+    on quietly.
+    """
+    vehicle = vacuum_vehicle(dry=1_000.0, propellant=200_000.0, thrust=5_000_000.0)
+    mission = Mission(vehicle, StraightDown(400.0), CutoffAtTime(400.0),
+                      target_altitude=0.0, duration=400.0, steps_per_second=10,
+                      latitude_deg=0.0, azimuth_deg=0.0)
+
+    with pytest.raises(ValueError, match='left the model'):
+        mission.run()

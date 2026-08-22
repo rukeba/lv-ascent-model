@@ -273,6 +273,14 @@ class Mission:
             state.flight_path_angle = math.atan2(vertical, horizontal)
             state.flight_path_rate = \
                 (state.flight_path_angle - previous.flight_path_angle) / self.dt
+        # not finite covers the case this guard exists for: once anything goes
+        # to NaN the comparison below is false and the run would carry on
+        # producing numbers that are not numbers
+        if not math.isfinite(radius) or radius <= 1.0:
+            raise ValueError(
+                f'the trajectory has left the model at t = {t:.1f} s '
+                f'(radius {radius}). This pitch programme cannot be flown by '
+                f'this vehicle.')
         state.radius = radius
         state.polar_angle = polar_angle
         state.inertial_speed = math.hypot(

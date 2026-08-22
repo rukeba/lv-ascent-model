@@ -4,6 +4,10 @@ A mission file names the vehicle file next to it, the pitch programme and its
 parameters, when the engines stop and where the launch site is. Programme and
 cut-off types are looked up in the tables below, so a configuration file names
 a model rather than an import path.
+
+The catalogue holds the same kind of specification many times over - one per
+vehicle, programme and target altitude - so a solved parameter set can be
+flown without writing a mission file for it.
 """
 
 from pathlib import Path
@@ -33,13 +37,19 @@ CUTOFFS = {
 def load_mission(path: str | Path) -> Mission:
     """Read a mission file and everything it refers to."""
     path = Path(path)
-    spec = _read(path)
-    vehicle = load_vehicle(path.parent / f"{spec['vehicle']}.yaml")
+    return mission_from_spec(read_spec(path), path.parent)
+
+
+def mission_from_spec(spec: dict[str, Any], directory: str | Path) -> Mission:
+    """Build a mission from an already-read specification.
+
+    `directory` is where the vehicle file it names is looked for.
+    """
     site = spec.get('launch_site', {})
     simulation = spec.get('simulation', {})
 
     return Mission(
-        vehicle=vehicle,
+        vehicle=load_vehicle(Path(directory) / f"{spec['vehicle']}.yaml"),
         pitch_programme=_build(PITCH_PROGRAMMES, spec['pitch_programme'], 'pitch programme'),
         cutoff=_build(CUTOFFS, spec['cutoff'], 'cut-off'),
         target_altitude=spec['target_altitude'],
@@ -50,8 +60,31 @@ def load_mission(path: str | Path) -> Mission:
     )
 
 
+def load_catalogue(path: str | Path = 'config/catalogue.yaml') -> list[dict[str, Any]]:
+    """The solved parameter sets, as a list of mission specifications."""
+    return read_spec(Path(path))['missions']
+
+
+def find_in_catalogue(catalogue: list[dict[str, Any]], vehicle: str,
+                      target_altitude: float, programme: str) -> dict[str, Any]:
+    """The entry for one vehicle, target altitude and pitch programme."""
+    for spec in catalogue:
+        if (spec['vehicle'] == vehicle
+                and spec['target_altitude'] == target_altitude
+                and spec['pitch_programme']['type'] == programme):
+            return spec
+
+    available = sorted({entry['target_altitude'] / 1000 for entry in catalogue
+                        if entry['vehicle'] == vehicle
+                        and entry['pitch_programme']['type'] == programme})
+    raise LookupError(
+        f'no {programme} entry for {vehicle} at {target_altitude / 1000:g} km; '
+        + (f'altitudes available: {", ".join(f"{a:g}" for a in available)} km'
+           if available else f'no {programme} entries for {vehicle} at all'))
+
+
 def load_vehicle(path: str | Path) -> LaunchVehicle:
-    spec = _read(Path(path))
+    spec = read_spec(Path(path))
     return LaunchVehicle(
         name=spec['name'],
         stages=[Stage(**stage) for stage in spec['stages']],
@@ -69,7 +102,8 @@ def resolve(name: str, directory: str | Path = 'config') -> Path:
     return Path(directory) / f'mission.{name}.yaml'
 
 
-def _read(path: Path) -> dict[str, Any]:
+def read_spec(path: Path) -> dict[str, Any]:
+    """Read one YAML file, with a clear message when it is not there."""
     if not path.exists():
         raise FileNotFoundError(f'configuration file not found: {path}')
     with open(path, 'rb') as handle:

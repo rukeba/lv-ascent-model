@@ -20,6 +20,10 @@ uv run ascent f9                            # summary of the flight on the conso
 uv run ascent f9 --csv out/f9.csv           # and the whole trajectory as CSV
 uv run ascent f9 --report out/f9            # and an HTML report with plots
 uv run ascent config/mission.a62.yaml       # a mission file by path
+
+uv run ascent f9 --list                     # solved parameter sets on file
+uv run ascent f9 --altitude 650             # fly one of them
+uv run ascent f9 --altitude 650 --programme bilinear-tangent
 ```
 
 `f9`, `a62` and `h3` are short names for `config/mission.<name>.yaml`.
@@ -78,7 +82,7 @@ several m/s, far more than the error of the scheme itself.
 | `telemetry.py` | the recorded flight and its CSV form |
 | `summary.py` | the console summary |
 | `report.py` | the HTML report with plots |
-| `config.py` | building a mission from YAML |
+| `config.py` | building a mission from YAML, and reading the catalogue |
 | `cli.py` | the `ascent` command |
 | `constants.py` | constants of the Earth model |
 
@@ -119,6 +123,42 @@ The three programmes take these parameters:
 | `velocity-share` | `t1` end of the vertical rise, `tf` end of the turn, `te` end of the burn, `s` how much of the turn is done early |
 | `bilinear-tangent` | `t1` start of the turn, `a`, `b`, `c` of `tan(gamma) = (a*tau + b) / (c*tau + 1)`, `te` end of the programme |
 
+## Catalogue of solved parameter sets
+
+`config/catalogue.yaml` holds parameters that place each vehicle on a circular
+orbit of a given altitude - one set per vehicle, pitch programme and altitude,
+43 in all. Falcon 9 is covered from 400 to 700 km, Ariane 62 from 500 to
+1000 km and H3 from 1000 to 1200 km.
+
+Each set is defined by its terminal condition: perigee and apogee both at the
+target. The vertical rise `t1` is held at 20 s and the programme ends at
+cut-off. The five-phase turn holds `k2` at 0.05 as well: minimising the loss
+drives that share of the turn to zero, which is a step in pitch rate and
+defeats the point of the phase, so it is a design choice rather than something
+the terminal condition can settle - which leaves `k3` and the cut-off time,
+two unknowns for two conditions. The other two programmes keep a third
+parameter, and among the sets meeting the condition the search preferred the
+smaller steering loss. Every entry records the orbit it produces and what it
+costs, and `tests/test_catalogue.py` flies all of them to check that it still
+does.
+
+```sh
+uv run python examples/programme_catalogue.py    # the whole table
+```
+
+Two things about the file are worth knowing. The numbers are written to full
+precision because near a circular orbit the apogee answers to the cut-off time
+at some 80 km per second, and the bilinear tangent is more delicate still - its
+numerator cancels to almost nothing at the end of the turn, which is what makes
+the vehicle level out, so the last digits of `a` and `b` carry the terminal
+angle. And the table has gaps, which are properties of the programmes rather
+than unfinished work: the bilinear tangent reaches every orbit here, the
+velocity-share quartic stops at 600 km on Falcon 9, and the five-phase turn
+covers only the middle of each range, having no freedom left to stretch to the
+ends once `k2` is fixed. It places no orbit at all for Ariane 62, whose turn
+would have to be one continuous manoeuvre while the vehicle spends its last
+several hundred seconds on a low-thrust upper stage.
+
 ## Reproducing a published result
 
 `examples/steering_loss_comparison.py` flies Falcon 9 into a 500 km circular
@@ -154,7 +194,8 @@ which horizontal drag-free flight satisfies exactly, and against itself at half
 the step — how far a result moves under refinement is its numerical error, and
 a mis-timed event looks exactly like that. `tests/test_reference.py` pins the
 published velocity budget above to one decimal place, which ties the whole
-chain down at once.
+chain down at once, and `tests/test_catalogue.py` flies every catalogue entry
+against the orbit and the losses recorded for it.
 
 ## Citing
 
