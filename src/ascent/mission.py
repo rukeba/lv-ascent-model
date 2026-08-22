@@ -371,13 +371,15 @@ class Mission:
             state.flight_path_rate = \
                 (state.flight_path_angle - previous.flight_path_angle) / self.dt
         # not finite covers the case this guard exists for: once anything goes
-        # to NaN the comparison below is false and the run would carry on
+        # to NaN every comparison here is false and the run would carry on
         # producing numbers that are not numbers
-        if not math.isfinite(radius) or radius < EARTH_RADIUS - 1.0:
+        if not math.isfinite(radius) or not math.isfinite(state.speed) \
+                or radius < EARTH_RADIUS - 1.0:
             raise ValueError(
                 f'the trajectory has left the model at t = {t:.1f} s '
-                f'({radius - EARTH_RADIUS:.0f} m below the ground). This pitch '
-                f'programme cannot be flown by this vehicle.')
+                f'(altitude {radius - EARTH_RADIUS:.0f} m, speed '
+                f'{state.speed:.0f} m/s). This pitch programme cannot be flown '
+                f'by this vehicle.')
         state.radius = radius
         state.polar_angle = polar_angle
         state.inertial_speed = math.hypot(
