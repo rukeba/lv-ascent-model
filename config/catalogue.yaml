@@ -190,6 +190,22 @@ missions:
   # ---- a62 -----------------------------------------------------------
 
   - vehicle: lv.a62
+    target_altitude: 400_000
+    launch_site: {latitude: 5.2, azimuth: 90}
+    pitch_programme: {type: velocity-share, t1: 20.0, tf: 729.0215542278632, te: 1097.4476470377163, s: -3.01377626284875}
+    cutoff: {type: time, time: 1097.4476470377163}
+    simulation: {duration: 1200, steps_per_second: 10}
+    reached: {perigee_km: 399.97, apogee_km: 400.03, gravity_loss: 2694.5, aerodynamic_loss: 166.6, steering_loss: 514.2, total_loss: 3375.2}
+
+  - vehicle: lv.a62
+    target_altitude: 400_000
+    launch_site: {latitude: 5.2, azimuth: 90}
+    pitch_programme: {type: bilinear-tangent, t1: 20.0, a: -0.07423518503871922, b: 75.23447529820992, c: 0.726486454579934, te: 1033.4611405490468}
+    cutoff: {type: time, time: 1033.4611405490468}
+    simulation: {duration: 1140, steps_per_second: 10}
+    reached: {perigee_km: 399.96, apogee_km: 400.04, gravity_loss: 2042.8, aerodynamic_loss: 207.9, steering_loss: 431.4, total_loss: 2682.1}
+
+  - vehicle: lv.a62
     target_altitude: 500_000
     launch_site: {latitude: 5.2, azimuth: 90}
     pitch_programme: {type: velocity-share, t1: 20.0, tf: 740.2772985544462, te: 1135.0213208314958, s: -1.248083079188431}

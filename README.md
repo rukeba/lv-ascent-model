@@ -132,7 +132,7 @@ The three programmes take these parameters:
 
 `config/catalogue.yaml` holds parameters that place each vehicle on a circular
 orbit of a given altitude - one set per vehicle, pitch programme and altitude,
-40 in all. Falcon 9 is covered from 400 to 700 km, Ariane 62 from 500 to
+42 in all. Falcon 9 is covered from 400 to 700 km, Ariane 62 from 400 to
 900 km and H3 from 1000 to 1200 km.
 
 Each set is defined by its terminal condition: perigee and apogee both at the
