@@ -4,6 +4,7 @@ Not needed to run a mission - it is what makes one readable. The numbers come
 from the same summary the command line prints, so the two can never disagree.
 """
 
+import html
 from pathlib import Path
 
 import matplotlib
@@ -44,9 +45,12 @@ def write_report(mission: Mission, telemetry: Telemetry, directory: str | Path) 
                        for name, title in figures)
 
     path = directory / 'index.html'
+    # the vehicle name and the description of the programme come from a
+    # configuration file, and go into the page as text rather than as markup
     path.write_text(_PAGE.format(
-        title=f'{mission.vehicle.name} to {mission.target_altitude / 1000:g} km',
-        summary=summarise(mission, telemetry),
+        title=html.escape(f'{mission.vehicle.name} to '
+                          f'{mission.target_altitude / 1000:g} km'),
+        summary=html.escape(summarise(mission, telemetry)),
         images=images,
         log=_log_table(telemetry),
     ), encoding='utf-8')

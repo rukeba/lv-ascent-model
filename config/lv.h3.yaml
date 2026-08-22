@@ -35,7 +35,10 @@ stages:
     ignition_time: 120
     dry_mass: 23_200           # the core structure, carried from lift-off
     propellant_mass: 141_923   # what is left of the ~225 t core tank
-    thrust_sea_level: 2_944_000
+    # equal, as the equal specific impulses below say: this stage only ever
+    # burns in near-vacuum. A vacuum figure below the sea-level one would make
+    # the nozzle area negative and the thrust rise with ambient pressure
+    thrust_sea_level: 2_942_000
     thrust_vacuum: 2_942_000
     isp_sea_level: 426
     isp_vacuum: 426

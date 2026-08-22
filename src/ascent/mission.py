@@ -59,7 +59,9 @@ class Mission:
     # a tank running dry is solved to this share of its capacity, in this many passes
     EXHAUSTION_TOLERANCE = 1e-12
     EXHAUSTION_PASSES = 8
-    # halvings of the step a watched cut-off threshold is bracketed by
+    # a watched cut-off threshold is looked for at this many points across the
+    # piece, and the crossing then closed in on by this many halvings
+    CUT_OFF_SAMPLES = 8
     CUT_OFF_PASSES = 40
 
     def __init__(self, vehicle: LaunchVehicle, pitch_programme: PitchProgramme,
@@ -91,7 +93,9 @@ class Mission:
         self._y = (0.0, EARTH_RADIUS, 0.0)
 
         state = FlightState(mass=self.vehicle.lift_off_mass)
-        state.inertial_speed = self.omega * EARTH_RADIUS
+        # a magnitude, as it is at every other instant: omega is negative for a
+        # launch to the west, and a sign here would be a jump at the second row
+        state.inertial_speed = abs(self.omega) * EARTH_RADIUS
         self.telemetry.record(state)
 
         for step in range(int(round(self.duration * self.steps_per_second))):
@@ -136,13 +140,14 @@ class Mission:
         its own - with the stage, the throttle and the tank all read again.
         """
         index, stage = self.vehicle.active_stage(begin)
-        # the throttle is read at the middle of the piece, from the state at
-        # its start: the bounds sit exactly on the switching instant of a
-        # scheduled cut-off, where the setting is ambiguous, while a watched
-        # threshold is a question about the state the piece begins in
-        middle = 0.5 * (begin + end)
+        # the throttle is read at the start of the piece, in both senses: the
+        # instant and the state. A scheduled cut-off is already a bound, so no
+        # piece straddles its switching instant and the start is never the
+        # ambiguous side of it; a watched threshold is a question about the
+        # state the piece begins in, and asking it at any other instant would
+        # pair that state with a pitch angle that does not belong to it
         capacity = stage.propellant_mass
-        segment = Segment(stage, index, self._probe_throttle(middle),
+        segment = Segment(stage, index, self._probe_throttle(begin),
                           self._attitude, self._burned[index] < capacity)
         self._throttle = segment.throttle
 
@@ -176,7 +181,7 @@ class Mission:
         # inside the piece and where
         if y[-1] < capacity < advanced[-1]:
             dry = self._solve_exhaustion(rates, y, begin, end, advanced[-1], capacity)
-        if segment.throttle > 0 and self.cutoff.fired(*self._watched(end, advanced)):
+        if segment.throttle > 0 and self.cutoff.watches:
             cut = self._solve_cut_off(rates, y, begin, end)
 
         inside = [(t, t is dry) for t in (dry, cut) if t is not None and begin < t < end]
@@ -201,15 +206,29 @@ class Mission:
     def _probe_throttle(self, t: float) -> float:
         return self.cutoff.throttle(t, *self._watched(t, self._y))
 
-    def _solve_cut_off(self, rates, y, begin: float, end: float) -> float:
-        """The instant inside the piece at which a watched threshold is met.
+    def _solve_cut_off(self, rates, y, begin: float, end: float) -> float | None:
+        """The first instant inside the piece at which a watched threshold is met.
 
-        Bisection rather than the regula falsi a dry tank gets: a policy says
-        whether it has fired, not by how much, so there is no residual to
-        interpolate on. It costs a handful of steps once in a flight, and it
-        takes the instant far below the precision the trajectory is carried at.
+        Walked, not simply tested at the end: the quantity a policy watches can
+        rise through its threshold and fall back under it inside one piece -
+        the inertial speed does exactly that near the top of a lofted ascent -
+        and the end of the piece would then show nothing at all.
+
+        The crossing found is then closed in on by bisection rather than by the
+        regula falsi a dry tank gets: a policy says whether it has fired, not
+        by how much, so there is no residual to interpolate on. Both cost a
+        handful of steps, and only for a policy that has to be watched.
         """
-        low, high = begin, end
+        low = begin
+        for i in range(1, self.CUT_OFF_SAMPLES + 1):
+            high = begin + (end - begin) * i / self.CUT_OFF_SAMPLES
+            trial = rk4_step(rates, begin, y, high - begin)
+            if self.cutoff.fired(*self._watched(high, trial)):
+                break
+            low = high
+        else:
+            return None
+
         for _ in range(self.CUT_OFF_PASSES):
             middle = 0.5 * (low + high)
             trial = rk4_step(rates, begin, y, middle - begin)

@@ -14,6 +14,11 @@ why the difference matters and why holding the state is safe.
 
 
 class Cutoff:
+    # whether the flight has to be watched for this policy to fire. False when
+    # the policy knows its own instant, which is then a bound of a piece and
+    # never falls inside one
+    watches = False
+
     def throttle(self, t: float, altitude: float, inertial_speed: float) -> float:
         return 1.0
 
@@ -72,6 +77,8 @@ class LatchedCutoff(Cutoff):
     point of the scheme, which is where remembering anything would quietly cost
     the order of accuracy. `Mission.run` clears it before each flight.
     """
+
+    watches = True
 
     def __init__(self) -> None:
         self._cut = False
