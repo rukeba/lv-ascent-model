@@ -35,7 +35,12 @@ def main(argv: list[str] | None = None) -> int:
     arguments = parser.parse_args(argv)
 
     directory = Path(arguments.config_dir)
-    spec = read_spec(resolve(arguments.mission, directory))
+    mission_path = resolve(arguments.mission, directory)
+    spec = read_spec(mission_path)
+    # a mission names its vehicle file as a neighbour, so a mission given by
+    # path brings its own vehicle with it rather than borrowing one from the
+    # configuration directory
+    beside = mission_path.parent
 
     if arguments.list:
         _list(directory, spec['vehicle'])
@@ -48,8 +53,10 @@ def main(argv: list[str] | None = None) -> int:
             target_altitude=(arguments.altitude * 1000 if arguments.altitude is not None
                              else spec['target_altitude']),
             programme=arguments.programme or spec['pitch_programme']['type'])
+        # catalogue entries name the vehicles that sit beside the catalogue
+        beside = directory
 
-    mission = mission_from_spec(spec, directory)
+    mission = mission_from_spec(spec, beside)
     telemetry = mission.run()
     print(summarise(mission, telemetry))
 
