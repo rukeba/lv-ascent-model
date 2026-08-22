@@ -96,9 +96,11 @@ class Mission:
         # a magnitude, as at every other instant: omega is negative to the west
         state.inertial_speed = abs(self.omega) * EARTH_RADIUS
         # the engine is alight on the pad and the first row has to say so: the
-        # budget reads the powered part of the flight off this column
-        state.thrust = self.vehicle.stages[0].thrust(air_at(0.0).pressure) \
-            * min(1.0, self._probe_throttle(0.0))
+        # budget reads the powered part of the flight off this column. A first
+        # stage with nothing in its tank is not alight, whatever the policy says
+        throttle = min(1.0, self._probe_throttle(0.0))
+        if self.vehicle.stages[0].propellant_mass > 0.0:
+            state.thrust = self.vehicle.stages[0].thrust(air_at(0.0).pressure) * throttle
         self.telemetry.record(state)
 
         for step in range(int(round(self.duration * self.steps_per_second))):

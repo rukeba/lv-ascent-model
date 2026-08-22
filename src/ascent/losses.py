@@ -11,8 +11,10 @@ the price of holding the programme, recovered from the normal equation after
 the fact. It is what a pitch programme is judged by, and gravity is what it
 trades against: a flatter turn steers less but climbs longer.
 
-All three are integrated over the powered part of the flight only, which ends
-at the last instant the engines were producing thrust.
+All three are integrated from lift-off to the last instant the engines were
+producing thrust. A coast between two burns falls inside that span and belongs
+there: gravity is lost over it as surely as under thrust, and leaving it out
+would be what stopped the sum above from closing.
 """
 
 from dataclasses import dataclass
