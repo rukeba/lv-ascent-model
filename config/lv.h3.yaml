@@ -1,0 +1,60 @@
+# H3-22S: LE-9 core with two SRB-3 solid boosters. As with Ariane, the
+# boosters are folded into the first stage and the core alone continues.
+name: H3-22S
+
+drag_coefficient:
+  0.0: 0.16
+  0.7: 0.16
+  0.9: 0.22
+  1.0: 0.40
+  1.2: 0.48
+  1.5: 0.38
+  2.0: 0.30
+  3.0: 0.25
+  5.0: 0.20
+
+design_dynamic_pressure: 35_000
+
+stages:
+  - name: core and two boosters
+    ignition_time: 0
+    dry_mass: 44_400
+    propellant_mass: 357_000   # core ~225 t + 2 x ~66 t of solid propellant
+    thrust_sea_level: 7_542_000
+    thrust_vacuum: 7_900_000
+    isp_sea_level: 426
+    isp_vacuum: 426
+    length: 33.0
+    diameter: 10.0             # core and boosters side by side
+
+  - name: core after booster separation
+    ignition_time: 120
+    dry_mass: 23_200
+    propellant_mass: 141_923
+    thrust_sea_level: 2_944_000
+    thrust_vacuum: 2_942_000
+    isp_sea_level: 426
+    isp_vacuum: 426
+    length: 33.0
+    diameter: 5.27
+
+  - name: second stage
+    ignition_time: 325
+    dry_mass: 7_000           # stage ~3 t plus the satellite ~4 t
+    propellant_mass: 23_000
+    thrust_sea_level: 137_000
+    thrust_vacuum: 137_000
+    isp_sea_level: 426
+    isp_vacuum: 448
+    length: 12.6
+    diameter: 5.27
+
+  - name: payload
+    ignition_time: 1724
+    dry_mass: 4_000
+    propellant_mass: 0
+    thrust_sea_level: 0
+    thrust_vacuum: 0
+    isp_vacuum: 0
+    length: 3.5
+    diameter: 3.0

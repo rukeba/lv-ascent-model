@@ -1,0 +1,26 @@
+# Falcon 9 into a 500 km circular orbit from Cape Canaveral, flying the
+# five-phase pitch programme with the parameters that minimise the steering
+# loss under the terminal conditions of the orbit.
+vehicle: lv.f9
+
+# altitude of the circular orbit aimed for, m
+target_altitude: 500_000
+
+launch_site:
+  latitude: 28.5   # Cape Canaveral, SLC-40
+  azimuth: 90      # degrees from north: 90 is due east, 0 is due north
+
+pitch_programme:
+  type: five-phase
+  t1: 20.0         # end of the vertical rise, s
+  t4: 502.8        # end of the programme, s
+  k2: 0.056178     # share of the turn spent building up the pitch rate
+  k3: 0.522859     # share of the turn spent at a constant pitch rate
+
+cutoff:
+  type: time
+  time: 502.8
+
+simulation:
+  duration: 600
+  steps_per_second: 10

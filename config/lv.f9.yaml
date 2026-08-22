@@ -1,0 +1,52 @@
+# Falcon 9 Full Thrust. Published figures: masses, thrusts and specific
+# impulses from the SpaceX users guide and open sources; the drag coefficient
+# is a generic profile for a slender launch vehicle, not a measured one.
+name: Falcon 9
+
+# drag coefficient against Mach number, interpolated linearly between points
+drag_coefficient:
+  0.0: 0.15
+  0.7: 0.15
+  0.9: 0.25   # onset of the transonic rise
+  1.0: 0.45
+  1.2: 0.50   # peak
+  1.5: 0.40
+  2.0: 0.30
+  3.0: 0.25
+  5.0: 0.20
+
+# dynamic pressure the airframe is designed for, Pa - reported, not enforced
+design_dynamic_pressure: 35_000
+
+stages:
+  - name: first stage
+    ignition_time: 0
+    dry_mass: 22_200
+    propellant_mass: 410_900
+    thrust_sea_level: 7_605_000
+    thrust_vacuum: 8_829_000
+    isp_sea_level: 282
+    isp_vacuum: 311
+    length: 42.6
+    diameter: 3.66
+
+  - name: second stage
+    ignition_time: 150
+    dry_mass: 4_000
+    propellant_mass: 107_500
+    thrust_sea_level: 845_000
+    thrust_vacuum: 981_000
+    isp_vacuum: 348
+    length: 12.6
+    diameter: 3.66
+
+  # carries no propellant: what is left in orbit once the second stage is spent
+  - name: payload
+    ignition_time: 550
+    dry_mass: 12_800
+    propellant_mass: 0
+    thrust_sea_level: 0
+    thrust_vacuum: 0
+    isp_vacuum: 0
+    length: 13.3
+    diameter: 5.3

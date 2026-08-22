@@ -1,0 +1,60 @@
+# Ariane 62: core stage with two P120C solid boosters. The boosters are not
+# modelled separately - the first stage is the two of them plus the core
+# burning together, and the core alone continues as the second stage.
+name: Ariane 62
+
+drag_coefficient:
+  0.0: 0.15
+  0.7: 0.15
+  0.9: 0.25
+  1.0: 0.45
+  1.2: 0.50
+  1.5: 0.40
+  2.0: 0.30
+  3.0: 0.25
+  5.0: 0.20
+
+design_dynamic_pressure: 35_000
+
+stages:
+  - name: core and two boosters
+    ignition_time: 0
+    dry_mass: 45_000          # core 23 t + 2 x 11 t of booster structure
+    propellant_mass: 424_000  # core 140 t + 2 x 142 t
+    thrust_sea_level: 7_960_000
+    thrust_vacuum: 10_371_000
+    isp_sea_level: 265
+    isp_vacuum: 295
+    length: 63.0
+    diameter: 12.2            # core and boosters side by side
+
+  - name: core after booster separation
+    ignition_time: 130
+    dry_mass: 23_000
+    propellant_mass: 99_616
+    thrust_sea_level: 960_000
+    thrust_vacuum: 1_371_000
+    isp_sea_level: 318
+    isp_vacuum: 432
+    length: 32.0
+    diameter: 5.4
+
+  - name: upper stage
+    ignition_time: 450
+    dry_mass: 9_500
+    propellant_mass: 31_000
+    thrust_sea_level: 180_000
+    thrust_vacuum: 180_000
+    isp_vacuum: 457          # Vinci only ever burns in vacuum
+    length: 15.0
+    diameter: 5.4
+
+  - name: payload
+    ignition_time: 1350
+    dry_mass: 6_000
+    propellant_mass: 0
+    thrust_sea_level: 0
+    thrust_vacuum: 0
+    isp_vacuum: 0
+    length: 5.0
+    diameter: 4.0
