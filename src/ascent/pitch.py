@@ -120,7 +120,18 @@ class VelocityShareProgramme(PitchProgramme):
     The parameter s controls how much of the turn is done early.
     """
 
+    # beyond this the quartic leaves [0, 1] between its ends: its interior
+    # stationary point is at (s - 3) / 2s, which lies inside the turn for
+    # |s| > 3. Clipping it back would put a kink in the middle of the turn,
+    # and the gradient behind the pitch rate turns a kink into a rate that
+    # answers to the grid rather than to the programme
+    SHARE_LIMIT = 3.0
+
     def __init__(self, t1: float, tf: float, te: float, s: float) -> None:
+        if not -self.SHARE_LIMIT <= s <= self.SHARE_LIMIT:
+            raise ValueError(
+                f'the velocity share is a turn only for '
+                f'|s| <= {self.SHARE_LIMIT:g}, and s = {s:g}')
         self.t1, self.te, self.s = t1, te, s
         # the turn cannot outlast the burn, nor precede the vertical rise
         self.tf = min(tf, te)

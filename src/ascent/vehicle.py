@@ -67,7 +67,14 @@ class LaunchVehicle:
         mach = sorted(self.drag_coefficient)
         self._mach = np.array(mach)
         self._cd = np.array([self.drag_coefficient[m] for m in mach])
-        self.frontal_area = math.pi * max(s.diameter for s in self.stages) ** 2 / 4
+        # what the flow sees, from each stage upwards: the widest stage still
+        # on the vehicle. Ariane 62 and H3 are as wide as their boosters side
+        # by side, but only until those boosters go
+        areas, widest = [], 0.0
+        for stage in reversed(self.stages):
+            widest = max(widest, stage.diameter)
+            areas.append(math.pi * widest ** 2 / 4)
+        self.frontal_areas = tuple(reversed(areas))
 
     def active_stage(self, t: float) -> tuple[int, Stage]:
         index = 0
@@ -93,17 +100,18 @@ class LaunchVehicle:
         stack = sum(s.dry_mass + s.propellant_mass for s in self.stages[index:])
         return stack - min(propellant_burned, stage.propellant_mass)
 
-    def drag(self, air: Air, altitude: float, speed: float) -> float:
-        """Aerodynamic drag, N. Taken as zero above 100 km.
+    def drag(self, air: Air, altitude: float, speed: float, index: int) -> float:
+        """Aerodynamic drag on the stack from `index` upwards, N.
 
-        A vehicle given no drag profile flies without drag, rather than through
-        an interpolation with nothing to interpolate between.
+        Taken as zero above 100 km. A vehicle given no drag profile flies
+        without drag, rather than through an interpolation with nothing to
+        interpolate between.
         """
         if altitude > 100_000 or not len(self._mach):
             return 0.0
         mach = speed / air.speed_of_sound
         cd = float(np.interp(mach, self._mach, self._cd))
-        return cd * air.density * speed**2 / 2 * self.frontal_area
+        return cd * air.density * speed**2 / 2 * self.frontal_areas[index]
 
     def staging_times_within(self, begin: float, end: float) -> list[float]:
         """Separation instants strictly inside the interval."""

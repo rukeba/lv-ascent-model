@@ -125,7 +125,7 @@ The three programmes take these parameters:
 | Programme | Parameters |
 |---|---|
 | `five-phase` | `t1` end of the vertical rise, `t4` end of the programme, `k2` and `k3` the shares of the turn spent building up and holding the pitch rate |
-| `velocity-share` | `t1` end of the vertical rise, `tf` end of the turn, `te` end of the burn, `s` how much of the turn is done early |
+| `velocity-share` | `t1` end of the vertical rise, `tf` end of the turn, `te` end of the burn, `s` how much of the turn is done early, between -3 and 3 |
 | `bilinear-tangent` | `t1` start of the turn, `a`, `b`, `c` of `tan(gamma) = (a*tau + b) / (c*tau + 1)`, `te` end of the programme |
 
 ## Catalogue of solved parameter sets
@@ -206,8 +206,9 @@ against the orbit and the losses recorded for it.
 
 ## Citing
 
-If you use this model, please cite the archived version — see `CITATION.cff`
-for the current DOI and the BibTeX entry.
+If you use this model, please cite it — `CITATION.cff` carries the citation
+metadata. The DOI of the archived release goes in there once Zenodo has minted
+it, alongside the version and the release date of the tag it was cut from.
 
 ## Licence
 

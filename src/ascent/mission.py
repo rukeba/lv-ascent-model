@@ -295,7 +295,7 @@ class Mission:
         air = air_at(radius - EARTH_RADIUS)
         mass = self.vehicle.mass_on(segment.index, burned)
         thrust, flow = self._propulsion(segment, air)
-        drag = self.vehicle.drag(air, radius - EARTH_RADIUS, speed)
+        drag = self.vehicle.drag(air, radius - EARTH_RADIUS, speed, segment.index)
 
         acceleration = (thrust - drag) / mass \
             - (gravity(radius) - self.omega**2 * radius) * math.sin(angle)
@@ -316,7 +316,7 @@ class Mission:
         air = air_at(radius - EARTH_RADIUS)
         mass = self.vehicle.mass_on(segment.index, burned)
         thrust, flow = self._propulsion(segment, air)
-        drag = self.vehicle.drag(air, radius - EARTH_RADIUS, speed)
+        drag = self.vehicle.drag(air, radius - EARTH_RADIUS, speed, segment.index)
 
         axial = (thrust - drag) / mass
         omega = self.omega
@@ -351,7 +351,16 @@ class Mission:
         if self._guided:
             speed, radius, polar_angle = self._y
             angle, rate, _ = self.pitch_programme.sample(t)
-            state.speed = max(0.0, speed)
+            # the guided phase integrates the magnitude of the velocity, which
+            # has no sign to turn round. Clamping a negative one to zero would
+            # report a vehicle at rest while its radius went on falling, and
+            # would build the orbit at the end out of that clamped state
+            if speed < 0.0:
+                raise ValueError(
+                    f'the vehicle has run out of speed against its programme '
+                    f'at t = {t:.1f} s ({speed:.1f} m/s). This pitch programme '
+                    f'cannot be flown by this vehicle.')
+            state.speed = speed
             state.flight_path_angle, state.flight_path_rate = angle, rate
         else:
             radius, polar_angle, vertical, horizontal = self._y
@@ -378,7 +387,7 @@ class Mission:
         state.mass = self.vehicle.mass(t, self._burned[index])
         state.thrust = 0.0 if self._burned[index] >= stage.propellant_mass \
             else stage.thrust(air.pressure) * self._throttle
-        state.drag = self.vehicle.drag(air, state.altitude, state.speed)
+        state.drag = self.vehicle.drag(air, state.altitude, state.speed, index)
         state.dynamic_pressure = 0.0 if state.altitude > 100_000 \
             else 0.5 * air.density * state.speed**2
 

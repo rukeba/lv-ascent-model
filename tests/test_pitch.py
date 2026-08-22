@@ -3,6 +3,7 @@
 import math
 
 import numpy as np
+import pytest
 
 from ascent.pitch import (BilinearTangentProgramme, FivePhaseProgramme,
                           VelocityShareProgramme, bilinear_coefficients)
@@ -33,6 +34,26 @@ def test_velocity_share_stays_within_its_bounds():
     assert math.isclose(programme.sample(10.0)[0], math.pi / 2)
     # past the end of the turn the velocity is entirely horizontal
     assert abs(programme.sample(490.0)[0]) < 1e-12
+
+
+def test_a_velocity_share_outside_its_range_is_not_a_turn():
+    """The quartic only stays a turn while it stays inside [0, 1].
+
+    Its interior stationary point sits at (s - 3) / 2s, which falls inside the
+    turn once |s| passes 3: the share then leaves [0, 1] partway along and has
+    to be clipped back, which puts a kink in the middle of the turn. The rate
+    is read off the tabulation by finite differences, so a kink there becomes a
+    pitch rate - and a steering loss - that answers to the grid step rather
+    than to the programme.
+    """
+    for s in (-3.0, 0.0, 3.0):
+        edge = VelocityShareProgramme(t1=20.0, tf=480.0, te=500.0, s=s)
+        assert edge.share.min() >= 0.0
+        assert edge.share.max() <= 1.0
+
+    for s in (-3.001, 3.001, 10.0):
+        with pytest.raises(ValueError, match='velocity share'):
+            VelocityShareProgramme(t1=20.0, tf=480.0, te=500.0, s=s)
 
 
 def test_bilinear_tangent_passes_through_its_three_points():

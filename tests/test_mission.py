@@ -259,6 +259,24 @@ class StraightDown(PitchProgramme):
         return 'straight down'
 
 
+def test_a_vehicle_that_cannot_hold_its_programme_raises():
+    """A guided phase that runs out of speed has to fail loudly.
+
+    What is integrated while the programme runs is the magnitude of the
+    velocity, and a magnitude has no sign to turn round. A vehicle too heavy to
+    climb the programme it is given drives it negative; reported as a zero it
+    would read as a vehicle at rest while its radius went on falling, and the
+    orbit at the end would be built out of that.
+    """
+    vehicle = vacuum_vehicle(thrust=50_000.0)     # half of its own weight
+    mission = Mission(vehicle, Vertical(200.0), CutoffAtTime(400.0),
+                      target_altitude=0.0, duration=200.0, steps_per_second=10,
+                      latitude_deg=0.0, azimuth_deg=0.0)
+
+    with pytest.raises(ValueError, match='run out of speed'):
+        mission.run()
+
+
 def test_a_trajectory_that_leaves_the_model_raises():
     """Flying into the ground has to fail loudly rather than return numbers.
 
