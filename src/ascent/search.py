@@ -331,7 +331,10 @@ class FivePhase(Family):
         self.k2 = k2
 
     def axes(self):
-        return {'k3': Axis(0.02, 0.98 - self.k2, 19)}
+        # the family's own range, less a thousandth at the top: k2 + k3 = 1
+        # leaves the fourth phase no time to arrest the pitch rate in, and the
+        # rate it would need to is divided by that nothing
+        return {'k3': Axis(0.0, 1.0 - self.k2 - 1e-3, 19)}
 
     def build(self, t1, end, shape):
         return FivePhaseProgramme(t1=t1, t4=end, k2=self.k2, k3=shape['k3'])
@@ -383,7 +386,7 @@ class BilinearTangent(Family):
     t1, from the vertical straight to whatever the tangent says, so the angle
     it starts at is also the size of that step; the further from 90 degrees it
     is asked to start, the less the turn resembles anything a vehicle flies.
-    The sets on file start between 84.7 and 89.9 degrees, and a search that
+    The sets on file start between 84.7 and 89.2 degrees, and a search that
     comes out on this bound is told so rather than allowed past it.
     """
     name = 'bilinear-tangent'
@@ -576,12 +579,18 @@ class _Flight:
     """
 
     def __init__(self, vehicle, family, t1, target_altitude, window,
-                 latitude_deg, azimuth_deg, steps_per_second, circular_tolerance):
+                 latitude_deg, azimuth_deg, steps_per_second, circular_tolerance,
+                 screen=True):
         self.vehicle, self.family, self.t1 = vehicle, family, t1
         self.target_altitude, self.window = target_altitude, window
         self.latitude_deg, self.azimuth_deg = latitude_deg, azimuth_deg
         self.steps_per_second = steps_per_second
         self.circular_tolerance = circular_tolerance
+        # whether the altitude integral is allowed to reject a node unflown.
+        # The band it rejects on is measured, not derived, so the second run of
+        # the grid turns it off: whatever the first run failed to find, it will
+        # not have been for want of trying a shape the integral mistrusted
+        self.screen = screen
         self._flights = 0
 
     def at(self, shape: dict[str, float],
@@ -608,7 +617,8 @@ class _Flight:
         # and the band the integral is known to read high by turns them into a
         # bound on the flight. A shape that cannot reach the target inside the
         # window is dropped without a trajectory
-        if not (soonest / ALTITUDE_RATIO_HIGH <= self.target_altitude
+        if self.screen and not (
+                soonest / ALTITUDE_RATIO_HIGH <= self.target_altitude
                 <= latest / ALTITUDE_RATIO_LOW):
             return self._node(shape, 'screened', None)
 
@@ -670,13 +680,25 @@ class _Flight:
                 break
             middle = low + (high - low) * (-below) / (above - below)
             if not low < middle < high:
-                # a trajectory that left the model takes its end of the bracket
-                # to infinity and the interpolation with it; halving the
-                # bracket is what there is left to do
+                # a residual that is not finite takes the interpolation with
+                # it; halving the bracket is what there is left to do
                 middle = 0.5 * (low + high)
+
             measured = self._measure(middle, shape)
             if measured is None:
-                return None
+                # the trial cannot be flown at all, which says nothing about
+                # which side of it the root lies. Rather than give up the
+                # bracket - which still holds a root, both of its ends having
+                # flown - the probe is pulled back towards the end that flew
+                # earliest and the pass tried again on what is left of the
+                # iterations
+                pulled = 0.5 * (low + middle)
+                if pulled <= low:
+                    return None
+                measured = self._measure(pulled, shape)
+                if measured is None:
+                    continue
+                middle = pulled
             residual, candidate = measured
             if abs(residual) < abs(closest.residual):
                 closest = candidate
