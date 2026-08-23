@@ -417,7 +417,7 @@ preferred the smallest steering loss among the sets that reach the orbit; this
 prefers the earliest cut-off. For the five-phase family there is nothing to
 prefer — two conditions and two unknowns leave no freedom — and the two agree
 to the figures the grid resolves: searching Falcon 9 to 500 km returns a
-cut-off of 502.698 s against the 502.707 on file, and the same velocity budget
+cut-off of 502.693 s against the 502.707 on file, and the same velocity budget
 to within a metre per second, as it does at 650 km and as H3 does at 1100. The
 other two families keep a parameter to spend, and the search spends it
 differently: Falcon 9 to 500 km on the velocity share cuts off at 501.696 s
