@@ -104,13 +104,25 @@ def required_velocity(altitude: float) -> float:
     return math.sqrt(circular_velocity(altitude) ** 2 + 2.0 * lift)
 
 
-def vacuum_time(vehicle: LaunchVehicle, altitude: float) -> float | None:
+def vacuum_time(vehicle: LaunchVehicle, altitude: float,
+                head_start: float = 0.0) -> float | None:
     """How long the engines would burn if nothing were ever lost, s.
 
-    The lower bound on the ascent time, and of no other use: a vehicle that
-    loses nothing does not exist. None when the propellant does not reach it.
+    The lower bound on the ascent time, and of no other use on its own: a
+    vehicle that loses nothing does not exist. None when the propellant does
+    not reach it, and then nothing else will either - which is the one thing
+    this figure can be asked on its own.
+
+    `head_start` is speed the vehicle has before the engines give it any: the
+    rotation of the pad, worth some 400 m/s to a launch due east from Cape
+    Canaveral and nothing to one due north. The rest of this module leaves the
+    rotation of the Earth out, as the dissertation does; it is credited here
+    because this is the figure a request is refused on, and a refusal has to be
+    made on the most generous reading there is.
     """
-    required, gained = required_velocity(altitude), 0.0
+    required, gained = required_velocity(altitude) - head_start, 0.0
+    if required <= 0.0:
+        return 0.0
     for burn in burns(vehicle):
         rise = burn.exhaust * math.log(
             burn.start_mass / (burn.start_mass - burn.flow * burn.burn_time))
@@ -123,7 +135,7 @@ def vacuum_time(vehicle: LaunchVehicle, altitude: float) -> float | None:
 
 
 def equivalent_time(vehicle: LaunchVehicle, altitude: float,
-                    step: float = 0.1) -> float | None:
+                    head_start: float = 0.0, step: float = 0.1) -> float | None:
     """The instant at which the propellant has bought the orbit, s.
 
     The balance is the characteristic velocity accumulated so far, less what
@@ -135,10 +147,20 @@ def equivalent_time(vehicle: LaunchVehicle, altitude: float,
     cumulative integral in flight order finds the same root, and only monotony
     makes either of them safe.
 
+    `head_start` is speed the vehicle has before the engines give it any - the
+    rotation of the pad - and is zero by default, because the model this
+    estimate comes from does not turn the Earth. Credit it where the answer is
+    a yes or a no rather than a number: an eastward pad is worth some 400 m/s,
+    and a balance that ignores it can fail to close on an orbit the vehicle
+    reaches comfortably. Leave it out where the answer is the number, which is
+    what the band around it was measured on.
+
     None when the balance never reaches zero: the orbit is out of reach of this
     vehicle, and that is known before a single trajectory is integrated.
     """
-    required = required_velocity(altitude)
+    required = required_velocity(altitude) - head_start
+    if required <= 0.0:
+        return 0.0
     gained = lost = 0.0
 
     for burn in burns(vehicle):

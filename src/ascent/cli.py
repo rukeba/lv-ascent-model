@@ -161,9 +161,10 @@ def search_main(argv: list[str] | None = None) -> int:
         ascent-search f9 --altitude 650 --programme bilinear-tangent --yaml
         ascent-search a62 --altitude 700 --coarse 0.5   # a quicker, rougher look
 
-    The mission file is read for the vehicle and the launch site only; the
-    orbit and the programme are the two things being searched against, and the
-    parameters in it are ignored.
+    The mission file supplies the vehicle and the launch site, and its own
+    target altitude and programme type stand in for `--altitude` and
+    `--programme` when those are not given. The pitch-programme parameters in
+    it are ignored: they are what the search is for.
     """
     parser = argparse.ArgumentParser(
         prog='ascent-search',

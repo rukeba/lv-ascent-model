@@ -58,16 +58,17 @@ from itertools import product
 
 import numpy as np
 
+from .constants import EARTH_RADIUS
 from .cutoff import CutoffAtTime
 from .estimates import (analytic_altitude, burns, equivalent_time,
                         required_velocity, vacuum_time)
 from .losses import velocity_budget
-from .mission import Mission
+from .mission import Mission, rotation_in_plane
 from .orbit import Orbit
 from .pitch import (BilinearTangentProgramme, FivePhaseProgramme, PitchProgramme,
                     VelocityShareProgramme, bilinear_coefficients)
 from .telemetry import Telemetry
-from .vehicle import LaunchVehicle
+from .vehicle import DRAG_CEILING, LaunchVehicle
 
 # How far either side of the estimated ascent time the cut-off is bracketed.
 # The estimate leaves the rotation of the Earth out and prices the losses off a
@@ -445,12 +446,32 @@ def search(vehicle: LaunchVehicle, target_altitude: float, programme: str,
                          f'of {sorted(FAMILIES)}')
     family = FivePhase(k2) if programme == 'five-phase' else FAMILIES[programme]()
 
-    estimate = equivalent_time(vehicle, target_altitude)
-    if estimate is None:
+    if target_altitude <= DRAG_CEILING:
         raise ValueError(
-            f'{vehicle.name} does not have the propellant for a circular orbit '
-            f'at {target_altitude / 1000:g} km: the velocity balance never '
-            f'closes, whatever the programme is. Nothing was integrated.')
+            f'a circular orbit at {target_altitude / 1000:g} km is inside the '
+            f'air, and this model takes the air as gone above '
+            f'{DRAG_CEILING / 1000:g} km rather than modelling an orbit in it')
+
+    # what the pad hands the vehicle before the engines do, which the estimate
+    # does not carry: it does not turn the Earth, as the dissertation does not.
+    # Credited where the answer is a yes or a no, because a refusal has to be
+    # made on the most generous reading there is - and a launch to the west,
+    # which the pad charges rather than pays, is not made stricter for it
+    from_the_pad = max(0.0, rotation_in_plane(latitude_deg, azimuth_deg)
+                       * EARTH_RADIUS)
+    reachable = equivalent_time(vehicle, target_altitude,
+                                head_start=from_the_pad)
+    if reachable is None:
+        raise ValueError(
+            f'{vehicle.name} does not reach a circular orbit at '
+            f'{target_altitude / 1000:g} km: the velocity balance never closes, '
+            f'whatever the programme is, and not with the {from_the_pad:.0f} m/s '
+            f'the pad hands it either. Nothing was integrated.')
+
+    # the plain balance is what the window was calibrated on, and the one with
+    # the pad in it stands in on the orbits high enough that the plain one no
+    # longer closes at all
+    estimate = equivalent_time(vehicle, target_altitude) or reachable
 
     # the late end of the window is never past the instant the last tank runs
     # dry. A cut-off after that is not a cut-off - the engines have already
@@ -703,15 +724,20 @@ class _Flight:
                                     *_demands(telemetry, end)))
 
     def _duration(self, end: float) -> float:
-        """How long to fly for: past the cut-off, and a whole number of steps.
+        """How long to fly for: to the first whole step at or past the cut-off.
 
-        `Mission` takes the length of a flight and rounds it to a whole number
-        of steps, so a duration that is not one already can round back below
-        the instant asked for - and then the state read off the end of it would
-        be from before cut-off with the engine still alight.
+        No further, because the orbit is read off the end of the flight and
+        every second of coast past the cut-off is a second in which something
+        could still act on it. Above the air nothing does - which is why five
+        seconds of coast made no difference to any set here - but the target is
+        the caller's to choose, and a step is a bound that holds whatever they
+        chose.
+
+        Not less either: `Mission` rounds the length of a flight to a whole
+        number of steps, and one rounded back below the cut-off would leave the
+        state at the end of it from before the engines stopped.
         """
-        steps = math.ceil((end + 5.0) * self.steps_per_second)
-        return steps / self.steps_per_second
+        return math.ceil(end * self.steps_per_second) / self.steps_per_second
 
     def _fly(self, end: float,
              shape: dict[str, float]) -> tuple[Telemetry, Mission] | None:
@@ -721,10 +747,6 @@ class _Flight:
                 vehicle=self.vehicle,
                 pitch_programme=self.family.build(self.t1, end, shape),
                 cutoff=CutoffAtTime(end), target_altitude=self.target_altitude,
-                # a few seconds of coast past cut-off and no more: above the
-                # atmosphere nothing acts on the vehicle that the orbit it is
-                # already on does not carry.
-                #
                 # `end` is an arbitrary instant and a programme is tabulated on
                 # a tenth-of-a-second grid, so the programme ends on the last
                 # grid point at or before it and the remainder is flown on the

@@ -13,6 +13,9 @@ import numpy as np
 from .atmosphere import Air
 from .constants import SEA_LEVEL_PRESSURE, STANDARD_GRAVITY
 
+# altitude above which the model takes the air as gone, m
+DRAG_CEILING = 100_000
+
 
 @dataclass
 class Stage:
@@ -103,11 +106,11 @@ class LaunchVehicle:
     def drag(self, air: Air, altitude: float, speed: float, index: int) -> float:
         """Aerodynamic drag on the stack from `index` upwards, N.
 
-        Taken as zero above 100 km. A vehicle given no drag profile flies
+        Taken as zero above `DRAG_CEILING`. A vehicle given no drag profile flies
         without drag, rather than through an interpolation with nothing to
         interpolate between.
         """
-        if altitude > 100_000 or not len(self._mach):
+        if altitude > DRAG_CEILING or not len(self._mach):
             return 0.0
         mach = speed / air.speed_of_sound
         cd = float(np.interp(mach, self._mach, self._cd))

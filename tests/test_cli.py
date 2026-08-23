@@ -86,7 +86,7 @@ def test_the_search_summary_is_the_output_without_yaml(capsys):
 
 
 def test_the_search_is_refused_an_orbit_out_of_reach():
-    with pytest.raises(ValueError, match='does not have the propellant'):
+    with pytest.raises(ValueError, match='does not reach a circular orbit'):
         search_main(['f9', '--altitude', '20000'])
 
 

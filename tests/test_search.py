@@ -11,6 +11,7 @@ integration, which is not what a test suite is for.
 import pytest
 
 from ascent.config import load_catalogue, load_vehicle, mission_from_spec
+from ascent.estimates import equivalent_time
 from ascent.search import (FAMILIES, Axis, BilinearTangent, FivePhase,
                            VelocityShare, _Flight, _refine, search)
 
@@ -170,8 +171,25 @@ def test_a_tighter_tolerance_tightens_the_cut_off_solve():
 
 
 def test_an_orbit_out_of_reach_is_refused_before_anything_is_flown():
-    with pytest.raises(ValueError, match='does not have the propellant'):
+    """And refused on the most generous reading of what the vehicle has.
+
+    The balance the refusal is made on credits the vehicle with the speed the
+    pad hands it, which the estimate itself does not carry. At 20 000 km it
+    does not close either way; at 5 000 km it closes only with the pad in it,
+    and a search that refused there would be refusing an orbit Falcon 9 has
+    been flown to.
+    """
+    with pytest.raises(ValueError, match='does not reach a circular orbit'):
         search(FALCON, 20_000_000, 'five-phase')
+
+    assert equivalent_time(FALCON, 5_000_000) is None
+    assert equivalent_time(FALCON, 5_000_000, head_start=408.0) is not None
+
+
+def test_an_orbit_inside_the_air_is_refused():
+    """The model takes the air as gone above 100 km and has no orbit below it."""
+    with pytest.raises(ValueError, match='inside the air'):
+        search(FALCON, 90_000, 'five-phase')
 
 
 def test_an_unknown_programme_is_refused():
