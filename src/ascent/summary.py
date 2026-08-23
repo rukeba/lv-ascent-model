@@ -43,9 +43,7 @@ def summary_blocks(mission: Mission, telemetry: Telemetry) -> list[Block]:
     design_q = vehicle.design_dynamic_pressure
 
     blocks = [Block('setup', (
-        ('launch site', f'{mission.latitude_deg:g} deg latitude, '
-                        f'azimuth {mission.azimuth_deg:g} deg '
-                        f'({rotation:.0f} m/s from Earth rotation)'),
+        *_site(mission, rotation),
         ('pitch programme', mission.pitch_programme.describe()),
         ('engine cut-off', mission.cutoff.describe()),
         ('integration', f'rk4, {mission.steps_per_second:g} steps/s, '
@@ -109,6 +107,20 @@ def summarise(mission: Mission, telemetry: Telemetry) -> str:
     for block in summary_blocks(mission, telemetry):
         _block(lines, block.title, list(block.rows))
     return '\n'.join(lines)
+
+
+def _site(mission: Mission, rotation: float) -> tuple[tuple[str, str], ...]:
+    """Where it was launched from: the pad by name, if the file gave one.
+
+    Two rows when it did, so that neither the name nor the geometry has to be
+    read out of the middle of a long line.
+    """
+    geometry = (f'{mission.latitude_deg:g} deg latitude, '
+                f'azimuth {mission.azimuth_deg:g} deg '
+                f'({rotation:.0f} m/s from Earth rotation)')
+    if not mission.site_name:
+        return (('launch site', geometry),)
+    return (('launch site', mission.site_name), ('pad', geometry))
 
 
 def _pressure(result) -> str:

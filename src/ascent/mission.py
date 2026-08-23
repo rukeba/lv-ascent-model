@@ -66,7 +66,7 @@ class Mission:
     def __init__(self, vehicle: LaunchVehicle, pitch_programme: PitchProgramme,
                  cutoff: Cutoff, target_altitude: float, duration: float,
                  steps_per_second: float = 10, latitude_deg: float = 0.0,
-                 azimuth_deg: float = 90.0) -> None:
+                 azimuth_deg: float = 90.0, site_name: str = '') -> None:
         self.vehicle = vehicle
         self.pitch_programme = pitch_programme
         self.cutoff = cutoff
@@ -75,6 +75,9 @@ class Mission:
         self.steps_per_second = steps_per_second
         self.latitude_deg = latitude_deg
         self.azimuth_deg = azimuth_deg
+        # what the pad is called, when it is called anything: reported, and
+        # nothing the flight depends on
+        self.site_name = site_name
         self.omega = rotation_in_plane(latitude_deg, azimuth_deg)
 
     def run(self) -> Telemetry:

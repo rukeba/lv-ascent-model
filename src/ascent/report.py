@@ -112,11 +112,13 @@ def write_report(mission: Mission, telemetry: Telemetry,
         generated=datetime.now().astimezone().strftime('%Y-%m-%d %H:%M'),
         version=_version(),
         status=_status(orbit),
-        chips=[mission.pitch_programme.describe(),
-               f'cut-off {mission.cutoff.describe()}',
-               f'rk4 at {mission.steps_per_second:g} steps/s',
-               f'{mission.latitude_deg:g} deg latitude, '
-               f'azimuth {mission.azimuth_deg:g} deg'],
+        chips=[chip for chip in
+               (mission.site_name,
+                mission.pitch_programme.describe(),
+                f'cut-off {mission.cutoff.describe()}',
+                f'rk4 at {mission.steps_per_second:g} steps/s',
+                f'{mission.latitude_deg:g} deg latitude, '
+                f'azimuth {mission.azimuth_deg:g} deg') if chip],
         tiles=_tiles(mission, telemetry, budget),
         budget=_budget(budget),
         blocks=_cards(mission, telemetry),

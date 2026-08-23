@@ -78,12 +78,15 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if arguments.altitude is not None or arguments.programme is not None:
-        spec = find_in_catalogue(
+        entry = find_in_catalogue(
             load_catalogue(directory / 'catalogue.yaml'),
             vehicle=spec['vehicle'],
             target_altitude=(arguments.altitude * 1000 if arguments.altitude is not None
                              else spec['target_altitude']),
             programme=arguments.programme or spec['pitch_programme']['type'])
+        entry['launch_site'] = _named_site(entry.get('launch_site', {}),
+                                           spec.get('launch_site', {}))
+        spec = entry
         # catalogue entries name the vehicles that sit beside the catalogue
         beside = directory
 
@@ -108,6 +111,19 @@ def main(argv: list[str] | None = None) -> int:
             webbrowser.open(path.resolve().as_uri())
 
     return 0
+
+
+def _named_site(site: dict, named: dict) -> dict:
+    """A catalogue launch site, given what the mission file calls that pad.
+
+    The catalogue records a site as two numbers - it is written out by the
+    search, which knows it as two numbers. Where the mission file the command
+    named describes the same pad, its name comes along with the entry.
+    """
+    if 'name' in named and all(site.get(key) == named.get(key)
+                               for key in ('latitude', 'azimuth')):
+        return {**site, 'name': named['name']}
+    return site
 
 
 def _command_line(prog: str, argv: list[str] | None) -> str:

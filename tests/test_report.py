@@ -32,6 +32,11 @@ def test_the_page_and_every_plot_are_written(report):
         assert f'{name}.png' in page
 
 
+def test_the_page_names_the_pad_it_was_launched_from(report):
+    _, page, _ = report
+    assert 'Cape Canaveral SLC-40, Florida' in page
+
+
 def test_the_styles_are_inlined_rather_than_linked(report):
     """The page has to survive being sent on its own, images aside."""
     _, page, _ = report

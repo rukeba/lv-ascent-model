@@ -5,7 +5,8 @@ vehicle: lv.a62
 target_altitude: 800_000
 
 launch_site:
-  latitude: 5.2    # Guiana Space Centre, ELA-4
+  name: Guiana Space Centre ELA-4, Kourou
+  latitude: 5.2
   azimuth: 90
 
 pitch_programme:

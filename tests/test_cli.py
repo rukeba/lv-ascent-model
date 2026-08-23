@@ -32,6 +32,12 @@ def test_catalogue_entry_is_flown_when_asked_for():
     assert main(['f9', '--altitude', '650', '--programme', 'bilinear-tangent']) == 0
 
 
+def test_a_catalogue_entry_is_flown_from_the_pad_the_mission_file_names(capsys):
+    """The catalogue holds a site as two numbers; the file gives it a name."""
+    assert main(['f9', '--altitude', '650']) == 0
+    assert 'Cape Canaveral SLC-40, Florida' in capsys.readouterr().out
+
+
 def test_a_catalogue_entry_can_be_asked_for_in_short():
     """`-a` is the altitude and `-p` the programme, by its short name."""
     assert main(['f9', '-a', '650', '-p', 'bt']) == 0

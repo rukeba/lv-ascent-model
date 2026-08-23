@@ -75,6 +75,7 @@ def mission_from_spec(spec: dict[str, Any], directory: str | Path) -> Mission:
         steps_per_second=simulation.get('steps_per_second', 10),
         latitude_deg=site.get('latitude', 0.0),
         azimuth_deg=site.get('azimuth', 90.0),
+        site_name=site.get('name', ''),
     )
 
 

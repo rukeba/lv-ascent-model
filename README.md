@@ -229,6 +229,7 @@ parameters, when the engines stop, and where the launch site is:
 vehicle: lv.f9
 target_altitude: 500_000       # altitude of the circular orbit aimed for, m
 launch_site:
+  name: Cape Canaveral SLC-40, Florida   # reported, and nothing more
   latitude: 28.5
   azimuth: 90                  # degrees from north: 90 is due east
 pitch_programme:
