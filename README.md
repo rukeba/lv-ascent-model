@@ -285,8 +285,8 @@ and a flatter one goes faster lower down. The set found is reported with the
 peak dynamic pressure it asks of the airframe, beside the figure the vehicle
 file declares it is designed for, and with the peak thrust deflection it asks
 of the guidance — and the first of those is not free. Searching Falcon 9 to
-500 km on the bilinear tangent returns a set that cuts off at 499.21 s rather
-than the 500.91 on file, and it peaks at 37.7 kPa against a design figure of
+500 km on the bilinear tangent returns a set that cuts off at 499.202 s rather
+than the 500.910 on file, and it peaks at 37.8 kPa against a design figure of
 35. Neither figure enters the ranking unless you say so: `--max-q` puts the
 airframe into the constraint, and a set that peaks above it is then not an
 answer however quick it is, which is where a limit on the dynamic pressure
@@ -302,12 +302,12 @@ uv run python examples/parameter_search.py       # all three families, side by s
 preferred the smallest steering loss among the sets that reach the orbit; this
 prefers the earliest cut-off. For the five-phase family there is nothing to
 prefer — two conditions and two unknowns leave no freedom — and the two agree
-to the figures the grid resolves: searching Falcon 9 to 500 km returns
-`t4 = 502.71 s`, `k3 = 0.5295` against the `502.7074` and `0.529569` on file,
-and the same velocity budget to a tenth of a metre per second. The other two
-families keep a parameter to spend, and the search spends it differently:
-Falcon 9 to 500 km on the velocity share cuts off at 501.71 s rather than
-502.19 s, for 2917.6 m/s of losses rather than 2996.4.
+to the figures the grid resolves: searching Falcon 9 to 500 km returns a
+cut-off of 502.698 s against the 502.707 on file, and the same velocity budget
+to within a metre per second, as it does at 650 km and as H3 does at 1100. The
+other two families keep a parameter to spend, and the search spends it
+differently: Falcon 9 to 500 km on the velocity share cuts off at 501.696 s
+rather than 502.188, for 2916.6 m/s of losses rather than 2996.4.
 
 The second of those figures need not follow the first, and on H3 it does not.
 An earlier cut-off is always less propellant burned — the burn is shorter — but

@@ -224,8 +224,17 @@ def _loss_rate(time: np.ndarray, speed: np.ndarray, mass: np.ndarray,
     # climbed at the mean speed so far along the current direction. The coarsest
     # thing here, and it only ever enters through R + h and the air density
     altitude = 0.5 * speed * time * np.sin(angle)
-    # gravity less what the horizontal speed already carries: at the circular
-    # speed in the horizon the two cancel and nothing more is lost to gravity
+    # Gravity less what the horizontal speed already carries. This is the
+    # dissertation's effective gravity, and it is the one deliberate difference
+    # from the along-track equation the model itself integrates, which carries
+    # g alone (less the centrifugal term of the rotating frame, which this
+    # estimate does not have because it does not turn the Earth). What it buys
+    # is that the loss dies out exactly where the vehicle reaches orbit, at
+    # theta -> 0 and V -> V_R; the objection to it is that a term normal to the
+    # velocity does no work along it, so subtracting it here prices the gravity
+    # loss low. Either way the estimate is calibrated as it stands - see the
+    # band `search.TIME_MARGIN_EARLY` and `TIME_MARGIN_LATE` carry - and
+    # changing it would move that band and every window built from it
     effective = np.maximum(0.0, STANDARD_GRAVITY - speed**2 * np.cos(angle)**2
                            / (EARTH_RADIUS + altitude))
     drag = MEAN_DRAG_COEFFICIENT * area * SEA_LEVEL_DENSITY \

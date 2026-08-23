@@ -196,7 +196,7 @@ def summarise_search(result) -> str:
                         f'({100 * result.screened / nodes:.0f} %), unflown, '
                         f'by the altitude integral'),
         ('refused by the family', f'{result.refused:,}'),
-        ('no cut-off found', f'{result.unbracketed:,}'),
+        ('no cut-off closes it', f'{result.no_cut_off:,}'),
         ('closed on no orbit', f'{result.no_orbit:,}'),
         ('cut-offs solved', f'{result.solved:,}'),
         ('trajectories flown', f'{result.flown:,}, '

@@ -19,7 +19,14 @@ CATALOGUE = load_catalogue('config/catalogue.yaml')
 
 
 def quick(programme, altitude=500_000, **overrides):
-    """A search coarse enough for a test but complete in every step of itself."""
+    """A search coarse enough for a test but complete in every step of itself.
+
+    One step a second rather than ten and half the nodes along each axis of the
+    first pass. Neither changes what the search finds; both change how long it
+    takes, and a search at the settings the command line defaults to is minutes
+    of integration, which is not what a test suite is for. The nodes are
+    divided over processes as they would be in earnest.
+    """
     settings = dict(latitude_deg=28.5, azimuth_deg=90.0, coarseness=0.5,
                     steps_per_second=1)
     settings.update(overrides)
@@ -117,21 +124,18 @@ def test_the_search_stays_inside_the_estimated_window():
 def test_every_node_ends_in_exactly_one_count():
     """The five outcomes of a node are counted, not derived from each other.
 
-    `screened`, `refused`, `unbracketed` and `no_orbit` are incremented where
+    `screened`, `refused`, `no_cut_off` and `no_orbit` are incremented where
     the node ends, and `closed` where it comes out on an orbit; a node that
     fell through all five would show up here as a node unaccounted for.
     """
     result = quick('velocity-share', refinements=1)
     assert result.nodes == (result.screened + result.refused
-                            + result.unbracketed + result.no_orbit
+                            + result.no_cut_off + result.no_orbit
                             + result.closed)
     assert result.closed == result.solved
     assert result.screened > 0, 'the altitude integral rejected nothing'
     assert result.closed > 0, 'no node came out on an orbit'
     assert result.flown > result.closed, 'every node takes several trajectories'
-    # and the passes and their nodes were walked as they were planned to be
-    assert result.planned_nodes == result.nodes
-    assert result.passes == result.pass_number
 
 
 def test_a_set_that_misses_is_not_written_out_as_an_entry():
@@ -204,10 +208,66 @@ def test_dividing_the_grid_over_processes_finds_the_same_set():
     divided over - and the same count of nodes and of trajectories, which is
     what says the division was of the work and not of the answer.
     """
-    alone = quick('five-phase', refinements=3)
+    alone = quick('five-phase', refinements=3, workers=1)
     together = quick('five-phase', refinements=3, workers=2)
 
-    assert together.workers == 2
+    assert (alone.workers, together.workers) == (1, 2)
     assert together.best.cutoff_time == alone.best.cutoff_time
     assert together.best.shape == alone.best.shape
     assert (together.nodes, together.flown) == (alone.nodes, alone.flown)
+
+
+def test_the_work_is_counted_out_before_any_of_it_is_done():
+    """The progress a search reports is against a total known in advance.
+
+    `planned_nodes` is read from the first node rather than from the finished
+    result, where it has been corrected to what was actually walked: what is
+    under test is the figure the progress line divides by while the search is
+    still running.
+    """
+    planned = []
+    quick('five-phase', refinements=3,
+          report=lambda result: planned or planned.append(
+              (result.planned_nodes, result.passes)))
+
+    nodes, passes = planned[0]
+    assert passes == 4
+    # the first pass over the whole range of the family, then three of five
+    # nodes each closing in
+    assert nodes == 10 + 3 * 5
+
+
+def test_the_fallback_runs_when_minimising_the_ascent_reaches_nothing():
+    """A search that reaches nothing runs the grid again for the orbit alone.
+
+    Forced here by asking for the orbit to a metre, which no grid this coarse
+    can meet, so that the branch is exercised whether or not a vehicle near its
+    limit is to hand. Both attempts are walked and both are counted.
+    """
+    result = quick('five-phase', refinements=0, tolerance=1.0)
+
+    assert not result.reaches_orbit
+    assert result.attempts == 2
+    assert result.pass_number == 2, 'the grid was not run a second time'
+    assert result.nodes == 2 * 10
+    # and the closest set found is still there to be shown
+    assert result.best is not None
+
+
+def test_a_set_that_overstresses_the_airframe_is_not_an_answer():
+    """`max_dynamic_pressure` takes a set out of the ranking, however quick.
+
+    Falcon 9 to 500 km peaks around 35 kPa on every set that reaches it, so a
+    limit of 25 leaves the search nothing to return - and it says so rather
+    than returning the quickest set that broke the vehicle.
+    """
+    unconstrained = quick('five-phase', refinements=3, tolerance=5_000.0)
+    assert unconstrained.reaches_orbit
+    assert unconstrained.best.peak_dynamic_pressure > 25_000.0
+    assert unconstrained.over_pressure == 0
+
+    constrained = quick('five-phase', refinements=3, tolerance=5_000.0,
+                        max_dynamic_pressure=25_000.0)
+    assert constrained.over_pressure > 0
+    assert constrained.best is None
+    assert not constrained.reaches_orbit

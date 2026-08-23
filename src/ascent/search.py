@@ -121,7 +121,7 @@ NEIGHBOURING_CUT_OFF = 2.0
 
 # What one node of the grid can come to. Each is a field of `SearchResult`, and
 # every node increments exactly one of them
-OUTCOMES = ('screened', 'refused', 'unbracketed', 'no_orbit', 'closed')
+OUTCOMES = ('screened', 'refused', 'no_cut_off', 'no_orbit', 'closed')
 
 
 def default_workers() -> int:
@@ -194,12 +194,13 @@ class SearchResult:
     equivalent_time: float = 0.0
     window: tuple[float, float] = (0.0, 0.0)
     # nodes of the grid visited, dropped by the altitude integral, refused by
-    # the family itself, left with no cut-off inside the window, and closed on
-    # something that is not an orbit at all - a perigee under the surface
+    # the family itself, left with no cut-off inside the window that closes a
+    # circular orbit, and closed on something that is not an orbit at all - a
+    # perigee under the surface
     nodes: int = 0
     screened: int = 0
     refused: int = 0
-    unbracketed: int = 0
+    no_cut_off: int = 0
     no_orbit: int = 0
     # nodes that came out on an orbit. Counted rather than derived, so that a
     # node falling through every branch would show as an inconsistency
@@ -618,7 +619,7 @@ class _Flight:
                 # at all. Its own outcome, so that every node has exactly one
                 return self._node(shape, 'no_orbit', None)
             return self._node(shape, 'closed', solved)
-        return self._node(shape, 'unbracketed', None)
+        return self._node(shape, 'no_cut_off', None)
 
     def _solve_between(self, low: float, high: float,
                        shape: dict[str, float]) -> Candidate | None:
@@ -663,6 +664,12 @@ class _Flight:
             else:
                 high, above, below = middle, residual, below * 0.5
 
+        # the loop can also run out, or the bracket collapse on a root the
+        # trajectories cannot resolve. What comes back then is the closest the
+        # solve got, which is not a circular orbit and must not be ranked as
+        # one - so it is no answer at all
+        if abs(closest.residual) > self.circular_tolerance:
+            return None
         return closest
 
     def _measure(self, end: float,
@@ -695,6 +702,17 @@ class _Flight:
                                     budget.steering, residual,
                                     *_demands(telemetry, end)))
 
+    def _duration(self, end: float) -> float:
+        """How long to fly for: past the cut-off, and a whole number of steps.
+
+        `Mission` takes the length of a flight and rounds it to a whole number
+        of steps, so a duration that is not one already can round back below
+        the instant asked for - and then the state read off the end of it would
+        be from before cut-off with the engine still alight.
+        """
+        steps = math.ceil((end + 5.0) * self.steps_per_second)
+        return steps / self.steps_per_second
+
     def _fly(self, end: float,
              shape: dict[str, float]) -> tuple[Telemetry, Mission] | None:
         """Integrate one trajectory, or nothing if it cannot be flown."""
@@ -714,14 +732,17 @@ class _Flight:
                 # solved and how every one of them is flown back, so the set
                 # reported here reproduces itself from its own specification -
                 # which `tests/test_search.py` checks
-                duration=end + 5.0, steps_per_second=self.steps_per_second,
+                duration=self._duration(end),
+                steps_per_second=self.steps_per_second,
                 latitude_deg=self.latitude_deg, azimuth_deg=self.azimuth_deg)
+            # counted before it is flown, not after: one that leaves the model
+            # does so part of the way through and has cost what it cost
+            self._flights += 1
             telemetry = mission.run()
         except ValueError:
             # the set cannot be flown by this vehicle: it runs out of speed
             # against its own programme, or the trajectory leaves the model
             return None
-        self._flights += 1
         return telemetry, mission
 
 
@@ -753,8 +774,29 @@ def _demands(telemetry: Telemetry, end: float) -> tuple[float, float]:
     """
     up_to = telemetry.at(end) + 1
     demand = telemetry.steering_demand[:up_to][telemetry.thrust[:up_to] > 0.0]
-    return (float(telemetry.dynamic_pressure[:up_to].max()),
+    return (_peak(telemetry.dynamic_pressure[:up_to]),
             float(np.abs(demand).max()) if len(demand) else 0.0)
+
+
+def _peak(series: np.ndarray) -> float:
+    """The height of a smooth maximum sampled at a uniform step.
+
+    The rows of a flight are a sample of it, and the peak of the dynamic
+    pressure falls between two of them as often as on one. Taking the largest
+    row reads the peak low by however far the parabola through it and its
+    neighbours rises above it, which at a coarse step is not nothing - and this
+    figure is a constraint when the caller makes it one, so it is worth the
+    three multiplications.
+    """
+    top = int(np.argmax(series))
+    if top == 0 or top == len(series) - 1:
+        return float(series[top])
+    left, middle, right = (float(value) for value in series[top - 1:top + 2])
+    curvature = left - 2.0 * middle + right
+    if curvature >= 0.0:
+        return middle
+    offset = 0.5 * (left - right) / curvature
+    return middle - 0.25 * (left - right) * offset
 
 
 def _sweep(flight: _Flight, axes: dict[str, Axis], bracket: tuple[float, float],
@@ -901,9 +943,11 @@ def _refine(axes: dict[str, Axis], centre: dict[str, float],
     for name, axis in axes.items():
         step = _step(axis)
         low, high = bounds[name]
+        # five nodes over two old steps, whatever the pass before had: fewer
+        # would span the same two steps without shortening them, and the pass
+        # would resolve the shape no further than the one before it
         refined[name] = Axis(max(low, centre[name] - step),
-                             min(high, centre[name] + step),
-                             min(axis.nodes, REFINED_NODES))
+                             min(high, centre[name] + step), REFINED_NODES)
     return refined
 
 
@@ -914,7 +958,7 @@ def _count(axes: dict[str, Axis]) -> int:
 
 def _planned_nodes(axes: dict[str, Axis], refinements: int) -> int:
     """How many nodes the whole search will visit, known before it starts."""
-    refined = {name: Axis(axis.low, axis.high, min(axis.nodes, REFINED_NODES))
+    refined = {name: Axis(axis.low, axis.high, REFINED_NODES)
                for name, axis in axes.items()}
     return _count(axes) + refinements * _count(refined)
 

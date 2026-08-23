@@ -59,22 +59,41 @@ def test_an_orbit_out_of_reach_is_reported_as_such():
     assert vacuum_time(VEHICLES['lv.f9'], 100_000_000) is None
 
 
+# How far the estimate is out across the whole catalogue, measured: between
+# 4.8 per cent high and 9.1 per cent low, written here as the band the cut-off
+# on file sits in relative to it, with a hair of rounding either way. These are
+# literals on purpose - the test below is what pins the measurement down, so it
+# must not be able to move with the constants the search derives from it
+ESTIMATE_LOW, ESTIMATE_HIGH = 0.954, 1.101
+
+
 @pytest.mark.parametrize('spec', CATALOGUE, ids=[name(s) for s in CATALOGUE])
 def test_equivalent_time_brackets_the_catalogue(spec):
-    """Every solved cut-off on file falls inside the window the estimate sets.
+    """Every solved cut-off on file sits this close to the estimate.
 
-    This is what the estimate is for: it is not accurate, but it is bounded,
-    and `search.TIME_MARGIN_EARLY` and `TIME_MARGIN_LATE` are the band measured
-    here. Widening them costs a longer search; narrowing them past this risks
-    a search that cannot reach its own answer.
+    This is what the estimate is for: it is not accurate, but it is bounded.
+    """
+    estimate = equivalent_time(VEHICLES[spec['vehicle']], spec['target_altitude'])
+    assert estimate is not None
+    assert ESTIMATE_LOW <= spec['cutoff']['time'] / estimate <= ESTIMATE_HIGH
+
+
+def test_the_search_window_covers_the_measured_band():
+    """And the window the search looks in covers that band with room over.
+
+    Kept apart from the measurement above so that neither can quietly follow
+    the other: widening the margins cannot make the measurement pass, and a
+    measurement that drifted would fail on its own.
     """
     from ascent.search import TIME_MARGIN_EARLY, TIME_MARGIN_LATE
 
-    estimate = equivalent_time(VEHICLES[spec['vehicle']], spec['target_altitude'])
-    assert estimate is not None
-    cut_off = spec['cutoff']['time']
-    assert estimate * (1.0 - TIME_MARGIN_EARLY) < cut_off \
-        < estimate * (1.0 + TIME_MARGIN_LATE)
+    assert 1.0 - TIME_MARGIN_EARLY < ESTIMATE_LOW
+    assert ESTIMATE_HIGH < 1.0 + TIME_MARGIN_LATE
+
+
+# What the integral reads high by across the whole catalogue, measured, with a
+# hair of rounding either way. Literals for the same reason as above
+ALTITUDE_LOW, ALTITUDE_HIGH = 1.004, 1.186
 
 
 @pytest.mark.parametrize('spec', CATALOGUE, ids=[name(s) for s in CATALOGUE])
@@ -83,15 +102,24 @@ def test_analytic_altitude_reads_high_but_bounded(spec):
 
     It leaves out the air, the thrust deficit at sea level and the fall of
     gravity with altitude, all of which push the same way, so it never reads
-    low. `search.ALTITUDE_RATIO_LOW` and `ALTITUDE_RATIO_HIGH` are the band
-    measured here, and the screen of the search is that band applied backwards.
+    low.
+    """
+    mission = mission_from_spec(spec, 'config')
+    predicted = analytic_altitude(VEHICLES[spec['vehicle']], mission.pitch_programme)
+    assert ALTITUDE_LOW <= predicted / spec['target_altitude'] <= ALTITUDE_HIGH
+
+
+def test_the_screen_covers_the_measured_band():
+    """And the screen of the search covers that band with room over.
+
+    More room than the window above gets, because the screen is a gate: a node
+    it rejects is never flown, so a fourth vehicle reading further out than
+    these three would be reported as unable to reach an orbit it can reach.
     """
     from ascent.search import ALTITUDE_RATIO_HIGH, ALTITUDE_RATIO_LOW
 
-    mission = mission_from_spec(spec, 'config')
-    predicted = analytic_altitude(VEHICLES[spec['vehicle']], mission.pitch_programme)
-    ratio = predicted / spec['target_altitude']
-    assert ALTITUDE_RATIO_LOW <= ratio <= ALTITUDE_RATIO_HIGH
+    assert ALTITUDE_RATIO_LOW < ALTITUDE_LOW
+    assert ALTITUDE_HIGH < ALTITUDE_RATIO_HIGH
 
 
 def test_analytic_altitude_rises_with_the_cut_off():

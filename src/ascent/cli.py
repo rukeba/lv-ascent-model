@@ -13,6 +13,7 @@
 """
 
 import argparse
+import sys
 import time
 from pathlib import Path
 
@@ -110,11 +111,6 @@ class _Progress:
     # how often the line is rewritten, s
     INTERVAL = 0.5
 
-    def __init__(self) -> None:
-        self.start = self.last = time.monotonic()
-        self.width = 0
-        self.written = False
-
     def finish(self) -> None:
         """Close the line off, wherever the search stopped.
 
@@ -123,8 +119,14 @@ class _Progress:
         progress line.
         """
         if self.written:
-            print()
+            print(file=self.stream)
             self.written = False
+
+    def __init__(self, stream) -> None:
+        self.stream = stream
+        self.start = self.last = time.monotonic()
+        self.width = 0
+        self.written = False
 
     def __call__(self, result) -> None:
         now = time.monotonic()
@@ -143,7 +145,7 @@ class _Progress:
         if result.best is not None:
             line += f'  (best {result.best.cutoff_time:.2f} s, ' \
                     f'{result.best.miss:.0f} m out)'
-        print(f'\r{line:<{self.width}}', end='', flush=True)
+        print(f'\r{line:<{self.width}}', end='', flush=True, file=self.stream)
         self.width = max(self.width, len(line))
         self.written = True
 
@@ -202,13 +204,27 @@ def search_main(argv: list[str] | None = None) -> int:
     parser.add_argument('--config-dir', default='config', metavar='DIR',
                         help='where short mission names are looked up')
     arguments = parser.parse_args(argv)
+    for name, value in (('--tolerance', arguments.tolerance),
+                        ('--steps', arguments.steps),
+                        ('--coarse', arguments.coarse)):
+        if value <= 0.0:
+            parser.error(f'{name} has to be above zero, and is {value:g}')
+    if arguments.refinements < 0:
+        parser.error(f'--refinements cannot be negative, and is '
+                     f'{arguments.refinements}')
+    if arguments.max_q is not None and arguments.max_q <= 0.0:
+        parser.error(f'--max-q has to be above zero, and is {arguments.max_q:g}')
 
     mission_path = resolve(arguments.mission, Path(arguments.config_dir))
     spec = read_spec(mission_path)
     site = spec.get('launch_site', {})
     vehicle_file = spec['vehicle']
 
-    progress = _Progress()
+    # with `--yaml` the entry is the whole of what this command is for, so
+    # everything else goes to the error stream and a redirect of the output is
+    # a file the catalogue reader can read
+    told = sys.stderr if arguments.yaml else sys.stdout
+    progress = _Progress(sys.stderr)
     result = search(
         vehicle=load_vehicle(mission_path.parent / f'{vehicle_file}.yaml'),
         target_altitude=(arguments.altitude * 1000 if arguments.altitude is not None
@@ -225,13 +241,14 @@ def search_main(argv: list[str] | None = None) -> int:
         workers=arguments.workers,
         report=progress)
     progress.finish()
-    print(summarise_search(result))
+    print(summarise_search(result), file=told)
 
     # only a set that reaches the orbit is written out as an entry: one that
     # misses is worth showing and is not worth filing
     if arguments.yaml and result.reaches_orbit:
-        print('\n' + yaml.safe_dump({'missions': [result.specification(vehicle_file)]},
-                                    sort_keys=False, default_flow_style=None))
+        print(file=told)
+        print(yaml.safe_dump({'missions': [result.specification(vehicle_file)]},
+                             sort_keys=False, default_flow_style=None), end='')
     return 0 if result.reaches_orbit else 1
 
 
