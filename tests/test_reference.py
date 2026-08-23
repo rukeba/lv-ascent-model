@@ -1,9 +1,15 @@
-"""The published velocity budget of the three pitch programmes.
+"""The reference velocity budget of the three pitch programmes.
 
 Falcon 9 into a 500 km circular orbit from Cape Canaveral, due east, at 10
-steps per second. These are the figures the model was published with; they pin
-the whole chain - atmosphere, propulsion, equations of motion, event handling
-and the loss accounting - to one decimal place.
+steps per second. These pin the whole chain - atmosphere, propulsion, equations
+of motion, event handling and the loss accounting - to one decimal place.
+
+They are not the split printed in the dissertation, which has 2326.7 / 29.3 /
+579.0 in the first row. The loss projection was corrected after that went to
+paper: gravity up by some 250 m/s, steering down by some 50, and the 190 the
+total gains is the gap by which the old split failed to close. The flight
+itself did not move - the same trajectories, read the way the equations of
+motion carry them.
 """
 
 import pytest
