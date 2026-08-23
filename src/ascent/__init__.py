@@ -7,19 +7,24 @@ and the velocity it spent on the way.
 
 from .config import load_mission, load_vehicle
 from .cutoff import CutoffAtAltitude, CutoffAtInertialSpeed, CutoffAtTime
+from .estimates import (analytic_altitude, equivalent_time, required_velocity,
+                        vacuum_time)
 from .losses import VelocityBudget, velocity_budget
 from .mission import Mission
 from .orbit import Orbit, orbit_from_state
 from .pitch import (BilinearTangentProgramme, FivePhaseProgramme,
                     VelocityShareProgramme, bilinear_coefficients)
-from .summary import summarise
+from .search import Candidate, SearchResult, search
+from .summary import summarise, summarise_search
 from .telemetry import Telemetry
 from .vehicle import LaunchVehicle, Stage
 
 __all__ = [
-    'BilinearTangentProgramme', 'CutoffAtAltitude', 'CutoffAtInertialSpeed',
-    'CutoffAtTime', 'FivePhaseProgramme', 'LaunchVehicle', 'Mission', 'Orbit',
-    'Stage', 'Telemetry', 'VelocityBudget', 'VelocityShareProgramme',
-    'bilinear_coefficients', 'load_mission', 'load_vehicle', 'orbit_from_state',
-    'summarise', 'velocity_budget',
+    'BilinearTangentProgramme', 'Candidate', 'CutoffAtAltitude',
+    'CutoffAtInertialSpeed', 'CutoffAtTime', 'FivePhaseProgramme',
+    'LaunchVehicle', 'Mission', 'Orbit', 'SearchResult', 'Stage', 'Telemetry',
+    'VelocityBudget', 'VelocityShareProgramme', 'analytic_altitude',
+    'bilinear_coefficients', 'equivalent_time', 'load_mission', 'load_vehicle',
+    'orbit_from_state', 'required_velocity', 'search', 'summarise',
+    'summarise_search', 'vacuum_time', 'velocity_budget',
 ]

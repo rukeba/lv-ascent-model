@@ -20,6 +20,7 @@ dependencies = [
 
 [project.scripts]
 ascent = "ascent.cli:main"
+ascent-search = "ascent.cli:search_main"
 
 [project.urls]
 Repository = "https://github.com/rukeba/lv-ascent-model"

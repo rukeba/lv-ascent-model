@@ -24,6 +24,9 @@ uv run ascent config/mission.a62.yaml       # a mission file by path
 uv run ascent f9 --list                     # solved parameter sets on file
 uv run ascent f9 --altitude 650             # fly one of them
 uv run ascent f9 --altitude 650 --programme bilinear-tangent
+
+uv run ascent-search f9 --altitude 500      # solve for a set instead of flying one
+uv run ascent-search f9 --altitude 650 --programme bilinear-tangent --yaml
 ```
 
 `f9`, `a62` and `h3` are short names for `config/mission.<name>.yaml`.
@@ -81,6 +84,8 @@ several m/s, far more than the error of the scheme itself.
 | `atmosphere.py` | ICAO standard atmosphere and the gravity field |
 | `orbit.py` | the osculating orbit recovered from a position and an inertial velocity |
 | `losses.py` | the velocity budget: gravity, aerodynamic and steering losses |
+| `estimates.py` | the ascent time and the altitude reached, by quadrature rather than by integration |
+| `search.py` | the grid search for the parameters of a pitch programme |
 | `integrators.py` | the Runge-Kutta step, knowing nothing about rockets |
 | `cutoff.py` | when the engines stop — by time, by altitude or by inertial speed |
 | `state.py` | one sample of the flight |
@@ -88,7 +93,7 @@ several m/s, far more than the error of the scheme itself.
 | `summary.py` | the console summary |
 | `report.py` | the HTML report with plots |
 | `config.py` | building a mission from YAML, and reading the catalogue |
-| `cli.py` | the `ascent` command |
+| `cli.py` | the `ascent` and `ascent-search` commands |
 | `constants.py` | constants of the Earth model |
 
 ## Configuration
@@ -170,6 +175,132 @@ no freedom left to stretch to the ends once `k2` is fixed. It places no orbit
 at all for Ariane 62, whose turn would have to be one continuous manoeuvre
 while the vehicle spends its last several hundred seconds on a low-thrust upper
 stage.
+
+## Searching for a parameter set
+
+`ascent-search` solves the problem the catalogue holds the answers to. Give it
+a vehicle, a circular orbit and one of the three programme families, and it
+returns the parameters that reach that orbit — and, among the sets that do, the
+ones that reach it soonest.
+
+```sh
+uv run ascent-search f9 --altitude 500
+uv run ascent-search f9 --altitude 650 --programme bilinear-tangent
+uv run ascent-search a62 --altitude 700 --yaml            # as a catalogue entry
+uv run ascent-search h3 --altitude 1100 --coarse 0.5      # a quicker, rougher look
+```
+
+The mission file supplies the vehicle and the launch site and nothing else;
+`--altitude` and `--programme` say what to search for. `--yaml` prints the set
+found as a catalogue entry, ready to paste. A search prints its progress as it
+runs — which pass it is on, how many trajectories it has integrated and roughly
+how much longer it will take.
+
+**What is gridded and what is solved.** The grid runs over the shape of the
+turn, and only over the shape: one number for the five-phase family, two for
+each of the others. The cut-off is not one of its axes. The two conditions of a
+circular orbit divide between the parameters the way the dissertation this
+model was written for divides them — the condition on the speed fixes the end
+of the powered flight, the condition on the altitude fixes the shape of the
+turn — and this follows that division. It has to: near a circular orbit the apogee answers to the
+cut-off time at some 80 km per second, so a grid fine enough to resolve it
+along that axis would be enormous and one coarse enough to afford would resolve
+nothing. So at every node the cut-off is solved for instead, by driving the
+semi-major axis to the radius at cut-off, which is what makes an orbit
+circular. Every node the search flies therefore sits on a circular orbit
+already, at its own altitude; the grid is looking for the shape whose altitude
+is the one asked for.
+
+**The two estimates.** Both come from the dissertation, both are quadrature
+rather than integration, and both are in `estimates.py`:
+
+- the **energy-equivalent ascent time** is the instant at which the propellant
+  has bought the orbit — the characteristic velocity accumulated less what the
+  orbit costs in energy less everything lost on the way. It bounds the cut-off:
+  the search brackets its solve inside a window around the estimate, and the
+  same balance says before anything is flown whether the vehicle has the
+  propellant for the orbit at all. Measured against the catalogue it sits
+  between 4.8 per cent high and 9.1 per cent low, and the window carries that
+  band with something to spare.
+- the **analytic altitude integral** is the altitude a programme reaches,
+  taken as the integral of the vertical component of the velocity with the
+  speed from the Tsiolkovsky equation stage by stage and the flight-path angle
+  read off the programme itself. It screens the grid: the altitude a shape
+  would reach at either end of the cut-off window bounds what it can reach
+  anywhere inside it, and a shape that cannot reach the target is dropped
+  without a trajectory. It reads between 1.005 and 1.185 times the altitude the
+  flight reaches — never low, because the air, the thrust deficit at sea level
+  and the fall of gravity with altitude all push the same way — and the screen
+  is that band applied backwards.
+
+Neither is accurate enough to stand in for a flight. Both are accurate enough
+to say which flights are worth making, and `tests/test_estimates.py` checks
+both bands against every entry in the catalogue, so the constants the search
+relies on cannot drift away from the data they were measured on.
+
+**Which node a pass closes in on.** Not simply the quickest one that reached
+the orbit. At the resolution of an early pass, whether a node lands on the
+orbit at all is largely luck, and a set half a kilometre out but two seconds
+quicker is the better thing to look near. What the passes follow instead is the
+cut-off each node would need to reach the target, read off the line its own
+pass draws between the altitude reached and the instant of cut-off — a line
+because the two are readings of the same energy. Where that leads into a corner
+of the family from which the orbit cannot be reached, which happens on a
+vehicle near its limit, the grid is run a second time for the orbit alone and
+the better of the two answers is reported. Falcon 9 to 700 km on the bilinear
+tangent is the case that needs it, and the summary says when it has happened.
+
+**What it costs.** Eleven passes: the first over the whole range of the family,
+then ten closing in, each one grid step wide about the best node of the pass
+before and halving the step. A five-phase search integrates some seven hundred
+trajectories, one of the two-axis families some three thousand — a minute or so
+in the first case and several in the second, and twice that where the grid has
+to be run again. What the screen saves is almost all on the first pass, the
+only one that covers the whole range of a family: three quarters of the nodes
+of a velocity-share first pass go unflown, and anywhere from none to half of a
+five-phase one, which has a single axis and less to reject. On the passes after
+it, already gathered about an answer, it drops nothing, and it is not meant to. `--steps` and `--coarse` are
+there for a quicker look: the orbit a set reaches is the same to within a few
+metres at one step a second as at ten.
+
+**What the quicker ascent is paid for.** A quicker ascent is a flatter one,
+and a flatter one goes faster lower down. The set found is reported with the
+peak dynamic pressure it asks of the airframe, beside the figure the vehicle
+file declares it is designed for, and with the peak thrust deflection it asks
+of the guidance — and the first of those is not free. Searching Falcon 9 to
+500 km on the bilinear tangent returns a set that cuts off at 499.41 s rather
+than the 500.91 on file, and it peaks at 37.4 kPa against a design figure of
+35. Neither figure enters the ranking unless you say so: `--max-q` puts the
+airframe into the constraint, and a set that peaks above it is then not an
+answer however quick it is, which is where a limit on the dynamic pressure
+belongs in a search of this kind and where the dissertation puts it. Without
+the flag the peaks are reported and nothing more, which is how the rest of the
+model treats them.
+
+```sh
+uv run python examples/parameter_search.py       # all three families, side by side
+```
+
+**It does not reproduce the catalogue, and should not.** The catalogue
+preferred the smallest steering loss among the sets that reach the orbit; this
+prefers the earliest cut-off. For the five-phase family there is nothing to
+prefer — two conditions and two unknowns leave no freedom — and the two agree
+to the figures the grid resolves: searching Falcon 9 to 500 km returns
+`t4 = 502.71 s`, `k3 = 0.5295` against the `502.7074` and `0.529569` on file,
+and the same velocity budget to a tenth of a metre per second. The other two
+families keep a parameter to spend, and the search spends it differently:
+Falcon 9 to 500 km on the velocity share cuts off at 501.71 s rather than
+502.19 s, for 2917.6 m/s of losses rather than 2996.4.
+
+The second of those figures need not follow the first, and on H3 it does not.
+An earlier cut-off is always less propellant burned — the burn is shorter — but
+only the gravity and the aerodynamic terms are paid by the trajectory. The
+steering loss is the price of holding the programme, recovered from the normal
+equation after the fact rather than spent on the way, so a set can cut off
+sooner and still be charged more of it. On H3 it is not even comparable: the
+thrust cannot hold any of these programmes over part of the burn, the demand
+saturates, and the figure stops measuring anything — which the search reports,
+along with the peak, for exactly that reason.
 
 ## Reproducing a published result
 

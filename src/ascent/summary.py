@@ -89,6 +89,24 @@ def summarise(mission: Mission, telemetry: Telemetry) -> str:
     return '\n'.join(lines)
 
 
+def _pressure(result) -> str:
+    """The peak the set found asks of the airframe, against what it is built for.
+
+    A quicker ascent is a flatter one, and a flatter one goes faster lower
+    down, so this is the first thing minimising the ascent time spends. Only a
+    constraint if the caller made it one.
+    """
+    peak = result.best.peak_dynamic_pressure
+    design = result.vehicle.design_dynamic_pressure
+    line = f'{peak / 1000:.1f} kPa'
+    if result.max_dynamic_pressure is not None:
+        return line + f' (held under {result.max_dynamic_pressure / 1000:g})'
+    if design:
+        return line + f' (design {design / 1000:g} kPa' \
+            + (', over it' if peak > design else '') + ')'
+    return line
+
+
 def _demand(telemetry: Telemetry, guided_until: float) -> str:
     """How hard the programme leaned on the guidance, and whether it could.
 
@@ -137,3 +155,95 @@ def _propellant_left(vehicle: LaunchVehicle, telemetry: Telemetry, index: int) -
     stack = sum(s.dry_mass + s.propellant_mass for s in vehicle.stages[stage_index:])
     left = stage.propellant_mass - (stack - telemetry.mass[index])
     return f'{left:,.0f} kg, {100 * left / stage.propellant_mass:.1f} % of stage {stage_index + 1}'
+
+
+def summarise_search(result) -> str:
+    """The console summary of a parameter search: what bounded it, what it cost.
+
+    `result` is a `search.SearchResult`, left untyped so that this module says
+    nothing about the search: a flight summary has no business importing the
+    machinery that goes looking for one.
+    """
+    lines = [f'{result.vehicle.name} to {result.target_altitude / 1000:g} km, '
+             f'{result.programme}']
+
+    _block(lines, 'search', [
+        ('launch site', f'{result.latitude_deg:g} deg latitude, '
+                        f'azimuth {result.azimuth_deg:g} deg'),
+        ('criterion', 'the earliest cut-off that closes the orbit, to the '
+                      'step the flight was integrated at'),
+        ('orbit reached when', f'perigee and apogee are both within '
+                               f'{result.tolerance / 1000:g} km of the target'),
+    ])
+
+    early, late = result.window
+    _block(lines, 'estimated in advance', [
+        ('energy of the orbit', f'{result.required_velocity:.1f} m/s of '
+                                f'characteristic velocity'),
+        ('ideal vacuum time', f'{result.vacuum_time:.1f} s'),
+        ('equivalent time', f'{result.equivalent_time:.1f} s'),
+        ('cut-off looked for in', f'{early:.1f} to {late:.1f} s'),
+    ])
+
+    nodes = max(result.nodes, 1)
+    _block(lines, 'grid', [
+        ('passes', f'{result.passes}, the first over the whole range of the '
+                   f'family and the rest closing in'
+                   + (' - run twice, the second time for the orbit alone'
+                      if result.attempts > 1 else '')),
+        ('nodes visited', f'{result.nodes:,}'),
+        ('screened out', f'{result.screened:,} '
+                        f'({100 * result.screened / nodes:.0f} %), unflown, '
+                        f'by the altitude integral'),
+        ('refused by the family', f'{result.refused:,}'),
+        ('no cut-off found', f'{result.unbracketed:,}'),
+        ('cut-offs solved', f'{result.solved:,}'),
+        ('trajectories flown', f'{result.flown:,}, '
+                              f'{result.flown / max(result.solved, 1):.1f} '
+                              f'per cut-off solved'),
+    ])
+
+    best = result.best
+    if best is None:
+        lines.append('')
+        lines.append('nothing was flown: no node of the grid could be flown at all')
+        return '\n'.join(lines)
+
+    orbit = best.orbit
+    _block(lines, 'found', [
+        ('pitch programme', ', '.join(
+            f'{key}={value:g}' if isinstance(value, float) else f'{value}'
+            for key, value in best.parameters.items() if key != 'type')),
+        ('cut-off', f'{best.cutoff_time:.4f} s'),
+        ('perigee', f'{orbit.perigee_altitude / 1000:.3f} km'
+                    if orbit.is_closed else 'not a closed orbit'),
+        ('apogee', f'{orbit.apogee_altitude / 1000:.3f} km'
+                   if orbit.is_closed else '-'),
+        ('eccentricity', f'{orbit.eccentricity:.5f}'),
+        ('worst terminal error', f'{best.miss:.0f} m'
+                                 if best.miss < float('inf') else 'no orbit'),
+        ('reaches the orbit', 'yes' if result.reaches_orbit
+                              else 'no: nothing on the grid met the tolerance'),
+        ('velocity budget', f'gravity {best.gravity_loss:.1f}, aerodynamic '
+                            f'{best.aerodynamic_loss:.1f}, steering '
+                            f'{best.steering_loss:.1f}, total '
+                            f'{best.total_loss:.1f} m/s'),
+        ('max dynamic pressure', _pressure(result)),
+        ('peak steering demand', f'{best.peak_steering_demand:.3f} of the 1.0 '
+                                 f'the thrust can give'
+                                 + (' - above it the programme cannot be held'
+                                    if best.peak_steering_demand > 1.0 else '')),
+    ])
+
+    if result.over_pressure:
+        lines.append('')
+        lines.append(f'{result.over_pressure:,} sets reached the orbit and were '
+                     f'put aside for asking more of the airframe than '
+                     f'{result.max_dynamic_pressure / 1000:g} kPa')
+
+    if result.on_edge:
+        lines.append('')
+        lines.append(f'the set found sits on a bound of the grid in '
+                     f'{", ".join(result.on_edge)}: either the family gives out '
+                     f'there, or a better set lies outside the range searched')
+    return '\n'.join(lines)
