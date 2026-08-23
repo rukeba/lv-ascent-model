@@ -74,6 +74,115 @@ regula falsi rather than estimated. This matters more than the order of the
 scheme: at around 60 m/s² an event misplaced by one step at 10 Hz is worth
 several m/s, far more than the error of the scheme itself.
 
+## The three pitch programmes
+
+A pitch programme is the law that turns the vehicle from the vertical it lifts
+off on to the horizontal an orbit needs — the prescribed flight-path angle
+`gamma(t)`, and with it the share of the engine's work that goes into altitude
+rather than into speed along the horizon. It is not the attitude control loop:
+that is the inner loop which holds the vehicle on the commanded direction
+against disturbances, and this model has none of it. What is here is the
+command.
+
+All three families below prescribe the same thing and disagree about what to
+prescribe it *with*, which is what makes them worth comparing. Each is
+tabulated on a tenth-of-a-second grid at construction and read back by
+interpolation, so the shape of a programme never enters the equations of motion
+— only its value at an instant does. Each ends before the engines do; after its
+last instant the vehicle holds the attitude it reached and flies on it to
+cut-off.
+
+### Five-phase turn
+
+What is prescribed is the pitch **rate**, as a trapezium, and the angle follows
+by integrating it. Five phases: a vertical rise to `t1`; the rate built up from
+zero over the share `k2` of the turn; the turn held at that rate over the share
+`k3`; the rate arrested over what is left, so that the angle arrives at the
+horizon exactly at `t4`; and then the fifth phase, free flight on the attitude
+reached, to cut-off.
+
+Prescribing the rate rather than the angle is the point of the family. A turn
+written as an angle leaves the rate and the angular acceleration as derived
+quantities, and those are exactly what actuator authority and bending loads are
+written in terms of; a trapezium in the rate makes the rate continuous at every
+joint by construction and the angular acceleration piecewise constant and
+bounded, so the control moment stays finite and the programme is something an
+attitude loop could actually hold. The requirement that the turn cover the
+whole 90 degrees closes the family analytically: the working rate follows from
+the angle to be covered, so `t1`, `t4`, `k2` and `k3` are the whole of it.
+
+`k2` and `k3` are shares rather than times, which is what lets a set of
+parameters carry across vehicles of different classes and burn lengths. Two
+levers set how flat the turn is — the length of the manoeuvre and the share of
+it spent at a constant rate — and both rise with the target altitude while the
+peak rate falls with it — a higher orbit needs a longer burn, and a longer manoeuvre can be
+made flatter, spending the propellant on horizontal speed rather than on
+holding the thrust away from the horizon (R. Keba and A. M. Kulabukhov,
+*Journal of Rocket-Space Technology* **34**(4), 115–122 (2025),
+[doi:10.15421/452553](https://doi.org/10.15421/452553)).
+
+### Velocity share
+
+What is prescribed is `eta = V_vertical / V = sin(gamma)`: the share of the
+speed that is pointed up. The family comes out of launch telemetry — across
+Falcon 9 flights that share starts at one, falls monotonically, and arrives at
+very nearly zero at cut-off, staying inside `[0, 1]` throughout — and out of
+what that split buys. Taking the pair "speed magnitude and vertical share"
+rather than two independent velocity components separates the energetics of the
+flight from the geometry of the turn: the magnitude comes from the vehicle's
+own thrust and mass through the Tsiolkovsky equation and so is attainable by
+construction, while the share carries the whole of the steering. That is what
+makes the altitude reached an integral of the programme, `h = integral of
+eta*V dt`, which can be evaluated without integrating the equations of motion —
+and it is the estimate the search screens its grid with.
+
+The share is prescribed by phases: one over the vertical rise, a quartic over
+the turn from `t1` to `tf`, and zero from `tf` to cut-off, where the velocity
+is already in the horizon. The quartic is the lowest-degree polynomial that can
+meet the four boundary conditions — one and zero at the ends, flat at both — and
+still keep a free parameter, and `s` is that parameter: it sets how full the
+turn is, how long the share lingers near one, and so how much altitude the
+ascent accumulates. Outside `|s| <= 3` the quartic leaves `[0, 1]` and stops
+being a turn, which is why the family refuses it. Being flat at both ends is
+what makes the turn join the vertical rise and the horizontal phase without a
+kink in the rate, and what makes a turn that runs all the way to cut-off leave
+the vehicle on the horizon anyway: the double root holds the share under `1e-7`
+at the last tabulated instant.
+
+The method behind this family is not published yet; its DOI belongs here and
+is a placeholder until it is —
+[doi:XX.YYYYY/ZZZZZ](https://doi.org/XX.YYYYY/ZZZZZ).
+
+### Bilinear tangent
+
+What is prescribed is `tan(gamma) = (a*tau + b) / (c*tau + 1)`, with `tau`
+counted from the end of the vertical rise. This is the classical optimal
+steering law of powered flight — what the calculus of variations returns for a
+flat Earth, constant gravity and no atmosphere — and it is here as an explicit
+programme with its coefficients as parameters rather than as something solved
+for. It has no phases: one expression covers the turn from `t1` to `te`.
+
+Three things about it are worth knowing before fitting it. Its numerator
+cancels to almost nothing at the end of the turn, and that cancellation is what
+levels the vehicle out, so the last digits of `a` and `b` carry the terminal
+angle — round them and the perigee moves by a kilometre. Its coefficients are
+nearly degenerate, in that scaling `b` and `c` together leaves almost the same
+turn, which is why the search grids the angles the turn passes through instead.
+And it steps the angle at `t1`, from the vertical straight to `arctan(b)`,
+so how far that start angle is from 90 degrees is the size of a discontinuity
+rather than a free choice; the eighteen sets on file start between 84.7 and
+89.2 degrees.
+
+### What they cost
+
+Flown into the same orbit by the same vehicle, the three differ mostly in what
+they spend. The steering loss — the share of the thrust that holding the
+programme points away from the velocity — is what a programme is judged by, and
+gravity is what it trades against: a flatter turn steers less and climbs
+longer. `examples/steering_loss_comparison.py` flies all three into a 500 km
+orbit and prints the three budgets side by side; the programme with the
+smallest steering loss is not the one with the smallest total.
+
 ## Modules
 
 | Module | What is in it |
@@ -130,12 +239,13 @@ it spends, and the core itself belongs to the entry that flies on after
 separation. The last stage carries no propellant: it is the payload. See
 `config/lv.f9.yaml` for the simple case and `config/lv.a62.yaml` for the other.
 
-The three programmes take these parameters:
+The three programmes take these parameters — what each of them means is above,
+under [The three pitch programmes](#the-three-pitch-programmes):
 
 | Programme | Parameters |
 |---|---|
 | `five-phase` | `t1` end of the vertical rise, `t4` end of the programme, `k2` and `k3` the shares of the turn spent building up and holding the pitch rate |
-| `velocity-share` | `t1` end of the vertical rise, `tf` end of the turn, `te` end of the burn, `s` how much of the turn is done early, between -3 and 3 |
+| `velocity-share` | `t1` end of the vertical rise, `tf` end of the turn, `te` end of the burn, `s` how full the turn is, between -3 and 3 |
 | `bilinear-tangent` | `t1` start of the turn, `a`, `b`, `c` of `tan(gamma) = (a*tau + b) / (c*tau + 1)`, `te` end of the programme |
 
 ## Catalogue of solved parameter sets
