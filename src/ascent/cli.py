@@ -2,7 +2,7 @@
 
     ascent f9                             # config/mission.f9.yaml
     ascent f9 --csv out/f9.csv            # and the whole trajectory as CSV
-    ascent f9 --report out/f9             # and an HTML report with plots
+    ascent f9 --report out/f9             # an HTML report, opened in a browser
     ascent config/mission.a62.yaml        # a mission file by path
 
     ascent f9 --altitude 650               # a solved set from the catalogue
@@ -15,6 +15,7 @@
 import argparse
 import sys
 import time
+import webbrowser
 from pathlib import Path
 
 import yaml
@@ -36,7 +37,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument('--list', action='store_true',
                         help='list the catalogue entries for this vehicle and stop')
     parser.add_argument('--csv', metavar='FILE', help='write the whole trajectory to a CSV file')
-    parser.add_argument('--report', metavar='DIR', help='write an HTML report with plots')
+    parser.add_argument('--report', metavar='DIR',
+                        help='write an HTML report with plots and open it')
+    parser.add_argument('--no-open', action='store_true',
+                        help='write the report without opening it in a browser')
     parser.add_argument('--config-dir', default='config', metavar='DIR',
                         help='where short mission names and the catalogue are '
                              'looked up; a mission given by path is read where '
@@ -77,7 +81,11 @@ def main(argv: list[str] | None = None) -> int:
 
     if arguments.report:
         from .report import write_report
-        print(f'report: {write_report(mission, telemetry, arguments.report)}')
+        path = write_report(mission, telemetry, arguments.report)
+        print(f'report: {path}')
+        # a report is written to be looked at, so it is opened where it can be
+        if not arguments.no_open:
+            webbrowser.open(path.resolve().as_uri())
 
     return 0
 

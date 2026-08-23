@@ -1,0 +1,127 @@
+{# The flight report. Rendered by report.py; the styles sit beside this file. #}
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ heading }}</title>
+<style>
+{% include 'report.css' %}
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="hero-top">
+      <div>
+        <div class="eyebrow">Ascent model &middot; flight report</div>
+        <h1>{{ heading }}</h1>
+      </div>
+      <div class="status {{ status.css }}">{{ status.label }}</div>
+    </div>
+    <div class="chips">
+      {%- for chip in chips %}<span class="chip">{{ chip }}</span>{% endfor %}
+    </div>
+  </div>
+</header>
+
+<nav class="nav">
+  <div class="wrap">
+    <a href="#summary">Summary</a>
+    <a href="#plots">Plots</a>
+    <a href="#log">Flight log</a>
+    <span class="stamp">{{ generated }}</span>
+  </div>
+</nav>
+
+<main class="wrap">
+
+<section id="summary">
+  <div class="tiles">
+    {%- for tile in tiles %}
+    <div class="tile{% if tile.css %} {{ tile.css }}{% endif %}">
+      <div class="num">{{ tile.value }}{% if tile.unit %}<small>{{ tile.unit }}</small>{% endif %}</div>
+      <div class="lbl">{{ tile.label }}</div>
+    </div>
+    {%- endfor %}
+  </div>
+
+  <div class="panel">
+    <h3>Velocity budget <em>{{ budget.total }} m/s</em></h3>
+    <div class="bar">
+      {%- for part in budget.parts %}
+      <span class="seg {{ part.css }}" style="width: {{ part.share }}%"
+            title="{{ part.name }}: {{ part.value }} m/s"></span>
+      {%- endfor %}
+    </div>
+    <ul class="key">
+      {%- for part in budget.parts %}
+      <li><i class="seg {{ part.css }}"></i><b>{{ part.value }}</b>
+          <span>m/s {{ part.name }}, {{ part.share }}%</span></li>
+      {%- endfor %}
+    </ul>
+  </div>
+
+  <div class="cards">
+    {%- for block in blocks %}
+    <div class="card {{ block.css }}">
+      <h3>{{ block.title }}</h3>
+      <dl>
+        {%- for row in block.rows %}
+        <div class="row{% if row.wide %} wide{% endif %}">
+          <dt>{{ row.label }}</dt><dd>{{ row.value }}</dd>
+        </div>
+        {%- endfor %}
+      </dl>
+    </div>
+    {%- endfor %}
+  </div>
+</section>
+
+<section id="plots">
+  <h2 class="section">Plots</h2>
+  <p class="note">{{ plot_note }}</p>
+  <div class="figs">
+    {%- for figure in figures %}
+    <figure class="fig{% if figure.wide %} wide{% endif %}">
+      <a href="{{ figure.file }}" target="_blank" rel="noopener">
+        <img src="{{ figure.file }}" alt="{{ figure.title }}" loading="lazy">
+      </a>
+      <figcaption><b>{{ figure.title }}.</b> {{ figure.caption }}</figcaption>
+    </figure>
+    {%- endfor %}
+  </div>
+</section>
+
+<section id="log">
+  <h2 class="section">Flight log <span class="note">every {{ log.interval }} s of the
+    flight; a blue rule marks the row where a stage takes over</span></h2>
+  <div class="scroll">
+    <table>
+      <thead>
+        <tr>{% for column in log.columns %}<th>{{ column.name }}</th>{% endfor %}</tr>
+        <tr class="units">{% for column in log.columns %}<th>{{ column.unit }}</th>{% endfor %}</tr>
+      </thead>
+      <tbody>
+        {%- for row in log.rows %}
+        <tr{% if row.mark %} class="mark" title="{{ row.mark }}"{% endif %}>
+          {%- for cell in row.cells %}<td>{{ cell }}</td>{% endfor %}
+        </tr>
+        {%- endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+</main>
+
+<footer class="wrap foot">
+  {{ heading }} &middot; generated {{ generated }} by
+  <code>lv-ascent-model</code>{% if version %} {{ version }}{% endif %}.
+  The plots are PNG files beside this page; the whole trajectory can be written
+  out with <code>ascent --csv</code>.
+</footer>
+
+</body>
+</html>

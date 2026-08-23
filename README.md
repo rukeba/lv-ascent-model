@@ -18,7 +18,7 @@ uv sync
 
 uv run ascent f9                            # summary of the flight on the console
 uv run ascent f9 --csv out/f9.csv           # and the whole trajectory as CSV
-uv run ascent f9 --report out/f9            # and an HTML report with plots
+uv run ascent f9 --report out/f9            # and an HTML report, opened in a browser
 uv run ascent config/mission.a62.yaml       # a mission file by path
 
 uv run ascent f9 --list                     # solved parameter sets on file
@@ -32,8 +32,15 @@ uv run ascent-search f9 --altitude 650 --programme bilinear-tangent --yaml
 `f9`, `a62` and `h3` are short names for `config/mission.<name>.yaml`.
 
 The console summary lists the set-up, the notable instants of the flight, the
-state at engine cut-off, the orbit reached and the velocity budget. The HTML
-report shows the same figures plus plots and a flight log.
+state at engine cut-off, the orbit reached and the velocity budget.
+
+`--report` writes those same figures as a page — laid out as cards, with the
+velocity budget drawn to scale — and adds ten plots and the trajectory
+tabulated every five seconds. The plots are PNG files beside the page, drawn
+well above screen resolution so that they stay sharp when opened full size or
+printed; the styles are inlined, so the page can be sent on with the images
+next to it. It is opened in a browser as soon as it is written, which
+`--no-open` suppresses.
 
 ## The model
 
@@ -200,7 +207,8 @@ smallest steering loss is not the one with the smallest total.
 | `state.py` | one sample of the flight |
 | `telemetry.py` | the recorded flight and its CSV form |
 | `summary.py` | the console summary |
-| `report.py` | the HTML report with plots |
+| `report.py` | the HTML report: the plots, the cards and the flight log |
+| `templates/` | the markup and the stylesheet of that report, rendered with Jinja |
 | `config.py` | building a mission from YAML, and reading the catalogue |
 | `cli.py` | the `ascent` and `ascent-search` commands |
 | `constants.py` | constants of the Earth model |

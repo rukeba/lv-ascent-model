@@ -1,0 +1,434 @@
+/* Styles of the flight report. Inlined into the page when it is rendered, so
+   that the file can be moved or sent on its own. */
+
+:root {
+  --ink: #171a1f;
+  --muted: #6b7280;
+  --faint: #98a1ad;
+  --line: #e3e6ea;
+  --bg: #f4f6f8;
+  --panel: #ffffff;
+  --zebra: #f7f9fb;
+  --blue: #1f4fd8;
+  --teal: #00695c;
+  --amber: #b8860b;
+  --purple: #6a1b9a;
+  --green: #2e7d32;
+  --red: #c62828;
+  --orange: #e65100;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 15px/1.55 var(--sans);
+  -webkit-text-size-adjust: 100%;
+}
+
+.wrap {
+  max-width: 1360px;
+  margin: 0 auto;
+  padding: 0 clamp(14px, 3vw, 34px);
+}
+
+/* --- head band ---------------------------------------------------------- */
+
+.hero {
+  background: linear-gradient(135deg, #101c31 0%, #1b3660 55%, #24508f 100%);
+  color: #fff;
+  padding: clamp(22px, 4vw, 40px) 0 clamp(18px, 3vw, 28px);
+}
+.hero-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.eyebrow {
+  font-size: 11px;
+  letter-spacing: 2.4px;
+  text-transform: uppercase;
+  color: #9db4d8;
+}
+.hero h1 {
+  margin: 6px 0 0;
+  font-size: clamp(22px, 3.4vw, 34px);
+  font-weight: 650;
+  letter-spacing: -0.4px;
+}
+.status {
+  font: 600 12px/1 var(--sans);
+  letter-spacing: 2px;
+  padding: 9px 16px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  white-space: nowrap;
+}
+.status.ok  { background: var(--green);  border-color: transparent; }
+.status.sub { background: var(--red);    border-color: transparent; }
+.status.esc { background: var(--orange); border-color: transparent; }
+
+.chips {
+  margin: 16px 0 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.chip {
+  font: 12px/1.3 var(--mono);
+  color: #d7e2f4;
+  background: rgba(255, 255, 255, 0.09);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 6px;
+  padding: 4px 10px;
+}
+
+/* --- navigation --------------------------------------------------------- */
+
+.nav {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--line);
+}
+.nav .wrap {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  height: 46px;
+}
+.nav a {
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 13px;
+  letter-spacing: 0.4px;
+  padding: 4px 0;
+  border-bottom: 2px solid transparent;
+}
+.nav a:hover { color: var(--blue); border-bottom-color: var(--blue); }
+.nav .stamp {
+  margin-left: auto;
+  font: 11px/1 var(--mono);
+  color: var(--faint);
+}
+
+main { padding: 26px 0 40px; }
+
+h2.section {
+  font-size: 13px;
+  letter-spacing: 2.2px;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 34px 0 12px;
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+h2.section .note {
+  font: 12px/1 var(--sans);
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--faint);
+}
+p.note {
+  margin: -4px 0 14px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* --- the figures that stand out ----------------------------------------- */
+
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+}
+.tile {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px 14px;
+  box-shadow: 0 1px 2px rgba(16, 28, 49, 0.05);
+}
+.tile .num {
+  font: 600 21px/1.15 var(--mono);
+  letter-spacing: -0.5px;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tile .num small {
+  font: 400 12px/1 var(--mono);
+  color: var(--faint);
+  margin-left: 3px;
+}
+.tile .lbl {
+  margin-top: 5px;
+  font-size: 11px;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.tile.blue   .num { color: var(--blue); }
+.tile.green  .num { color: var(--green); }
+.tile.red    .num { color: var(--red); }
+.tile.orange .num { color: var(--orange); }
+.tile.amber  .num { color: var(--amber); }
+.tile.teal   .num { color: var(--teal); }
+.tile.purple .num { color: var(--purple); }
+
+/* --- the velocity budget, drawn to scale -------------------------------- */
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 16px 18px;
+  margin-top: 16px;
+}
+.panel h3 {
+  margin: 0 0 12px;
+  font-size: 12px;
+  letter-spacing: 1.6px;
+  text-transform: uppercase;
+  color: var(--muted);
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.panel h3 em {
+  margin-left: auto;
+  font: 600 15px/1 var(--mono);
+  font-style: normal;
+  color: var(--ink);
+  letter-spacing: 0;
+}
+.bar {
+  display: flex;
+  height: 16px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--zebra);
+}
+.bar span { display: block; height: 100%; }
+.seg.gravity     { background: var(--amber); }
+.seg.aerodynamic { background: var(--teal); }
+.seg.steering    { background: var(--purple); }
+.key {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 26px;
+  margin: 12px 0 0;
+  padding: 0;
+  font-size: 13px;
+}
+.key li { display: flex; align-items: baseline; gap: 7px; }
+.key i {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  display: inline-block;
+}
+.key b { font: 600 13px/1 var(--mono); }
+.key span { color: var(--muted); }
+
+/* --- the summary as cards ----------------------------------------------- */
+
+.cards {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  margin-top: 16px;
+}
+@media (min-width: 700px) {
+  .cards { grid-template-columns: 1fr 1fr; }
+}
+@media (min-width: 1100px) {
+  .cards { grid-template-columns: 1fr 1fr 1fr; }
+}
+.card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--faint);
+  border-radius: 10px;
+  padding: 14px 16px 12px;
+}
+.card h3 {
+  margin: 0 0 10px;
+  font-size: 11px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.card dl { margin: 0; }
+.card .row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 4px 0;
+  border-top: 1px solid var(--zebra);
+}
+.card .row:first-child { border-top: none; }
+.card dt {
+  color: var(--muted);
+  font-size: 13px;
+  flex: 0 0 auto;
+}
+.card dd {
+  margin: 0 0 0 auto;
+  font: 13px/1.45 var(--mono);
+  text-align: right;
+}
+.card .row.wide { display: block; }
+.card .row.wide dd {
+  margin: 2px 0 0;
+  text-align: left;
+  font-size: 12.5px;
+  color: #2c313a;
+}
+.card.blue   { border-left-color: var(--blue); }
+.card.teal   { border-left-color: var(--teal); }
+.card.amber  { border-left-color: var(--amber); }
+.card.purple { border-left-color: var(--purple); }
+.card.green  { border-left-color: var(--green); }
+.card.red    { border-left-color: var(--red); }
+.card.orange { border-left-color: var(--orange); }
+.card.blue   dd b, .card.green dd b { color: inherit; }
+
+/* --- plots -------------------------------------------------------------- */
+
+.figs {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+}
+@media (min-width: 900px) {
+  .figs { grid-template-columns: 1fr 1fr; }
+}
+.fig {
+  margin: 0;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px 12px 10px;
+}
+.fig.wide { grid-column: 1 / -1; }
+.fig a { display: block; }
+.fig img {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+.fig figcaption {
+  margin-top: 8px;
+  font-size: 12.5px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+.fig figcaption b {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+/* --- the flight log ----------------------------------------------------- */
+
+.scroll {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: auto;
+  max-height: 78vh;
+}
+table {
+  border-collapse: separate;
+  border-spacing: 0;
+  width: 100%;
+  font: 12.5px/1.3 var(--mono);
+}
+th, td {
+  text-align: right;
+  padding: 3px 10px;
+  white-space: nowrap;
+}
+thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  height: 24px;
+  background: var(--panel);
+  color: var(--ink);
+  font-weight: 600;
+  border-bottom: 1px solid var(--line);
+}
+thead tr.units th {
+  top: 24px;
+  height: 20px;
+  font-weight: 400;
+  color: var(--faint);
+  font-size: 11px;
+  border-bottom: 1px solid var(--line);
+}
+tbody td { border-bottom: 1px solid var(--zebra); }
+tbody tr:nth-child(even) td { background: var(--zebra); }
+tbody tr:hover td { background: #eef3fb; }
+tbody tr.mark td { box-shadow: inset 0 1px 0 var(--blue); }
+th:first-child, td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--panel);
+  font-weight: 600;
+  border-right: 1px solid var(--line);
+}
+thead th:first-child { z-index: 3; }
+tbody tr:nth-child(even) td:first-child { background: var(--zebra); }
+tbody tr:hover td:first-child { background: #eef3fb; }
+
+.foot {
+  color: var(--faint);
+  font-size: 12px;
+  padding-bottom: 30px;
+}
+.foot code { font-family: var(--mono); }
+
+/* --- narrow screens ----------------------------------------------------- */
+
+@media (max-width: 699px) {
+  body { font-size: 14px; }
+  .tiles {
+    grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+    gap: 8px;
+  }
+  .tile .num { font-size: 18px; }
+  .hero { padding-bottom: 22px; }
+  .nav .wrap { gap: 14px; }
+  .nav .stamp { display: none; }
+  .card .row { display: block; }
+  .card dd { text-align: left; margin-left: 0; }
+  .figs { gap: 10px; }
+  .scroll { max-height: 70vh; }
+  table { font-size: 11.5px; }
+  th, td { padding: 3px 7px; }
+}
+
+/* --- on paper ----------------------------------------------------------- */
+
+@media print {
+  body { background: #fff; }
+  .nav { display: none; }
+  .hero { background: #14263f; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .fig, .card, .panel, .tile { break-inside: avoid; }
+  .figs { grid-template-columns: 1fr 1fr; }
+  .scroll { max-height: none; overflow: visible; }
+}
