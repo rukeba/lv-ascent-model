@@ -10,6 +10,7 @@
     ascent f9 --list                       # what the catalogue holds
 
     ascent-search f9 --altitude 500        # solve for a set instead of flying one
+    ascent-search f9 --altitude 500 -r     # and a report of the set it found
 
 A pitch programme can be named in full or by the short form beside it - `5f`,
 `vs`, `bt`.
@@ -225,6 +226,7 @@ def search_main(argv: list[str] | None = None) -> int:
 
         ascent-search f9 --altitude 500
         ascent-search f9 -a 650 -p bt --yaml
+        ascent-search f9 --altitude 500 --report        # fly the set found, too
         ascent-search a62 --altitude 700 --coarse 0.5   # a quicker, rougher look
 
     The mission file supplies the vehicle and the launch site, and its own
@@ -269,6 +271,12 @@ def search_main(argv: list[str] | None = None) -> int:
                              f'cores on this machine); 1 to search in this one')
     parser.add_argument('--yaml', action='store_true',
                         help='print the set found as a catalogue entry')
+    parser.add_argument('--report', '-r', metavar='DIR', nargs='?', const='',
+                        help='fly the set found and write the same HTML report '
+                             '`ascent` writes; on its own it goes to out/ and '
+                             'the name of the vehicle')
+    parser.add_argument('--no-open', action='store_true',
+                        help='write the report without opening it in a browser')
     parser.add_argument('--config-dir', default='config', metavar='DIR',
                         help='where short mission names are looked up')
     arguments = parser.parse_args(argv)
@@ -319,7 +327,39 @@ def search_main(argv: list[str] | None = None) -> int:
         print(file=told)
         print(yaml.safe_dump({'missions': [result.specification(vehicle_file)]},
                              sort_keys=False, default_flow_style=None), end='')
+
+    if arguments.report is not None:
+        _report_the_search(result, arguments, spec, mission_path, told,
+                           _command_line(parser.prog, argv))
     return 0 if result.reaches_orbit else 1
+
+
+def _report_the_search(result, arguments, spec: dict, mission_path: Path,
+                       told, command: str) -> None:
+    """Fly the set the search found, and report it as a flight.
+
+    The report is of a flight, not of a search: the set is turned into the
+    same entry `--yaml` would write and flown by the same route a catalogue
+    entry is flown, so a searched set and a filed one give the same page. A
+    set that misses the orbit is not an entry and is not flown - the summary
+    above has already said what was found and how far out it was.
+    """
+    if not result.reaches_orbit:
+        print('\nno report: nothing was found that reaches the orbit', file=told)
+        return
+
+    from .report import write_report
+    vehicle_file = spec['vehicle']
+    entry = result.specification(vehicle_file)
+    entry['launch_site'] = _named_site(entry['launch_site'],
+                                       spec.get('launch_site', {}))
+    mission = mission_from_spec(entry, mission_path.parent)
+    path = write_report(mission, mission.run(),
+                        _report_directory(arguments.report, vehicle_file),
+                        command=command)
+    print(f'\nreport: {path}', file=told)
+    if not arguments.no_open:
+        webbrowser.open(path.resolve().as_uri())
 
 
 if __name__ == '__main__':

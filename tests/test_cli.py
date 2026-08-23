@@ -122,3 +122,39 @@ def test_a_setting_that_cannot_be_searched_with_is_refused(argument):
     """Told at the command line rather than met as an arithmetic error."""
     with pytest.raises(SystemExit):
         search_main(['f9', '--altitude', '500', argument])
+
+
+def test_the_search_reports_the_set_it_found(tmp_path, monkeypatch):
+    """`--report` flies what was found and writes the page `ascent` writes.
+
+    Coarse and shallow, as the test above: what is under test is that the set
+    is flown and reported, not how well it was searched for.
+    """
+    opened = []
+    monkeypatch.setattr('webbrowser.open', lambda url: opened.append(url))
+    directory = tmp_path / 'found'
+
+    assert search_main(['f9', '--altitude', '500', '--programme', '5f',
+                        '--tolerance', '20', '--coarse', '0.3',
+                        '--refinements', '1', '--steps', '1',
+                        '--report', str(directory)]) == 0
+
+    page = (directory / 'index.html').read_text(encoding='utf-8')
+    assert 'Falcon 9 to 500 km' in page
+    assert 'Cape Canaveral SLC-40, Florida' in page
+    assert 'ascent-search f9 --altitude 500' in page
+    assert (directory / 'attitude.png').exists()
+    assert opened
+
+
+def test_a_search_that_reaches_nothing_writes_no_report(tmp_path, capsys):
+    """There is no flight to report: a set that misses is not an entry."""
+    directory = tmp_path / 'nothing'
+
+    assert search_main(['f9', '--altitude', '500', '--programme', '5f',
+                        '--tolerance', '0.001', '--coarse', '0.2',
+                        '--refinements', '0', '--steps', '1',
+                        '--report', str(directory)]) == 1
+
+    assert not directory.exists()
+    assert 'no report' in capsys.readouterr().out

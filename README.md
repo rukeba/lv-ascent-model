@@ -313,13 +313,17 @@ ones that reach it soonest.
 uv run ascent-search f9 --altitude 500
 uv run ascent-search f9 --altitude 650 --programme bilinear-tangent
 uv run ascent-search a62 --altitude 700 --yaml            # as a catalogue entry
+uv run ascent-search f9 --altitude 500 --report           # fly it and report it
 uv run ascent-search h3 --altitude 1100 --coarse 0.5      # a quicker, rougher look
 uv run ascent-search f9 --altitude 500 --workers 1        # in this process alone
 ```
 
 The mission file supplies the vehicle and the launch site and nothing else;
 `--altitude` and `--programme` — or `-a` and `-p` — say what to search for. `--yaml` prints the set
-found as a catalogue entry, ready to paste. A search prints its progress as it
+found as a catalogue entry, ready to paste; `--report` turns it into that same
+entry, flies it and writes the page `ascent --report` writes, so a set that was
+searched for and one that was filed give the same report. A set that misses the
+orbit is not an entry: it is printed, and it is not flown. A search prints its progress as it
 runs — which pass it is on, how many trajectories it has integrated and roughly
 how much longer it will take.
 
