@@ -26,7 +26,7 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--ink);
-  font: 15px/1.55 var(--sans);
+  font: 16px/1.55 var(--sans);
   -webkit-text-size-adjust: 100%;
 }
 
@@ -51,7 +51,7 @@ body {
   flex-wrap: wrap;
 }
 .eyebrow {
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: 2.4px;
   text-transform: uppercase;
   color: #9db4d8;
@@ -63,7 +63,7 @@ body {
   letter-spacing: -0.4px;
 }
 .status {
-  font: 600 12px/1 var(--sans);
+  font: 600 13px/1 var(--sans);
   letter-spacing: 2px;
   padding: 9px 16px;
   border-radius: 999px;
@@ -82,7 +82,7 @@ body {
   gap: 8px;
 }
 .chip {
-  font: 12px/1.3 var(--mono);
+  font: 13px/1.35 var(--mono);
   color: #d7e2f4;
   background: rgba(255, 255, 255, 0.09);
   border: 1px solid rgba(255, 255, 255, 0.16);
@@ -109,7 +109,7 @@ body {
 .nav a {
   color: var(--muted);
   text-decoration: none;
-  font-size: 13px;
+  font-size: 14px;
   letter-spacing: 0.4px;
   padding: 4px 0;
   border-bottom: 2px solid transparent;
@@ -117,14 +117,14 @@ body {
 .nav a:hover { color: var(--blue); border-bottom-color: var(--blue); }
 .nav .stamp {
   margin-left: auto;
-  font: 11px/1 var(--mono);
+  font: 12px/1 var(--mono);
   color: var(--faint);
 }
 
 main { padding: 26px 0 40px; }
 
 h2.section {
-  font-size: 13px;
+  font-size: 14px;
   letter-spacing: 2.2px;
   text-transform: uppercase;
   color: var(--muted);
@@ -134,14 +134,14 @@ h2.section {
   gap: 12px;
 }
 h2.section .note {
-  font: 12px/1 var(--sans);
+  font: 13px/1 var(--sans);
   letter-spacing: 0;
   text-transform: none;
   color: var(--faint);
 }
 p.note {
   margin: -4px 0 14px;
-  font-size: 13px;
+  font-size: 14px;
   color: var(--muted);
 }
 
@@ -160,21 +160,23 @@ p.note {
   box-shadow: 0 1px 2px rgba(16, 28, 49, 0.05);
 }
 .tile .num {
-  font: 600 21px/1.15 var(--mono);
-  letter-spacing: -0.5px;
+  font: 600 20px/1.2 var(--mono);
+  letter-spacing: -0.4px;
   color: var(--ink);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  /* nothing is ever cut short: a long value is set smaller, and one that
+     still does not fit wraps rather than losing an end */
+  overflow-wrap: break-word;
 }
+.tile.long .num { font-size: 16px; }
+.tile.long .num small { font-size: 12px; }
 .tile .num small {
-  font: 400 12px/1 var(--mono);
+  font: 400 13px/1 var(--mono);
   color: var(--faint);
   margin-left: 3px;
 }
 .tile .lbl {
   margin-top: 5px;
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: 0.6px;
   text-transform: uppercase;
   color: var(--muted);
@@ -198,7 +200,7 @@ p.note {
 }
 .panel h3 {
   margin: 0 0 12px;
-  font-size: 12px;
+  font-size: 13px;
   letter-spacing: 1.6px;
   text-transform: uppercase;
   color: var(--muted);
@@ -208,7 +210,7 @@ p.note {
 }
 .panel h3 em {
   margin-left: auto;
-  font: 600 15px/1 var(--mono);
+  font: 600 16px/1 var(--mono);
   font-style: normal;
   color: var(--ink);
   letter-spacing: 0;
@@ -231,7 +233,7 @@ p.note {
   gap: 8px 26px;
   margin: 12px 0 0;
   padding: 0;
-  font-size: 13px;
+  font-size: 14px;
 }
 .key li { display: flex; align-items: baseline; gap: 7px; }
 .key i {
@@ -240,7 +242,7 @@ p.note {
   border-radius: 2px;
   display: inline-block;
 }
-.key b { font: 600 13px/1 var(--mono); }
+.key b { font: 600 14px/1 var(--mono); }
 .key span { color: var(--muted); }
 
 /* --- the summary as cards ----------------------------------------------- */
@@ -266,7 +268,7 @@ p.note {
 }
 .card h3 {
   margin: 0 0 10px;
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: 2px;
   text-transform: uppercase;
   color: var(--muted);
@@ -282,19 +284,23 @@ p.note {
 .card .row:first-child { border-top: none; }
 .card dt {
   color: var(--muted);
-  font-size: 13px;
-  flex: 0 0 auto;
+  font-size: 14px;
+  flex: 0 1 auto;
 }
 .card dd {
   margin: 0 0 0 auto;
-  font: 13px/1.45 var(--mono);
+  font: 14px/1.45 var(--mono);
   text-align: right;
+  /* a value that will not fit beside its label wraps under itself; none of
+     it is ever hidden */
+  min-width: 0;
+  overflow-wrap: break-word;
 }
 .card .row.wide { display: block; }
 .card .row.wide dd {
   margin: 2px 0 0;
   text-align: left;
-  font-size: 12.5px;
+  font-size: 13.5px;
   color: #2c313a;
 }
 .card.blue   { border-left-color: var(--blue); }
@@ -332,7 +338,7 @@ p.note {
 }
 .fig figcaption {
   margin-top: 8px;
-  font-size: 12.5px;
+  font-size: 13.5px;
   color: var(--muted);
   line-height: 1.45;
 }
@@ -354,7 +360,7 @@ table {
   border-collapse: separate;
   border-spacing: 0;
   width: 100%;
-  font: 12.5px/1.3 var(--mono);
+  font: 13px/1.35 var(--mono);
 }
 th, td {
   text-align: right;
@@ -365,18 +371,18 @@ thead th {
   position: sticky;
   top: 0;
   z-index: 2;
-  height: 24px;
+  height: 25px;
   background: var(--panel);
   color: var(--ink);
   font-weight: 600;
   border-bottom: 1px solid var(--line);
 }
 thead tr.units th {
-  top: 24px;
-  height: 20px;
+  top: 25px;
+  height: 21px;
   font-weight: 400;
   color: var(--faint);
-  font-size: 11px;
+  font-size: 12px;
   border-bottom: 1px solid var(--line);
 }
 tbody td { border-bottom: 1px solid var(--zebra); }
@@ -397,7 +403,7 @@ tbody tr:hover td:first-child { background: #eef3fb; }
 
 .foot {
   color: var(--faint);
-  font-size: 12px;
+  font-size: 13px;
   padding-bottom: 30px;
 }
 .foot code { font-family: var(--mono); }
@@ -405,12 +411,12 @@ tbody tr:hover td:first-child { background: #eef3fb; }
 /* --- narrow screens ----------------------------------------------------- */
 
 @media (max-width: 699px) {
-  body { font-size: 14px; }
+  body { font-size: 15px; }
   .tiles {
     grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
     gap: 8px;
   }
-  .tile .num { font-size: 18px; }
+  .tile .num { font-size: 19px; }
   .hero { padding-bottom: 22px; }
   .nav .wrap { gap: 14px; }
   .nav .stamp { display: none; }
@@ -418,7 +424,7 @@ tbody tr:hover td:first-child { background: #eef3fb; }
   .card dd { text-align: left; margin-left: 0; }
   .figs { gap: 10px; }
   .scroll { max-height: 70vh; }
-  table { font-size: 11.5px; }
+  table { font-size: 12px; }
   th, td { padding: 3px 7px; }
 }
 

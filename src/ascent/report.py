@@ -139,6 +139,10 @@ def _version() -> str:
 
 # how the orbit reached colours the badge, the tile and the card
 ORBIT_COLOURS = {'ok': 'green', 'sub': 'red', 'esc': 'orange'}
+# a tile value longer than this is set in the smaller of the two sizes: the
+# widest of them carries two numbers and a sign, and has to fit beside seven
+# others across the page
+VALUE_DIGITS = 8
 
 
 def _status(orbit) -> dict:
@@ -157,6 +161,10 @@ def _tiles(mission: Mission, telemetry: Telemetry, budget) -> list[dict]:
                f'{orbit.apogee_altitude / 1000:.0f}' if orbit.is_closed else 'open')
 
     def tile(value, unit, label, css=''):
+        # a value wider than the tile is set smaller rather than trimmed:
+        # 'perigee x apogee' carries two numbers and a sign
+        if len(value) > VALUE_DIGITS:
+            css = f'{css} long'.strip()
         return {'value': value, 'unit': unit, 'label': label, 'css': css}
 
     return [
