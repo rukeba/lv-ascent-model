@@ -222,7 +222,9 @@ rather than integration, and both are in `estimates.py`:
   same balance says before anything is flown whether the vehicle has the
   propellant for the orbit at all. Measured against the catalogue it sits
   between 4.8 per cent high and 9.1 per cent low, and the window carries that
-  band with something to spare.
+  band with something to spare. The method is published: R. Keba and A. M.
+  Kulabukhov, *Journal of Rocket-Space Technology* **35**(1), 94–99 (2026),
+  [doi:10.15421/452567](https://doi.org/10.15421/452567).
 - the **analytic altitude integral** is the altitude a programme reaches,
   taken as the integral of the vertical component of the velocity with the
   speed from the Tsiolkovsky equation stage by stage and the flight-path angle
@@ -234,7 +236,9 @@ rather than integration, and both are in `estimates.py`:
   and the fall of gravity with altitude all push the same way — and the screen
   is that band applied backwards, widened to 0.95–1.40 because it is a gate: a
   node it rejects is never flown, and the measurement behind it is of three
-  vehicles.
+  vehicles. The method behind it is not published yet; its DOI belongs here and
+  is a placeholder until it is —
+  [doi:XX.YYYYY/ZZZZZ](https://doi.org/XX.YYYYY/ZZZZZ).
 
 Neither is accurate enough to stand in for a flight. Both are accurate enough
 to say which flights are worth making, and `tests/test_estimates.py` checks
