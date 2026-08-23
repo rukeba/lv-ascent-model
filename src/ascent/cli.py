@@ -6,14 +6,13 @@
     ascent config/mission.a62.yaml        # a mission file by path
 
     ascent f9 --altitude 650               # a solved set from the catalogue
-    ascent f9 -h 650 -p bt                 # the same, in short
+    ascent f9 -a 650 -p bt                 # the same, in short
     ascent f9 --list                       # what the catalogue holds
 
     ascent-search f9 --altitude 500        # solve for a set instead of flying one
 
-`-h` is the altitude rather than the help: it is typed at nearly every run,
-and the help is `--help`. A pitch programme can be named in full or by the
-short form beside it - `5f`, `vs`, `bt`.
+A pitch programme can be named in full or by the short form beside it - `5f`,
+`vs`, `bt`.
 """
 
 import argparse
@@ -41,13 +40,10 @@ def _programmes(names) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
-    # the help gives up -h to the altitude, which is asked for far more often
     parser = argparse.ArgumentParser(
-        prog='ascent', add_help=False,
-        description='Simulate the powered ascent of a launch vehicle.')
-    parser.add_argument('--help', action='help', help='show this message and stop')
+        prog='ascent', description='Simulate the powered ascent of a launch vehicle.')
     parser.add_argument('mission', help='mission name (f9) or path to a mission YAML file')
-    parser.add_argument('--altitude', '-h', type=float, metavar='KM',
+    parser.add_argument('--altitude', '-a', type=float, metavar='KM',
                         help='fly the catalogue entry for this target altitude')
     parser.add_argument('--programme', '-p', metavar='NAME',
                         help=f'pitch programme to take from the catalogue: '
@@ -212,7 +208,7 @@ def search_main(argv: list[str] | None = None) -> int:
     """Entry point of `ascent-search`: solve for a programme instead of flying one.
 
         ascent-search f9 --altitude 500
-        ascent-search f9 -h 650 -p bt --yaml
+        ascent-search f9 -a 650 -p bt --yaml
         ascent-search a62 --altitude 700 --coarse 0.5   # a quicker, rougher look
 
     The mission file supplies the vehicle and the launch site, and its own
@@ -221,14 +217,13 @@ def search_main(argv: list[str] | None = None) -> int:
     it are ignored: they are what the search is for.
     """
     parser = argparse.ArgumentParser(
-        prog='ascent-search', add_help=False,
+        prog='ascent-search',
         description='Search for the pitch-programme parameters that reach a '
                     'circular orbit in the shortest time.')
-    parser.add_argument('--help', action='help', help='show this message and stop')
     parser.add_argument('mission', help='mission name (f9) or path to a mission '
                                         'YAML file: the vehicle and the launch '
                                         'site are taken from it')
-    parser.add_argument('--altitude', '-h', type=float, metavar='KM',
+    parser.add_argument('--altitude', '-a', type=float, metavar='KM',
                         help='altitude of the circular orbit to aim for')
     parser.add_argument('--programme', '-p', metavar='NAME',
                         choices=sorted(FAMILIES) + sorted(PROGRAMME_ALIASES),

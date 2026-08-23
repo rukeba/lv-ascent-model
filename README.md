@@ -25,16 +25,15 @@ uv run ascent config/mission.a62.yaml       # a mission file by path
 uv run ascent f9 --list                     # solved parameter sets on file
 uv run ascent f9 --altitude 650             # fly one of them
 uv run ascent f9 --altitude 650 --programme bilinear-tangent
-uv run ascent f9 -h 650 -p bt               # the same, in short
+uv run ascent f9 -a 650 -p bt               # the same, in short
 
 uv run ascent-search f9 --altitude 500      # solve for a set instead of flying one
-uv run ascent-search f9 -h 650 -p bt --yaml
+uv run ascent-search f9 -a 650 -p bt --yaml
 ```
 
 `f9`, `a62` and `h3` are short names for `config/mission.<name>.yaml`, and the
 three pitch programmes answer to `5f`, `vs` and `bt` as well as to their full
-names. Both commands read `-h` as the target altitude, which is asked for at
-nearly every run; the help is `--help`.
+names. `--altitude` is `-a` and `--programme` is `-p` on both commands.
 
 The console summary lists the set-up, the notable instants of the flight, the
 state at engine cut-off, the orbit reached and the velocity budget.
@@ -318,7 +317,7 @@ uv run ascent-search f9 --altitude 500 --workers 1        # in this process alon
 ```
 
 The mission file supplies the vehicle and the launch site and nothing else;
-`--altitude` and `--programme` — or `-h` and `-p` — say what to search for. `--yaml` prints the set
+`--altitude` and `--programme` — or `-a` and `-p` — say what to search for. `--yaml` prints the set
 found as a catalogue entry, ready to paste. A search prints its progress as it
 runs — which pass it is on, how many trajectories it has integrated and roughly
 how much longer it will take.

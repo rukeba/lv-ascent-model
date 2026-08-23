@@ -33,8 +33,8 @@ def test_catalogue_entry_is_flown_when_asked_for():
 
 
 def test_a_catalogue_entry_can_be_asked_for_in_short():
-    """`-h` is the altitude and `-p` the programme, by its short name."""
-    assert main(['f9', '-h', '650', '-p', 'bt']) == 0
+    """`-a` is the altitude and `-p` the programme, by its short name."""
+    assert main(['f9', '-a', '650', '-p', 'bt']) == 0
 
 
 def test_every_short_name_stands_for_a_family_that_can_be_searched():
