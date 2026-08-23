@@ -1,4 +1,4 @@
-"""Command line entry point: run one mission, print its summary, save its data.
+"""Command line entry points: fly one mission, or search for a programme.
 
     ascent f9                             # config/mission.f9.yaml
     ascent f9 --csv out/f9.csv            # and the whole trajectory as CSV
@@ -8,14 +8,21 @@
     ascent f9 --altitude 650               # a solved set from the catalogue
     ascent f9 --altitude 650 --programme bilinear-tangent
     ascent f9 --list                       # what the catalogue holds
+
+    ascent-search f9 --altitude 500        # solve for a set instead of flying one
 """
 
 import argparse
+import sys
+import time
 from pathlib import Path
 
-from .config import (find_in_catalogue, load_catalogue, mission_from_spec,
-                     read_spec, resolve)
-from .summary import summarise
+import yaml
+
+from .config import (find_in_catalogue, load_catalogue, load_vehicle,
+                     mission_from_spec, read_spec, resolve)
+from .search import FAMILIES, default_workers, search
+from .summary import summarise, summarise_search
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -88,6 +95,162 @@ def _list(directory: Path, vehicle: str) -> None:
               f'{spec["cutoff"]["time"]:>9.1f} s'
               f'{reached.get("steering_loss", float("nan")):>9.1f} '
               f'{reached.get("total_loss", float("nan")):>11.1f} m/s')
+
+
+class _Progress:
+    """One line of progress, rewritten in place while the search runs.
+
+    The passes and the nodes of each are known before the search starts, so the
+    share of the nodes done is a share of the work, and the time already spent
+    scales up to a time still to go. It is an estimate of an estimate: the
+    first pass covers the whole range of a family and takes more trajectories
+    per node than the passes that close in on an answer, so the figure starts
+    pessimistic and settles as it goes.
+    """
+
+    # how often the line is rewritten, s
+    INTERVAL = 0.5
+
+    def finish(self) -> None:
+        """Close the line off, wherever the search stopped.
+
+        Not left to the last pass to do: a pass that solves nothing ends the
+        search early, and the summary would then be printed on the end of the
+        progress line.
+        """
+        if self.written:
+            print(file=self.stream)
+            self.written = False
+
+    def __init__(self, stream) -> None:
+        self.stream = stream
+        self.start = self.last = time.monotonic()
+        self.width = 0
+        self.written = False
+
+    def __call__(self, result) -> None:
+        now = time.monotonic()
+        done = result.pass_node == result.pass_nodes
+        if now - self.last < self.INTERVAL and not done:
+            return
+        self.last = now
+
+        elapsed = now - self.start
+        share = result.nodes / max(result.planned_nodes, 1)
+        line = (f'pass {result.pass_number}/{result.passes}  '
+                f'node {result.pass_node}/{result.pass_nodes}  '
+                f'{result.flown} flights  {_clock(elapsed)} gone')
+        if share > 0.0:
+            line += f', about {_clock(elapsed / share - elapsed)} left'
+        if result.best is not None:
+            line += f'  (best {result.best.cutoff_time:.2f} s, ' \
+                    f'{result.best.miss:.0f} m out)'
+        print(f'\r{line:<{self.width}}', end='', flush=True, file=self.stream)
+        self.width = max(self.width, len(line))
+        self.written = True
+
+
+def _clock(seconds: float) -> str:
+    return f'{int(seconds) // 60}:{int(seconds) % 60:02d}'
+
+
+def search_main(argv: list[str] | None = None) -> int:
+    """Entry point of `ascent-search`: solve for a programme instead of flying one.
+
+        ascent-search f9 --altitude 500
+        ascent-search f9 --altitude 650 --programme bilinear-tangent --yaml
+        ascent-search a62 --altitude 700 --coarse 0.5   # a quicker, rougher look
+
+    The mission file supplies the vehicle and the launch site, and its own
+    target altitude and programme type stand in for `--altitude` and
+    `--programme` when those are not given. The pitch-programme parameters in
+    it are ignored: they are what the search is for.
+    """
+    parser = argparse.ArgumentParser(
+        prog='ascent-search',
+        description='Search for the pitch-programme parameters that reach a '
+                    'circular orbit in the shortest time.')
+    parser.add_argument('mission', help='mission name (f9) or path to a mission '
+                                        'YAML file: the vehicle and the launch '
+                                        'site are taken from it')
+    parser.add_argument('--altitude', type=float, metavar='KM',
+                        help='altitude of the circular orbit to aim for')
+    parser.add_argument('--programme', metavar='NAME', choices=sorted(FAMILIES),
+                        help=f'pitch programme to search: {", ".join(sorted(FAMILIES))}')
+    parser.add_argument('--tolerance', type=float, default=0.5, metavar='KM',
+                        help='how close the perigee and the apogee have to come '
+                             'to the target for the set to count (default 0.5)')
+    parser.add_argument('--refinements', type=int, default=10, metavar='N',
+                        help='passes of the grid after the first, each one grid '
+                             'step wide about the best node (default 10)')
+    parser.add_argument('--max-q', type=float, metavar='KPA',
+                        help='put the airframe into the constraint: sets whose '
+                             'dynamic pressure peaks above this are not answers, '
+                             'however quick. Without it the peak is reported and '
+                             'nothing more')
+    parser.add_argument('--coarse', type=float, default=1.0, metavar='FACTOR',
+                        help='scale the nodes along every axis: below one for a '
+                             'quicker and rougher search')
+    parser.add_argument('--steps', type=float, default=10, metavar='PER_SECOND',
+                        help='integration steps per second of every trajectory '
+                             'flown (default 10). A coarser step is for a quick '
+                             'look and barely moves the orbit or the budget; '
+                             'the entry written out asks for ten either way')
+    parser.add_argument('--workers', type=int, metavar='N',
+                        help=f'processes the nodes of a pass are divided over '
+                             f'(default {default_workers()}, two thirds of the '
+                             f'cores on this machine); 1 to search in this one')
+    parser.add_argument('--yaml', action='store_true',
+                        help='print the set found as a catalogue entry')
+    parser.add_argument('--config-dir', default='config', metavar='DIR',
+                        help='where short mission names are looked up')
+    arguments = parser.parse_args(argv)
+    for name, value in (('--tolerance', arguments.tolerance),
+                        ('--steps', arguments.steps),
+                        ('--coarse', arguments.coarse)):
+        if value <= 0.0:
+            parser.error(f'{name} has to be above zero, and is {value:g}')
+    if arguments.refinements < 0:
+        parser.error(f'--refinements cannot be negative, and is '
+                     f'{arguments.refinements}')
+    if arguments.max_q is not None and arguments.max_q <= 0.0:
+        parser.error(f'--max-q has to be above zero, and is {arguments.max_q:g}')
+
+    mission_path = resolve(arguments.mission, Path(arguments.config_dir))
+    spec = read_spec(mission_path)
+    site = spec.get('launch_site', {})
+    vehicle_file = spec['vehicle']
+
+    # with `--yaml` the entry is the whole of what this command is for, so
+    # everything else goes to the error stream and a redirect of the output is
+    # a file the catalogue reader can read
+    told = sys.stderr if arguments.yaml else sys.stdout
+    progress = _Progress(sys.stderr)
+    result = search(
+        vehicle=load_vehicle(mission_path.parent / f'{vehicle_file}.yaml'),
+        target_altitude=(arguments.altitude * 1000 if arguments.altitude is not None
+                         else spec['target_altitude']),
+        programme=arguments.programme or spec['pitch_programme']['type'],
+        latitude_deg=site.get('latitude', 0.0),
+        azimuth_deg=site.get('azimuth', 90.0),
+        tolerance=arguments.tolerance * 1000,
+        refinements=arguments.refinements,
+        max_dynamic_pressure=(arguments.max_q * 1000
+                              if arguments.max_q is not None else None),
+        coarseness=arguments.coarse,
+        steps_per_second=arguments.steps,
+        workers=arguments.workers,
+        report=progress)
+    progress.finish()
+    print(summarise_search(result), file=told)
+
+    # only a set that reaches the orbit is written out as an entry: one that
+    # misses is worth showing and is not worth filing
+    if arguments.yaml and result.reaches_orbit:
+        print(file=told)
+        print(yaml.safe_dump({'missions': [result.specification(vehicle_file)]},
+                             sort_keys=False, default_flow_style=None), end='')
+    return 0 if result.reaches_orbit else 1
 
 
 if __name__ == '__main__':
