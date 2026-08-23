@@ -188,6 +188,7 @@ uv run ascent-search f9 --altitude 500
 uv run ascent-search f9 --altitude 650 --programme bilinear-tangent
 uv run ascent-search a62 --altitude 700 --yaml            # as a catalogue entry
 uv run ascent-search h3 --altitude 1100 --coarse 0.5      # a quicker, rougher look
+uv run ascent-search f9 --altitude 500 --workers 1        # in this process alone
 ```
 
 The mission file supplies the vehicle and the launch site and nothing else;
@@ -255,20 +256,29 @@ tangent is the case that needs it, and the summary says when it has happened.
 **What it costs.** Eleven passes: the first over the whole range of the family,
 then ten closing in, each one grid step wide about the best node of the pass
 before and halving the step. A five-phase search integrates some seven hundred
-trajectories, one of the two-axis families some three thousand — a minute or so
-in the first case and several in the second, and twice that where the grid has
-to be run again. What the screen saves is almost all on the first pass, the
-only one that covers the whole range of a family: of a Falcon 9 first pass to
-500 km it drops four fifths of the velocity-share nodes unflown, half of the
-bilinear-tangent ones and a tenth of the five-phase ones, which have a single
-axis and less to reject. On the passes after it, already gathered about an
-answer, it drops nothing, and it is not meant to. `--steps` and `--coarse` are
-there for a quicker look: the orbit a set reaches is the same to within a few
-metres at one step a second as at ten, and so is the velocity budget: it is
-read off the last powered row rather than off the cut-off itself, but by then
-the vehicle is level and out of the air, so all three integrands are near zero
-there and the part left out is fractions of a metre per second. The entry the
-search writes out asks for ten steps a second whatever it was searched at.
+trajectories, one of the two-axis families some three thousand, and twice that
+where the grid has to be run again.
+
+Not of wall-clock, though. The nodes of a pass are independent — each is its own
+cut-off solved over its own handful of trajectories — so they are divided over
+two thirds of the cores, which is seven times faster on a machine with fourteen
+of them and turns several minutes into under one. It finds exactly the same
+set: the nodes are collected in the order of the grid, so the answer does not
+depend on how many processes answered it. `--workers` says how many, and
+`--workers 1` searches in this process alone.
+
+What the screen saves is almost all on the first pass, the only one that covers
+the whole range of a family: of a Falcon 9 first pass to 500 km it drops four
+fifths of the velocity-share nodes unflown, half of the bilinear-tangent ones
+and a tenth of the five-phase ones, which have a single axis and less to
+reject. On the passes after it, already gathered about an answer, it drops
+nothing, and it is not meant to. `--steps` and `--coarse` are there for a
+quicker look: the orbit a set reaches is the same to within a few metres at one
+step a second as at ten, and so is the velocity budget: it is read off the last
+powered row rather than off the cut-off itself, but by then the vehicle is
+level and out of the air, so all three integrands are near zero there and the
+part left out is fractions of a metre per second. The entry the search writes
+out asks for ten steps a second whatever it was searched at.
 
 **What the quicker ascent is paid for.** A quicker ascent is a flatter one,
 and a flatter one goes faster lower down. The set found is reported with the

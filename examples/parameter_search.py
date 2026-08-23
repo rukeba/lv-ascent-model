@@ -12,9 +12,9 @@ search rows are the quicker ascents.
 
     uv run python examples/parameter_search.py
 
-Several minutes: it integrates a few thousand trajectories. Pass a coarser
-integration step to see it sooner - the orbit a set reaches is the same to
-within a few metres either way.
+A few minutes: it integrates some seven thousand trajectories, divided over two
+thirds of the cores. Pass a coarser integration step to see it sooner - the
+orbit a set reaches is the same to within a few metres either way.
 
     uv run python examples/parameter_search.py 2
 """

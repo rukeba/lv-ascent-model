@@ -12,7 +12,7 @@ import pytest
 
 from ascent.config import load_catalogue, load_vehicle, mission_from_spec
 from ascent.search import (FAMILIES, Axis, BilinearTangent, FivePhase,
-                           SearchResult, VelocityShare, _Flight, _refine, search)
+                           VelocityShare, _Flight, _refine, search)
 
 FALCON = load_vehicle('config/lv.f9.yaml')
 CATALOGUE = load_catalogue('config/catalogue.yaml')
@@ -76,18 +76,17 @@ def test_every_family_solves_its_cut_off_to_a_circular_orbit(family, shape):
     but the terminal condition the cut-off carries and the only one it carries:
     whatever altitude the shape reaches, the orbit at that cut-off is circular.
     """
-    result = SearchResult(best=None, vehicle=FALCON, target_altitude=500_000,
-                          programme=family.name, latitude_deg=28.5,
-                          azimuth_deg=90.0, steps_per_second=1)
     window = (470.0, 570.0)
-    flight = _Flight(FALCON, family, 20.0, 500_000, window, 28.5, 90.0, 1, result)
+    flight = _Flight(FALCON, family, 20.0, 500_000, window, 28.5, 90.0, 1, 50.0)
 
-    candidate = flight.at(shape)
-    assert candidate is not None, f'{family.name} solved no cut-off at all'
+    node = flight.at(shape, window)
+    assert node.outcome == 'closed', f'{family.name} came to {node.outcome}'
+    candidate = node.candidate
     assert candidate.cutoff_time == pytest.approx(502, abs=3)
     assert candidate.orbit.eccentricity < 1e-4
     assert abs(candidate.residual) <= flight.circular_tolerance
     assert candidate.miss < 3_000.0
+    assert node.flights > 2, 'a cut-off takes more than its two bracket ends' 
 
 
 def test_the_set_found_flies_again_from_its_own_specification():
@@ -150,18 +149,20 @@ def test_a_set_that_misses_is_not_written_out_as_an_entry():
 
 def test_a_tighter_tolerance_tightens_the_cut_off_solve():
     """The circularity the solve stops at is a share of what was asked for."""
-    from ascent.search import CIRCULAR_SHARE, _Flight
+    from ascent.search import CIRCULAR_SHARE
 
+    window = (470.0, 570.0)
     for tolerance in (500.0, 100.0):
-        result = SearchResult(best=None, vehicle=FALCON, target_altitude=500_000,
-                              programme='five-phase', latitude_deg=28.5,
-                              azimuth_deg=90.0, steps_per_second=1,
-                              tolerance=tolerance)
-        flight = _Flight(FALCON, FivePhase(), 20.0, 500_000, (470.0, 570.0),
-                         28.5, 90.0, 1, result)
-        assert flight.circular_tolerance == tolerance * CIRCULAR_SHARE
-        candidate = flight.at({'k3': 0.5296})
-        assert abs(candidate.residual) <= flight.circular_tolerance
+        stop = tolerance * CIRCULAR_SHARE
+        flight = _Flight(FALCON, FivePhase(), 20.0, 500_000, window,
+                         28.5, 90.0, 1, stop)
+        node = flight.at({'k3': 0.5296}, window)
+        assert node.outcome == 'closed'
+        assert abs(node.candidate.residual) <= stop
+
+    # and the search hands the solve a stop derived from what it was asked for
+    result = quick('five-phase', refinements=0, tolerance=100.0)
+    assert result.tolerance == 100.0
 
 
 def test_an_orbit_out_of_reach_is_refused_before_anything_is_flown():
@@ -193,3 +194,20 @@ def test_refining_stays_inside_the_range_the_family_gave():
 def test_the_families_cover_the_catalogue():
     """Every programme the catalogue holds is one the search can look for."""
     assert set(FAMILIES) == {spec['pitch_programme']['type'] for spec in CATALOGUE}
+
+
+def test_dividing_the_grid_over_processes_finds_the_same_set():
+    """A pool answers the nodes of a pass; it does not change what they answer.
+
+    The nodes of a pass are independent and are collected in the order of the
+    grid, so a search returns the same set however many processes it was
+    divided over - and the same count of nodes and of trajectories, which is
+    what says the division was of the work and not of the answer.
+    """
+    alone = quick('five-phase', refinements=3)
+    together = quick('five-phase', refinements=3, workers=2)
+
+    assert together.workers == 2
+    assert together.best.cutoff_time == alone.best.cutoff_time
+    assert together.best.shape == alone.best.shape
+    assert (together.nodes, together.flown) == (alone.nodes, alone.flown)

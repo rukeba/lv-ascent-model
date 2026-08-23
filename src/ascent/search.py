@@ -34,6 +34,11 @@ cut-off is re-solved from scratch at every node of every pass, so it never
 inherits the resolution of the pass before it: the passes place the shape, and
 the cut-off is as sharp on the first of them as on the last.
 
+The nodes of a pass do not depend on one another - each is its own cut-off
+solved over its own handful of trajectories - so they are answered over a pool
+of processes, two thirds of the cores by default, and collected in the order of
+the grid. A search returns the same set however many processes answered it.
+
 Which node a pass refines about is not simply the quickest one that reached the
 orbit. At the resolution of an early pass, whether a node lands on the orbit at
 all is largely luck, and a set half a kilometre out but two seconds quicker is
@@ -46,6 +51,8 @@ alone, and the better of the two answers is the one reported.
 """
 
 import math
+import os
+from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 from itertools import product
 
@@ -112,6 +119,23 @@ REFINED_NODES = 5
 # before the whole window is fallen back on, s
 NEIGHBOURING_CUT_OFF = 2.0
 
+# What one node of the grid can come to. Each is a field of `SearchResult`, and
+# every node increments exactly one of them
+OUTCOMES = ('screened', 'refused', 'unbracketed', 'no_orbit', 'closed')
+
+
+def default_workers() -> int:
+    """Processes a search runs its nodes over: two thirds of the cores.
+
+    Two thirds rather than all of them because a search is minutes long and the
+    machine it runs on is being used for something else at the time. The nodes
+    of one pass are independent - each is its own cut-off solved over its own
+    handful of trajectories - so they divide over processes exactly, and it has
+    to be processes: the work is Python arithmetic, and threads would queue up
+    behind the interpreter lock rather than run beside each other.
+    """
+    return max(1, ((os.cpu_count() or 1) * 2) // 3)
+
 
 @dataclass(frozen=True)
 class Candidate:
@@ -139,6 +163,19 @@ class Candidate:
     @property
     def total_loss(self) -> float:
         return self.gravity_loss + self.aerodynamic_loss + self.steering_loss
+
+
+@dataclass(frozen=True)
+class Node:
+    """What one node of the grid came to, and what it cost to find out.
+
+    Returned rather than recorded, because a node may be answered in another
+    process: the counting is done by whoever collects it.
+    """
+    shape: dict[str, float]
+    outcome: str
+    candidate: Candidate | None
+    flights: int
 
 
 @dataclass
@@ -185,6 +222,8 @@ class SearchResult:
     planned_nodes: int = 0
     tolerance: float = TOLERANCE
     max_dynamic_pressure: float | None = None
+    # processes the nodes of a pass were divided over
+    workers: int = 1
     # axes whose best value came out on a bound of the grid, where a better set
     # may lie just outside
     on_edge: tuple[str, ...] = ()
@@ -377,7 +416,7 @@ def search(vehicle: LaunchVehicle, target_altitude: float, programme: str,
            tolerance: float = TOLERANCE, refinements: int = 10,
            max_dynamic_pressure: float | None = None,
            coarseness: float = 1.0, steps_per_second: float = 10,
-           report=None) -> SearchResult:
+           workers: int | None = None, report=None) -> SearchResult:
     """Parameters that fly `vehicle` into a circular orbit at `target_altitude`.
 
     Among the sets whose perigee and apogee both land within `tolerance` of the
@@ -393,7 +432,9 @@ def search(vehicle: LaunchVehicle, target_altitude: float, programme: str,
 
     `refinements` is how many passes follow the first, each halving the step
     the shape is resolved to; `coarseness` scales the nodes along every axis of
-    that first pass, below one for a quicker and rougher search. `report` is
+    that first pass, below one for a quicker and rougher search. `workers` is
+    how many processes the nodes of a pass are divided over, two thirds of the
+    cores by default and one for a search that runs where it is called. `report` is
     called with the result after every node, so a caller can show progress: the
     passes and the nodes of each are known before the search starts, so how far
     it has got is known too.
@@ -431,20 +472,31 @@ def search(vehicle: LaunchVehicle, target_altitude: float, programme: str,
     result.passes = refinements + 1
     result.planned_nodes = _planned_nodes(axes, refinements)
     flight = _Flight(vehicle, family, t1, target_altitude, window,
-                     latitude_deg, azimuth_deg, steps_per_second, result)
+                     latitude_deg, azimuth_deg, steps_per_second,
+                     tolerance * CIRCULAR_SHARE)
 
-    settled = _passes(flight, axes, bounds, refinements, report, by_time=True)
-    if not result.reaches_orbit:
-        # minimising the ascent has led into a corner of the family where the
-        # orbit cannot be reached at all - which happens where a vehicle is
-        # near its limit, the quickest sets of a pass lying just outside what
-        # it can still close. Run the grid again for the orbit alone
-        result.attempts = 2
-        result.passes += refinements + 1
-        result.planned_nodes += _planned_nodes(axes, refinements)
-        flight.bracket = window
-        settled = _passes(flight, _coarsen(family.axes(), coarseness), bounds,
-                          refinements, report, by_time=False) or settled
+    result.workers = default_workers() if workers is None else max(1, workers)
+    pool = (None if result.workers == 1 else
+            ProcessPoolExecutor(max_workers=result.workers,
+                                initializer=_begin, initargs=(flight,)))
+    try:
+        settled = _passes(flight, axes, bounds, refinements, result, report,
+                          pool, by_time=True)
+        if not result.reaches_orbit:
+            # minimising the ascent has led into a corner of the family where
+            # the orbit cannot be reached at all - which happens where a
+            # vehicle is near its limit, the quickest sets of a pass lying just
+            # outside what it can still close. Run the grid again for the orbit
+            # alone
+            result.attempts = 2
+            result.passes += refinements + 1
+            result.planned_nodes += _planned_nodes(axes, refinements)
+            settled = _passes(flight, _coarsen(family.axes(), coarseness),
+                              bounds, refinements, result, report, pool,
+                              by_time=False) or settled
+    finally:
+        if pool is not None:
+            pool.shutdown()
 
     # a pass that solved nothing stops the search where it stands, so the count
     # of passes and of nodes is corrected to what was actually walked rather
@@ -462,7 +514,8 @@ def search(vehicle: LaunchVehicle, target_altitude: float, programme: str,
 
 def _passes(flight: "_Flight", axes: dict[str, Axis],
             bounds: dict[str, tuple[float, float]], refinements: int,
-            report, by_time: bool) -> dict[str, Axis] | None:
+            result: SearchResult, report, pool,
+            by_time: bool) -> dict[str, Axis] | None:
     """Sweep the grid, refine about the best node, sweep again.
 
     `by_time` says what the next pass is centred on: the quickest node within
@@ -470,19 +523,20 @@ def _passes(flight: "_Flight", axes: dict[str, Axis],
     search is for; the second is the fallback when the first has run out of
     family before it ran out of orbit.
     """
-    result = flight.result
+    # the first pass has nowhere to look but the whole window; each one after
+    # it starts in the neighbourhood of the cut-off the pass before settled on
+    bracket = flight.window
     for _ in range(refinements + 1):
         result.pass_number += 1
-        solved = _sweep(flight, axes, report)
+        solved = _sweep(flight, axes, bracket, result, report, pool)
         if not solved:
             return None
         result.best = _best_so_far(result, solved)
         centre = (_refine_about(solved, axes, result) if by_time
                   else min(solved, key=lambda candidate: candidate.miss))
         axes = _refine(axes, centre.shape, bounds)
-        flight.bracket = (
-            max(flight.window[0], centre.cutoff_time - NEIGHBOURING_CUT_OFF),
-            min(flight.window[1], centre.cutoff_time + NEIGHBOURING_CUT_OFF))
+        bracket = (max(flight.window[0], centre.cutoff_time - NEIGHBOURING_CUT_OFF),
+                   min(flight.window[1], centre.cutoff_time + NEIGHBOURING_CUT_OFF))
     return axes
 
 
@@ -493,24 +547,29 @@ class _Flight:
     altitude integral says whether it is aiming anywhere near the orbit, and -
     only then - the cut-off that closes the orbit is solved for by integrating
     the trajectory a handful of times.
+
+    Nothing here is written to. What a node came to is returned as a `Node` and
+    counted by the caller, because the node may have been answered in another
+    process, where anything written to would be written to a copy.
     """
 
     def __init__(self, vehicle, family, t1, target_altitude, window,
-                 latitude_deg, azimuth_deg, steps_per_second, result):
+                 latitude_deg, azimuth_deg, steps_per_second, circular_tolerance):
         self.vehicle, self.family, self.t1 = vehicle, family, t1
         self.target_altitude, self.window = target_altitude, window
         self.latitude_deg, self.azimuth_deg = latitude_deg, azimuth_deg
         self.steps_per_second = steps_per_second
-        self.result = result
-        # a tenth of what the caller asked of the orbit, so that a tighter
-        # tolerance is met by the solve rather than only asked of it
-        self.circular_tolerance = result.tolerance * CIRCULAR_SHARE
-        # narrowed to the neighbourhood of the last pass's answer once there is
-        # one: neighbouring shapes cut off at neighbouring instants
-        self.bracket = window
+        self.circular_tolerance = circular_tolerance
+        self._flights = 0
 
-    def at(self, shape: dict[str, float]) -> Candidate | None:
-        """Answer one node of the grid, flying as little as it takes."""
+    def at(self, shape: dict[str, float],
+           bracket: tuple[float, float]) -> Node:
+        """Answer one node of the grid, flying as little as it takes.
+
+        `bracket` is where the cut-off is looked for first - the neighbourhood
+        of the one the last pass settled on - with the whole window behind it.
+        """
+        self._flights = 0
         early, late = self.window
         try:
             soonest = analytic_altitude(
@@ -520,8 +579,7 @@ class _Flight:
         except ValueError:
             # the family refuses this shape outright: phases out of order, a
             # share the quartic is not a turn over, a tangent through its pole
-            self.result.refused += 1
-            return None
+            return self._node(shape, 'refused', None)
 
         # the screen. The altitude the integral reports rises with the cut-off,
         # so these two bound what the shape can reach anywhere in the window,
@@ -530,12 +588,15 @@ class _Flight:
         # window is dropped without a trajectory
         if not (soonest / ALTITUDE_RATIO_HIGH <= self.target_altitude
                 <= latest / ALTITUDE_RATIO_LOW):
-            self.result.screened += 1
-            return None
+            return self._node(shape, 'screened', None)
 
-        return self._close_the_orbit(shape)
+        return self._close_the_orbit(shape, bracket)
 
-    def _close_the_orbit(self, shape: dict[str, float]) -> Candidate | None:
+    def _node(self, shape, outcome: str, candidate: Candidate | None) -> Node:
+        return Node(shape, outcome, candidate, self._flights)
+
+    def _close_the_orbit(self, shape: dict[str, float],
+                         bracket: tuple[float, float]) -> Node:
         """Solve for the cut-off that leaves the vehicle on a circular orbit.
 
         Tried first in the neighbourhood of the cut-off the last pass settled
@@ -544,8 +605,8 @@ class _Flight:
         instants, so the narrow bracket almost always holds it and is worth
         half the trajectories the wide one takes.
         """
-        brackets = [self.bracket]
-        if self.bracket != self.window:
+        brackets = [bracket]
+        if bracket != self.window:
             brackets.append(self.window)
         for low, high in brackets:
             solved = self._solve_between(low, high, shape)
@@ -554,13 +615,10 @@ class _Flight:
             if not math.isfinite(solved.miss):
                 # a cut-off was found and what it closes is not an orbit: the
                 # perigee is under the surface, or the trajectory is not closed
-                # at all. Its own count, so that every node has exactly one
-                self.result.no_orbit += 1
-                return None
-            self.result.closed += 1
-            return solved
-        self.result.unbracketed += 1
-        return None
+                # at all. Its own outcome, so that every node has exactly one
+                return self._node(shape, 'no_orbit', None)
+            return self._node(shape, 'closed', solved)
+        return self._node(shape, 'unbracketed', None)
 
     def _solve_between(self, low: float, high: float,
                        shape: dict[str, float]) -> Candidate | None:
@@ -663,8 +721,24 @@ class _Flight:
             # the set cannot be flown by this vehicle: it runs out of speed
             # against its own programme, or the trajectory leaves the model
             return None
-        self.result.flown += 1
+        self._flights += 1
         return telemetry, mission
+
+
+# The flight a worker process answers its nodes with, set once when the process
+# starts so that the vehicle and the family are handed over once rather than
+# with every node.
+_WORKER: _Flight | None = None
+
+
+def _begin(flight: _Flight) -> None:
+    global _WORKER
+    _WORKER = flight
+
+
+def _answer(work: tuple[dict[str, float], tuple[float, float]]) -> Node:
+    shape, bracket = work
+    return _WORKER.at(shape, bracket)
 
 
 def _demands(telemetry: Telemetry, end: float) -> tuple[float, float]:
@@ -683,26 +757,36 @@ def _demands(telemetry: Telemetry, end: float) -> tuple[float, float]:
             float(np.abs(demand).max()) if len(demand) else 0.0)
 
 
-def _sweep(flight: _Flight, axes: dict[str, Axis], report) -> list[Candidate]:
+def _sweep(flight: _Flight, axes: dict[str, Axis], bracket: tuple[float, float],
+           result: SearchResult, report, pool) -> list[Candidate]:
     """One pass over the grid: every node screened, the survivors solved.
 
-    A set that asks more of the airframe than the caller allowed is dropped
-    here rather than ranked: it is not a slower answer, it is not an answer.
+    The nodes are independent, so they are answered over a pool of processes
+    where there is one - in the order of the grid, so that a search returns the
+    same set however many of them there are. A set that asks more of the
+    airframe than the caller allowed is put aside here rather than ranked: it
+    is not a slower answer, it is not an answer.
     """
-    result = flight.result
-    limit = result.max_dynamic_pressure
-    result.pass_nodes = _count(axes)
+    shapes = list(_nodes(axes))
+    result.pass_nodes = len(shapes)
     result.pass_node = 0
+    limit = result.max_dynamic_pressure
+
+    answers = ((flight.at(shape, bracket) for shape in shapes) if pool is None
+               else pool.map(_answer, [(shape, bracket) for shape in shapes],
+                             chunksize=1))
+
     solved = []
-    for shape in _nodes(axes):
+    for node in answers:
         result.nodes += 1
         result.pass_node += 1
-        candidate = flight.at(shape)
-        if candidate is not None:
-            if limit is not None and candidate.peak_dynamic_pressure > limit:
+        result.flown += node.flights
+        setattr(result, node.outcome, getattr(result, node.outcome) + 1)
+        if node.candidate is not None:
+            if limit is not None and node.candidate.peak_dynamic_pressure > limit:
                 result.over_pressure += 1
             else:
-                solved.append(candidate)
+                solved.append(node.candidate)
         if report is not None:
             report(result)
     return solved

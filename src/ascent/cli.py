@@ -20,7 +20,7 @@ import yaml
 
 from .config import (find_in_catalogue, load_catalogue, load_vehicle,
                      mission_from_spec, read_spec, resolve)
-from .search import FAMILIES, search
+from .search import FAMILIES, default_workers, search
 from .summary import summarise, summarise_search
 
 
@@ -193,6 +193,10 @@ def search_main(argv: list[str] | None = None) -> int:
                              'flown (default 10). A coarser step is for a quick '
                              'look and barely moves the orbit or the budget; '
                              'the entry written out asks for ten either way')
+    parser.add_argument('--workers', type=int, metavar='N',
+                        help=f'processes the nodes of a pass are divided over '
+                             f'(default {default_workers()}, two thirds of the '
+                             f'cores on this machine); 1 to search in this one')
     parser.add_argument('--yaml', action='store_true',
                         help='print the set found as a catalogue entry')
     parser.add_argument('--config-dir', default='config', metavar='DIR',
@@ -218,6 +222,7 @@ def search_main(argv: list[str] | None = None) -> int:
                               if arguments.max_q is not None else None),
         coarseness=arguments.coarse,
         steps_per_second=arguments.steps,
+        workers=arguments.workers,
         report=progress)
     progress.finish()
     print(summarise_search(result))

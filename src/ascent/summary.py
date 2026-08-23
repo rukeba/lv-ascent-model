@@ -202,6 +202,8 @@ def summarise_search(result) -> str:
         ('trajectories flown', f'{result.flown:,}, '
                               f'{result.flown / max(result.solved, 1):.1f} '
                               f'per cut-off solved'),
+        ('divided over', f'{result.workers} '
+                         f'{"process" if result.workers == 1 else "processes"}'),
     ])
 
     best = result.best
