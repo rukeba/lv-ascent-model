@@ -18,18 +18,23 @@ uv sync
 
 uv run ascent f9                            # summary of the flight on the console
 uv run ascent f9 --csv out/f9.csv           # and the whole trajectory as CSV
-uv run ascent f9 --report out/f9            # and an HTML report, opened in a browser
+uv run ascent f9 --report                   # an HTML report in out/f9, opened
+uv run ascent f9 --report out/run-12        # or wherever it is wanted
 uv run ascent config/mission.a62.yaml       # a mission file by path
 
 uv run ascent f9 --list                     # solved parameter sets on file
 uv run ascent f9 --altitude 650             # fly one of them
 uv run ascent f9 --altitude 650 --programme bilinear-tangent
+uv run ascent f9 -h 650 -p bt               # the same, in short
 
 uv run ascent-search f9 --altitude 500      # solve for a set instead of flying one
-uv run ascent-search f9 --altitude 650 --programme bilinear-tangent --yaml
+uv run ascent-search f9 -h 650 -p bt --yaml
 ```
 
-`f9`, `a62` and `h3` are short names for `config/mission.<name>.yaml`.
+`f9`, `a62` and `h3` are short names for `config/mission.<name>.yaml`, and the
+three pitch programmes answer to `5f`, `vs` and `bt` as well as to their full
+names. Both commands read `-h` as the target altitude, which is asked for at
+nearly every run; the help is `--help`.
 
 The console summary lists the set-up, the notable instants of the flight, the
 state at engine cut-off, the orbit reached and the velocity budget.
@@ -40,7 +45,10 @@ tabulated every five seconds. The plots are PNG files beside the page, drawn
 well above screen resolution so that they stay sharp when opened full size or
 printed; the styles are inlined, so the page can be sent on with the images
 next to it. It is opened in a browser as soon as it is written, which
-`--no-open` suppresses.
+`--no-open` suppresses. Given no directory it writes to `out/` and the name of
+the vehicle file, so `ascent f9 --report` lands in `out/f9`. The page carries
+the command that produced it, so a report found months later says how to make
+it again.
 
 ## The model
 
@@ -252,9 +260,9 @@ under [The three pitch programmes](#the-three-pitch-programmes):
 
 | Programme | Parameters |
 |---|---|
-| `five-phase` | `t1` end of the vertical rise, `t4` end of the programme, `k2` and `k3` the shares of the turn spent building up and holding the pitch rate |
-| `velocity-share` | `t1` end of the vertical rise, `tf` end of the turn, `te` end of the burn, `s` how full the turn is, between -3 and 3 |
-| `bilinear-tangent` | `t1` start of the turn, `a`, `b`, `c` of `tan(gamma) = (a*tau + b) / (c*tau + 1)`, `te` end of the programme |
+| `five-phase`, `5f` | `t1` end of the vertical rise, `t4` end of the programme, `k2` and `k3` the shares of the turn spent building up and holding the pitch rate |
+| `velocity-share`, `vs` | `t1` end of the vertical rise, `tf` end of the turn, `te` end of the burn, `s` how full the turn is, between -3 and 3 |
+| `bilinear-tangent`, `bt` | `t1` start of the turn, `a`, `b`, `c` of `tan(gamma) = (a*tau + b) / (c*tau + 1)`, `te` end of the programme |
 
 ## Catalogue of solved parameter sets
 
@@ -310,7 +318,7 @@ uv run ascent-search f9 --altitude 500 --workers 1        # in this process alon
 ```
 
 The mission file supplies the vehicle and the launch site and nothing else;
-`--altitude` and `--programme` say what to search for. `--yaml` prints the set
+`--altitude` and `--programme` — or `-h` and `-p` — say what to search for. `--yaml` prints the set
 found as a catalogue entry, ready to paste. A search prints its progress as it
 runs — which pass it is on, how many trajectories it has integrated and roughly
 how much longer it will take.

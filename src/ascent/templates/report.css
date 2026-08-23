@@ -90,6 +90,26 @@ body {
   padding: 4px 10px;
 }
 
+/* the command that produced the page, ready to be typed again */
+.command {
+  margin: 14px 0 0;
+  padding: 9px 13px;
+  border-radius: 7px;
+  background: rgba(4, 12, 26, 0.42);
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  color: #e6edf9;
+  font: 13.5px/1.5 var(--mono);
+  /* a long command wraps rather than scrolling out of sight */
+  overflow-wrap: anywhere;
+}
+.command .prompt {
+  color: #7f9bc7;
+  margin-right: 9px;
+  /* left out of a copy of the line */
+  user-select: none;
+  -webkit-user-select: none;
+}
+
 /* --- navigation --------------------------------------------------------- */
 
 .nav {

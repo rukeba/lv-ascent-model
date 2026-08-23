@@ -2,6 +2,7 @@
 
 import re
 from html import escape
+from pathlib import Path
 
 import pytest
 
@@ -59,6 +60,19 @@ def test_the_log_is_sampled_at_the_interval_to_the_end_of_the_flight(report):
     # the flight is 600 s long and the last row is its last instant
     assert instants[-1] == 600.0
     assert len(instants) == 1 + 600 / LOG_INTERVAL
+
+
+def test_a_report_without_a_directory_goes_under_out(tmp_path, monkeypatch):
+    """`--report` on its own names the directory after the vehicle file."""
+    config = Path('config').resolve()
+    monkeypatch.chdir(tmp_path)
+
+    assert main(['f9', '--report', '--no-open', '--config-dir', str(config)]) == 0
+    page = tmp_path / 'out' / 'f9' / 'index.html'
+    assert page.exists()
+    # and the page says what made it, so that a report found later can be
+    # made again
+    assert 'ascent f9 --report --no-open' in page.read_text(encoding='utf-8')
 
 
 def test_the_report_is_opened_unless_it_is_asked_not_to_be(tmp_path, monkeypatch):

@@ -6,6 +6,8 @@ import pytest
 import yaml
 
 from ascent.cli import main, search_main
+from ascent.config import PROGRAMME_ALIASES, programme_name
+from ascent.search import FAMILIES
 
 
 def test_mission_named_by_short_name_flies():
@@ -28,6 +30,23 @@ def test_mission_given_by_path_brings_its_own_vehicle(tmp_path):
 
 def test_catalogue_entry_is_flown_when_asked_for():
     assert main(['f9', '--altitude', '650', '--programme', 'bilinear-tangent']) == 0
+
+
+def test_a_catalogue_entry_can_be_asked_for_in_short():
+    """`-h` is the altitude and `-p` the programme, by its short name."""
+    assert main(['f9', '-h', '650', '-p', 'bt']) == 0
+
+
+def test_every_short_name_stands_for_a_family_that_can_be_searched():
+    for short, full in PROGRAMME_ALIASES.items():
+        assert programme_name(short) == full
+        assert full in FAMILIES
+
+
+def test_a_name_that_is_not_short_for_anything_is_left_alone():
+    """Whatever is going to look the name up reports it, not the alias table."""
+    assert programme_name('five-phase') == 'five-phase'
+    assert programme_name('parabolic') == 'parabolic'
 
 
 def test_altitude_absent_from_the_catalogue_is_reported():

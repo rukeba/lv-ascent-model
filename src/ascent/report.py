@@ -87,8 +87,12 @@ STYLE = {
 
 
 def write_report(mission: Mission, telemetry: Telemetry,
-                 directory: str | Path) -> Path:
-    """Write index.html and its plots into `directory`; return the page."""
+                 directory: str | Path, command: str = '') -> Path:
+    """Write index.html and its plots into `directory`; return the page.
+
+    `command` is the command line that produced the run, shown on the page so
+    that it can be typed again. Left empty by a caller that has none.
+    """
     directory = Path(directory)
     directory.mkdir(parents=True, exist_ok=True)
 
@@ -104,6 +108,7 @@ def write_report(mission: Mission, telemetry: Telemetry,
                               trim_blocks=True, lstrip_blocks=True)
     page = environment.get_template('report.html').render(
         heading=heading(mission),
+        command=command,
         generated=datetime.now().astimezone().strftime('%Y-%m-%d %H:%M'),
         version=_version(),
         status=_status(orbit),

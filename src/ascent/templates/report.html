@@ -23,6 +23,9 @@
     <div class="chips">
       {%- for chip in chips %}<span class="chip">{{ chip }}</span>{% endfor %}
     </div>
+    {% if command %}
+    <p class="command"><span class="prompt">$</span>{{ command }}</p>
+    {% endif %}
   </div>
 </header>
 

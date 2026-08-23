@@ -2,17 +2,23 @@
 
     ascent f9                             # config/mission.f9.yaml
     ascent f9 --csv out/f9.csv            # and the whole trajectory as CSV
-    ascent f9 --report out/f9             # an HTML report, opened in a browser
+    ascent f9 --report                    # an HTML report under out/, opened
     ascent config/mission.a62.yaml        # a mission file by path
 
     ascent f9 --altitude 650               # a solved set from the catalogue
-    ascent f9 --altitude 650 --programme bilinear-tangent
+    ascent f9 -h 650 -p bt                 # the same, in short
     ascent f9 --list                       # what the catalogue holds
 
     ascent-search f9 --altitude 500        # solve for a set instead of flying one
+
+`-h` is the altitude rather than the help: it is typed at nearly every run,
+and the help is `--help`. A pitch programme can be named in full or by the
+short form beside it - `5f`, `vs`, `bt`.
 """
 
 import argparse
+import os
+import shlex
 import sys
 import time
 import webbrowser
@@ -20,25 +26,39 @@ from pathlib import Path
 
 import yaml
 
-from .config import (find_in_catalogue, load_catalogue, load_vehicle,
-                     mission_from_spec, read_spec, resolve)
+from .config import (PITCH_PROGRAMMES, PROGRAMME_ALIASES, find_in_catalogue,
+                     load_catalogue, load_vehicle, mission_from_spec,
+                     programme_name, read_spec, resolve)
 from .search import FAMILIES, default_workers, search
 from .summary import summarise, summarise_search
 
 
+def _programmes(names) -> str:
+    """The programmes that can be asked for, each with its short form."""
+    short = {full: alias for alias, full in PROGRAMME_ALIASES.items()}
+    return ', '.join(f'{name} ({short[name]})' if name in short else name
+                     for name in sorted(names))
+
+
 def main(argv: list[str] | None = None) -> int:
+    # the help gives up -h to the altitude, which is asked for far more often
     parser = argparse.ArgumentParser(
-        prog='ascent', description='Simulate the powered ascent of a launch vehicle.')
+        prog='ascent', add_help=False,
+        description='Simulate the powered ascent of a launch vehicle.')
+    parser.add_argument('--help', action='help', help='show this message and stop')
     parser.add_argument('mission', help='mission name (f9) or path to a mission YAML file')
-    parser.add_argument('--altitude', type=float, metavar='KM',
+    parser.add_argument('--altitude', '-h', type=float, metavar='KM',
                         help='fly the catalogue entry for this target altitude')
-    parser.add_argument('--programme', metavar='NAME',
-                        help='pitch programme to take from the catalogue')
+    parser.add_argument('--programme', '-p', metavar='NAME',
+                        help=f'pitch programme to take from the catalogue: '
+                             f'{_programmes(PITCH_PROGRAMMES)}')
     parser.add_argument('--list', action='store_true',
                         help='list the catalogue entries for this vehicle and stop')
     parser.add_argument('--csv', metavar='FILE', help='write the whole trajectory to a CSV file')
-    parser.add_argument('--report', metavar='DIR',
-                        help='write an HTML report with plots and open it')
+    parser.add_argument('--report', '-r', metavar='DIR', nargs='?', const='',
+                        help='write an HTML report with plots and open it; '
+                             'on its own it writes to out/ and the name of the '
+                             'vehicle')
     parser.add_argument('--no-open', action='store_true',
                         help='write the report without opening it in a browser')
     parser.add_argument('--config-dir', default='config', metavar='DIR',
@@ -46,6 +66,8 @@ def main(argv: list[str] | None = None) -> int:
                              'looked up; a mission given by path is read where '
                              'it lies, along with the vehicle beside it')
     arguments = parser.parse_args(argv)
+    if arguments.programme:
+        arguments.programme = programme_name(arguments.programme)
 
     directory = Path(arguments.config_dir)
     mission_path = resolve(arguments.mission, directory)
@@ -79,15 +101,39 @@ def main(argv: list[str] | None = None) -> int:
         telemetry.write_csv(path)
         print(f'\ntrajectory: {path}')
 
-    if arguments.report:
+    if arguments.report is not None:
         from .report import write_report
-        path = write_report(mission, telemetry, arguments.report)
+        path = write_report(mission, telemetry,
+                            _report_directory(arguments.report, spec['vehicle']),
+                            command=_command_line(parser.prog, argv))
         print(f'report: {path}')
         # a report is written to be looked at, so it is opened where it can be
         if not arguments.no_open:
             webbrowser.open(path.resolve().as_uri())
 
     return 0
+
+
+def _command_line(prog: str, argv: list[str] | None) -> str:
+    """The command that produced the run, as it can be typed again.
+
+    Written on to the report, so that a page found later says what made it.
+    `uv run` leaves itself in the environment and this project is run through
+    it, so the line is the whole of what has to be typed.
+    """
+    words = sys.argv[1:] if argv is None else argv
+    line = ' '.join(shlex.quote(word) for word in [prog, *words])
+    return f'uv run {line}' if os.environ.get('UV') else line
+
+
+def _report_directory(given: str, vehicle: str) -> Path:
+    """Where the report goes: what was asked for, or out/ and the vehicle.
+
+    `--report` on its own is the common case - one run, looked at once - and
+    naming a directory for it every time is a chore. `lv.f9` writes to
+    `out/f9`, so a second run of the same vehicle replaces the first.
+    """
+    return Path(given) if given else Path('out') / vehicle.removeprefix('lv.')
 
 
 def _list(directory: Path, vehicle: str) -> None:
@@ -166,7 +212,7 @@ def search_main(argv: list[str] | None = None) -> int:
     """Entry point of `ascent-search`: solve for a programme instead of flying one.
 
         ascent-search f9 --altitude 500
-        ascent-search f9 --altitude 650 --programme bilinear-tangent --yaml
+        ascent-search f9 -h 650 -p bt --yaml
         ascent-search a62 --altitude 700 --coarse 0.5   # a quicker, rougher look
 
     The mission file supplies the vehicle and the launch site, and its own
@@ -175,16 +221,18 @@ def search_main(argv: list[str] | None = None) -> int:
     it are ignored: they are what the search is for.
     """
     parser = argparse.ArgumentParser(
-        prog='ascent-search',
+        prog='ascent-search', add_help=False,
         description='Search for the pitch-programme parameters that reach a '
                     'circular orbit in the shortest time.')
+    parser.add_argument('--help', action='help', help='show this message and stop')
     parser.add_argument('mission', help='mission name (f9) or path to a mission '
                                         'YAML file: the vehicle and the launch '
                                         'site are taken from it')
-    parser.add_argument('--altitude', type=float, metavar='KM',
+    parser.add_argument('--altitude', '-h', type=float, metavar='KM',
                         help='altitude of the circular orbit to aim for')
-    parser.add_argument('--programme', metavar='NAME', choices=sorted(FAMILIES),
-                        help=f'pitch programme to search: {", ".join(sorted(FAMILIES))}')
+    parser.add_argument('--programme', '-p', metavar='NAME',
+                        choices=sorted(FAMILIES) + sorted(PROGRAMME_ALIASES),
+                        help=f'pitch programme to search: {_programmes(FAMILIES)}')
     parser.add_argument('--tolerance', type=float, default=0.5, metavar='KM',
                         help='how close the perigee and the apogee have to come '
                              'to the target for the set to count (default 0.5)')
@@ -213,6 +261,8 @@ def search_main(argv: list[str] | None = None) -> int:
     parser.add_argument('--config-dir', default='config', metavar='DIR',
                         help='where short mission names are looked up')
     arguments = parser.parse_args(argv)
+    if arguments.programme:
+        arguments.programme = programme_name(arguments.programme)
     for name, value in (('--tolerance', arguments.tolerance),
                         ('--steps', arguments.steps),
                         ('--coarse', arguments.coarse)):

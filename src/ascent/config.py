@@ -27,11 +27,29 @@ PITCH_PROGRAMMES = {
     'bilinear-tangent': BilinearTangentProgramme,
 }
 
+# short names for the programmes above, accepted on the command line: a
+# parameter search is run over one family many times over, and its name is
+# typed every time
+PROGRAMME_ALIASES = {
+    '5f': 'five-phase',
+    'vs': 'velocity-share',
+    'bt': 'bilinear-tangent',
+}
+
 CUTOFFS = {
     'time': CutoffAtTime,
     'altitude': CutoffAtAltitude,
     'inertial-speed': CutoffAtInertialSpeed,
 }
+
+
+def programme_name(name: str) -> str:
+    """The full name of a pitch programme, from a short one or from itself.
+
+    Anything else is handed back untouched, so that an unknown name is
+    reported by whatever was going to look it up rather than here.
+    """
+    return PROGRAMME_ALIASES.get(name, name)
 
 
 def load_mission(path: str | Path) -> Mission:
