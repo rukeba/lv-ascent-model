@@ -158,8 +158,8 @@ class Mission:
 
         y = (*self._y, self._burned[index])
         advanced = rk4_step(rates, begin, y, end - begin)
-        event, emptied = self._event_within(rates, y, begin, end, advanced,
-                                            segment, capacity)
+        event, emptied = self._event_within(rates, y, begin, end,
+                                            advanced, capacity)
 
         if event is None:
             self._y = advanced[:-1]
@@ -173,7 +173,7 @@ class Mission:
         self._integrate(event, end)
 
     def _event_within(self, rates, y, begin: float, end: float, advanced,
-                      segment: Segment, capacity: float) -> tuple[float | None, bool]:
+                      capacity: float) -> tuple[float | None, bool]:
         """The first instant strictly inside the piece at which it stops holding."""
         dry = cut = None
         # the burn is allowed to run past the tank: that overshoot is the only

@@ -9,6 +9,7 @@ from ascent import (CutoffAtInertialSpeed, CutoffAtTime, LaunchVehicle, Mission,
                     Stage, load_mission, velocity_budget)
 from ascent.constants import EARTH_RADIUS, STANDARD_GRAVITY
 from ascent.pitch import PitchProgramme
+from ascent.telemetry import Telemetry
 
 
 class Horizontal(PitchProgramme):
@@ -195,6 +196,10 @@ def test_a_flight_that_never_lights_an_engine_spends_nothing():
     assert not telemetry.thrust.any()
     assert (budget.gravity, budget.aerodynamic, budget.steering) == (0.0, 0.0, 0.0)
     assert budget.burnout_time == 0.0
+
+    # and a flight with no rows at all is refused rather than read off row zero
+    with pytest.raises(ValueError, match='nothing was recorded'):
+        velocity_budget(Telemetry(), mission.omega)
 
 
 def test_halving_the_step_barely_moves_the_answer():

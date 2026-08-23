@@ -49,6 +49,9 @@ def velocity_budget(telemetry: Telemetry, omega: float) -> VelocityBudget:
     zero would quietly cost a launch to the east some hundreds of metres per
     second of gravity loss.
     """
+    if not len(telemetry):
+        raise ValueError('nothing was recorded: there is no flight to account for')
+
     powered = np.flatnonzero(telemetry.thrust > 0.0)
     if not len(powered):
         # nothing was ever spent, so nothing was spent on anything. Integrating

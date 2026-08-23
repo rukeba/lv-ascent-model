@@ -110,7 +110,10 @@ def _demand(telemetry: Telemetry, guided_until: float) -> str:
     peak = f'peak {demand.max():.3f} of the 1.0 the thrust can give'
     if not saturated:
         return peak
-    return f'{peak}, unreachable over {saturated * 100:.0f}% of the burn'
+    # a nought is what this line says when nothing saturated, so a share too
+    # small to round to one percent has to be spelled out rather than rounded
+    share = f'{saturated * 100:.0f}%' if saturated >= 0.005 else 'less than 1%'
+    return f'{peak}, unreachable over {share} of the burn'
 
 
 def _block(lines: list[str], title: str, rows: list[tuple[str, str]]) -> None:
