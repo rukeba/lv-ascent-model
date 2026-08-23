@@ -61,10 +61,13 @@ def _row(programme, source, cut_off, perigee, apogee, steering, total) -> None:
 
 
 def _progress(result) -> None:
-    """One dot per pass of the grid, so a long search shows it is running."""
-    if result.pass_node == result.pass_nodes:
-        print('.', end='' if result.pass_number < result.passes else '\r',
-              flush=True)
+    """A dot a pass, wiped once the row those dots were waiting for is ready."""
+    if result.pass_node != result.pass_nodes:
+        return
+    if result.pass_number < result.passes:
+        print('.', end='', flush=True)
+    else:
+        print('\r' + ' ' * result.passes + '\r', end='', flush=True)
 
 
 if __name__ == '__main__':

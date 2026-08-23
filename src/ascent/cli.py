@@ -113,6 +113,18 @@ class _Progress:
     def __init__(self) -> None:
         self.start = self.last = time.monotonic()
         self.width = 0
+        self.written = False
+
+    def finish(self) -> None:
+        """Close the line off, wherever the search stopped.
+
+        Not left to the last pass to do: a pass that solves nothing ends the
+        search early, and the summary would then be printed on the end of the
+        progress line.
+        """
+        if self.written:
+            print()
+            self.written = False
 
     def __call__(self, result) -> None:
         now = time.monotonic()
@@ -133,8 +145,7 @@ class _Progress:
                     f'{result.best.miss:.0f} m out)'
         print(f'\r{line:<{self.width}}', end='', flush=True)
         self.width = max(self.width, len(line))
-        if done and result.pass_number == result.passes:
-            print()
+        self.written = True
 
 
 def _clock(seconds: float) -> str:
@@ -179,7 +190,9 @@ def search_main(argv: list[str] | None = None) -> int:
                              'quicker and rougher search')
     parser.add_argument('--steps', type=float, default=10, metavar='PER_SECOND',
                         help='integration steps per second of every trajectory '
-                             'flown (default 10)')
+                             'flown (default 10). A coarser step is for a quick '
+                             'look and barely moves the orbit or the budget; '
+                             'the entry written out asks for ten either way')
     parser.add_argument('--yaml', action='store_true',
                         help='print the set found as a catalogue entry')
     parser.add_argument('--config-dir', default='config', metavar='DIR',
@@ -191,6 +204,7 @@ def search_main(argv: list[str] | None = None) -> int:
     site = spec.get('launch_site', {})
     vehicle_file = spec['vehicle']
 
+    progress = _Progress()
     result = search(
         vehicle=load_vehicle(mission_path.parent / f'{vehicle_file}.yaml'),
         target_altitude=(arguments.altitude * 1000 if arguments.altitude is not None
@@ -204,10 +218,13 @@ def search_main(argv: list[str] | None = None) -> int:
                               if arguments.max_q is not None else None),
         coarseness=arguments.coarse,
         steps_per_second=arguments.steps,
-        report=_Progress())
+        report=progress)
+    progress.finish()
     print(summarise_search(result))
 
-    if arguments.yaml and result.best is not None:
+    # only a set that reaches the orbit is written out as an entry: one that
+    # misses is worth showing and is not worth filing
+    if arguments.yaml and result.reaches_orbit:
         print('\n' + yaml.safe_dump({'missions': [result.specification(vehicle_file)]},
                                     sort_keys=False, default_flow_style=None))
     return 0 if result.reaches_orbit else 1

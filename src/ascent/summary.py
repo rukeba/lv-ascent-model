@@ -100,7 +100,7 @@ def _pressure(result) -> str:
     design = result.vehicle.design_dynamic_pressure
     line = f'{peak / 1000:.1f} kPa'
     if result.max_dynamic_pressure is not None:
-        return line + f' (held under {result.max_dynamic_pressure / 1000:g})'
+        return line + f' (held under {result.max_dynamic_pressure / 1000:g} kPa)'
     if design:
         return line + f' (design {design / 1000:g} kPa' \
             + (', over it' if peak > design else '') + ')'
@@ -197,6 +197,7 @@ def summarise_search(result) -> str:
                         f'by the altitude integral'),
         ('refused by the family', f'{result.refused:,}'),
         ('no cut-off found', f'{result.unbracketed:,}'),
+        ('closed on no orbit', f'{result.no_orbit:,}'),
         ('cut-offs solved', f'{result.solved:,}'),
         ('trajectories flown', f'{result.flown:,}, '
                               f'{result.flown / max(result.solved, 1):.1f} '
@@ -206,7 +207,14 @@ def summarise_search(result) -> str:
     best = result.best
     if best is None:
         lines.append('')
-        lines.append('nothing was flown: no node of the grid could be flown at all')
+        if result.over_pressure:
+            lines.append(f'{result.over_pressure:,} sets reached an orbit and '
+                         f'every one of them was put aside for asking more of '
+                         f'the airframe than '
+                         f'{result.max_dynamic_pressure / 1000:g} kPa: there is '
+                         f'no set here that meets both conditions')
+        else:
+            lines.append('no node of the grid came out on an orbit at all')
         return '\n'.join(lines)
 
     orbit = best.orbit

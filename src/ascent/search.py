@@ -75,8 +75,15 @@ TIME_MARGIN_LATE = 0.15
 # the same way; against the catalogue the figure it returns is between 1.005
 # and 1.185 times the altitude the flight reaches, and a node is screened out
 # only when the target lies outside what these two allow.
-ALTITUDE_RATIO_LOW = 1.00
-ALTITUDE_RATIO_HIGH = 1.25
+#
+# They are wider than that measurement because the measurement is of three
+# vehicles and the screen is a gate: a node it rejects is never flown, so a
+# vehicle whose integral read a little further out than any of these would be
+# reported as unable to reach an orbit it can reach. The margin costs some of
+# the screening - a first pass of the velocity share still goes 83 per cent
+# unflown against 87 at the measured band, one of the five-phase 11 against 32.
+ALTITUDE_RATIO_LOW = 0.95
+ALTITUDE_RATIO_HIGH = 1.40
 
 # Both the perigee and the apogee have to land within this of the target for a
 # set to count as reaching the orbit, m
@@ -85,11 +92,13 @@ TOLERANCE = 500.0
 # The vertical rise is a construction choice rather than a solved unknown, s
 VERTICAL_RISE = 20.0
 
-# The cut-off is solved until the orbit is this close to circular, measured as
-# the gap between the semi-major axis and the radius at cut-off, m. Half of it
-# is what the apogee and the perigee each end up away from the mean
-CIRCULAR_TOLERANCE = 50.0
-CUT_OFF_PASSES = 30
+# The cut-off is solved until the orbit is this share of the tolerance away
+# from circular, measured as the gap between the semi-major axis and the radius
+# at cut-off. That gap is what the apogee and the perigee each end up away from
+# the mean, so a tenth of the tolerance leaves nine tenths of it for the
+# altitude - and asking for a tighter orbit tightens the solve with it
+CIRCULAR_SHARE = 0.1
+CUT_OFF_PASSES = 40
 
 # Nodes along each axis of a refining pass. The first pass has to cover the
 # whole range of a family and is as wide as the family says; the passes after
@@ -148,11 +157,16 @@ class SearchResult:
     equivalent_time: float = 0.0
     window: tuple[float, float] = (0.0, 0.0)
     # nodes of the grid visited, dropped by the altitude integral, refused by
-    # the family itself, and left with no cut-off inside the window
+    # the family itself, left with no cut-off inside the window, and closed on
+    # something that is not an orbit at all - a perigee under the surface
     nodes: int = 0
     screened: int = 0
     refused: int = 0
     unbracketed: int = 0
+    no_orbit: int = 0
+    # nodes that came out on an orbit. Counted rather than derived, so that a
+    # node falling through every branch would show as an inconsistency
+    closed: int = 0
     # sets that reached an orbit and were put aside for asking more of the
     # airframe than the caller allowed
     over_pressure: int = 0
@@ -177,8 +191,12 @@ class SearchResult:
 
     @property
     def solved(self) -> int:
-        """Nodes for which a cut-off was found and the orbit closed."""
-        return self.nodes - self.screened - self.refused - self.unbracketed
+        """Nodes for which a cut-off was found and the orbit closed.
+
+        Every node ends in exactly one of the five counts above, and this is
+        the last of them under its older name.
+        """
+        return self.closed
 
     @property
     def reaches_orbit(self) -> bool:
@@ -190,9 +208,17 @@ class SearchResult:
 
         `vehicle_file` is the stem of the vehicle file the entry should name -
         `lv.f9` rather than `Falcon 9`, which is what the vehicle calls itself.
+
+        Refused unless the set reaches the orbit. `best` is the closest set
+        found whether or not it reaches, which is the right thing to show and
+        the wrong thing to file: an entry of the catalogue is a set that meets
+        its terminal condition, and one that misses would be read as one that
+        does not.
         """
-        if self.best is None:
-            raise ValueError('the search found nothing to write down')
+        if self.best is None or not self.reaches_orbit:
+            raise ValueError(
+                'the search found no set that reaches the orbit, and a set '
+                'that misses it is not a catalogue entry')
         best = self.best
         altitude = self.target_altitude
         return {
@@ -420,6 +446,12 @@ def search(vehicle: LaunchVehicle, target_altitude: float, programme: str,
         settled = _passes(flight, _coarsen(family.axes(), coarseness), bounds,
                           refinements, report, by_time=False) or settled
 
+    # a pass that solved nothing stops the search where it stands, so the count
+    # of passes and of nodes is corrected to what was actually walked rather
+    # than left saying what was planned
+    result.passes = result.pass_number
+    result.planned_nodes = result.nodes
+
     if result.best is not None and settled is not None:
         result.on_edge = tuple(
             name for name, (low, high) in bounds.items()
@@ -470,6 +502,9 @@ class _Flight:
         self.latitude_deg, self.azimuth_deg = latitude_deg, azimuth_deg
         self.steps_per_second = steps_per_second
         self.result = result
+        # a tenth of what the caller asked of the orbit, so that a tighter
+        # tolerance is met by the solve rather than only asked of it
+        self.circular_tolerance = result.tolerance * CIRCULAR_SHARE
         # narrowed to the neighbourhood of the last pass's answer once there is
         # one: neighbouring shapes cut off at neighbouring instants
         self.bracket = window
@@ -514,8 +549,16 @@ class _Flight:
             brackets.append(self.window)
         for low, high in brackets:
             solved = self._solve_between(low, high, shape)
-            if solved is not None:
-                return solved
+            if solved is None:
+                continue
+            if not math.isfinite(solved.miss):
+                # a cut-off was found and what it closes is not an orbit: the
+                # perigee is under the surface, or the trajectory is not closed
+                # at all. Its own count, so that every node has exactly one
+                self.result.no_orbit += 1
+                return None
+            self.result.closed += 1
+            return solved
         self.result.unbracketed += 1
         return None
 
@@ -542,7 +585,8 @@ class _Flight:
         closest = under if abs(below) < abs(above) else over
 
         for _ in range(CUT_OFF_PASSES):
-            if abs(closest.residual) <= CIRCULAR_TOLERANCE or high - low <= 1e-9:
+            if abs(closest.residual) <= self.circular_tolerance \
+                    or high - low <= 1e-9:
                 break
             middle = low + (high - low) * (-below) / (above - below)
             if not low < middle < high:
@@ -603,7 +647,15 @@ class _Flight:
                 cutoff=CutoffAtTime(end), target_altitude=self.target_altitude,
                 # a few seconds of coast past cut-off and no more: above the
                 # atmosphere nothing acts on the vehicle that the orbit it is
-                # already on does not carry
+                # already on does not carry.
+                #
+                # `end` is an arbitrary instant and a programme is tabulated on
+                # a tenth-of-a-second grid, so the programme ends on the last
+                # grid point at or before it and the remainder is flown on the
+                # attitude reached. That is how every set in the catalogue was
+                # solved and how every one of them is flown back, so the set
+                # reported here reproduces itself from its own specification -
+                # which `tests/test_search.py` checks
                 duration=end + 5.0, steps_per_second=self.steps_per_second,
                 latitude_deg=self.latitude_deg, azimuth_deg=self.azimuth_deg)
             telemetry = mission.run()
@@ -646,7 +698,7 @@ def _sweep(flight: _Flight, axes: dict[str, Axis], report) -> list[Candidate]:
         result.nodes += 1
         result.pass_node += 1
         candidate = flight.at(shape)
-        if candidate is not None and math.isfinite(candidate.miss):
+        if candidate is not None:
             if limit is not None and candidate.peak_dynamic_pressure > limit:
                 result.over_pressure += 1
             else:

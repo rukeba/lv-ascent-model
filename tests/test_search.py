@@ -86,13 +86,14 @@ def test_every_family_solves_its_cut_off_to_a_circular_orbit(family, shape):
     assert candidate is not None, f'{family.name} solved no cut-off at all'
     assert candidate.cutoff_time == pytest.approx(502, abs=3)
     assert candidate.orbit.eccentricity < 1e-4
-    assert abs(candidate.residual) <= 50.0
+    assert abs(candidate.residual) <= flight.circular_tolerance
     assert candidate.miss < 3_000.0
 
 
 def test_the_set_found_flies_again_from_its_own_specification():
     """What the search writes down reproduces what the search measured."""
-    result = quick('five-phase', refinements=2)
+    result = quick('five-phase')
+    assert result.reaches_orbit
     spec = result.specification('lv.f9')
     assert spec['vehicle'] == 'lv.f9'
     assert spec['cutoff']['time'] == result.best.cutoff_time
@@ -114,14 +115,53 @@ def test_the_search_stays_inside_the_estimated_window():
     assert result.vacuum_time < result.equivalent_time
 
 
-def test_the_screen_and_the_flights_account_for_every_node():
+def test_every_node_ends_in_exactly_one_count():
+    """The five outcomes of a node are counted, not derived from each other.
+
+    `screened`, `refused`, `unbracketed` and `no_orbit` are incremented where
+    the node ends, and `closed` where it comes out on an orbit; a node that
+    fell through all five would show up here as a node unaccounted for.
+    """
     result = quick('velocity-share', refinements=1)
     assert result.nodes == (result.screened + result.refused
-                            + result.unbracketed + result.solved)
+                            + result.unbracketed + result.no_orbit
+                            + result.closed)
+    assert result.closed == result.solved
     assert result.screened > 0, 'the altitude integral rejected nothing'
-    assert result.flown > result.solved, 'every node takes several trajectories'
-    # and the passes and their nodes were known before any of it was flown
+    assert result.closed > 0, 'no node came out on an orbit'
+    assert result.flown > result.closed, 'every node takes several trajectories'
+    # and the passes and their nodes were walked as they were planned to be
     assert result.planned_nodes == result.nodes
+    assert result.passes == result.pass_number
+
+
+def test_a_set_that_misses_is_not_written_out_as_an_entry():
+    """`best` is the closest set found; only a set that reaches is filed.
+
+    One pass of a grid this coarse cannot place the orbit within half a
+    kilometre, so this is a search that has an answer to show and none to file.
+    """
+    result = quick('velocity-share', refinements=0, coarseness=0.3)
+    assert not result.reaches_orbit
+    assert result.best is not None
+    with pytest.raises(ValueError, match='not a catalogue entry'):
+        result.specification('lv.f9')
+
+
+def test_a_tighter_tolerance_tightens_the_cut_off_solve():
+    """The circularity the solve stops at is a share of what was asked for."""
+    from ascent.search import CIRCULAR_SHARE, _Flight
+
+    for tolerance in (500.0, 100.0):
+        result = SearchResult(best=None, vehicle=FALCON, target_altitude=500_000,
+                              programme='five-phase', latitude_deg=28.5,
+                              azimuth_deg=90.0, steps_per_second=1,
+                              tolerance=tolerance)
+        flight = _Flight(FALCON, FivePhase(), 20.0, 500_000, (470.0, 570.0),
+                         28.5, 90.0, 1, result)
+        assert flight.circular_tolerance == tolerance * CIRCULAR_SHARE
+        candidate = flight.at({'k3': 0.5296})
+        assert abs(candidate.residual) <= flight.circular_tolerance
 
 
 def test_an_orbit_out_of_reach_is_refused_before_anything_is_flown():

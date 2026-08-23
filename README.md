@@ -231,7 +231,9 @@ rather than integration, and both are in `estimates.py`:
   without a trajectory. It reads between 1.005 and 1.185 times the altitude the
   flight reaches — never low, because the air, the thrust deficit at sea level
   and the fall of gravity with altitude all push the same way — and the screen
-  is that band applied backwards.
+  is that band applied backwards, widened to 0.95–1.40 because it is a gate: a
+  node it rejects is never flown, and the measurement behind it is of three
+  vehicles.
 
 Neither is accurate enough to stand in for a flight. Both are accurate enough
 to say which flights are worth making, and `tests/test_estimates.py` checks
@@ -256,20 +258,25 @@ before and halving the step. A five-phase search integrates some seven hundred
 trajectories, one of the two-axis families some three thousand — a minute or so
 in the first case and several in the second, and twice that where the grid has
 to be run again. What the screen saves is almost all on the first pass, the
-only one that covers the whole range of a family: three quarters of the nodes
-of a velocity-share first pass go unflown, and anywhere from none to half of a
-five-phase one, which has a single axis and less to reject. On the passes after
-it, already gathered about an answer, it drops nothing, and it is not meant to. `--steps` and `--coarse` are
+only one that covers the whole range of a family: of a Falcon 9 first pass to
+500 km it drops four fifths of the velocity-share nodes unflown, half of the
+bilinear-tangent ones and a tenth of the five-phase ones, which have a single
+axis and less to reject. On the passes after it, already gathered about an
+answer, it drops nothing, and it is not meant to. `--steps` and `--coarse` are
 there for a quicker look: the orbit a set reaches is the same to within a few
-metres at one step a second as at ten.
+metres at one step a second as at ten, and so is the velocity budget: it is
+read off the last powered row rather than off the cut-off itself, but by then
+the vehicle is level and out of the air, so all three integrands are near zero
+there and the part left out is fractions of a metre per second. The entry the
+search writes out asks for ten steps a second whatever it was searched at.
 
 **What the quicker ascent is paid for.** A quicker ascent is a flatter one,
 and a flatter one goes faster lower down. The set found is reported with the
 peak dynamic pressure it asks of the airframe, beside the figure the vehicle
 file declares it is designed for, and with the peak thrust deflection it asks
 of the guidance — and the first of those is not free. Searching Falcon 9 to
-500 km on the bilinear tangent returns a set that cuts off at 499.41 s rather
-than the 500.91 on file, and it peaks at 37.4 kPa against a design figure of
+500 km on the bilinear tangent returns a set that cuts off at 499.21 s rather
+than the 500.91 on file, and it peaks at 37.7 kPa against a design figure of
 35. Neither figure enters the ranking unless you say so: `--max-q` puts the
 airframe into the constraint, and a set that peaks above it is then not an
 answer however quick it is, which is where a limit on the dynamic pressure
