@@ -89,7 +89,7 @@ TIME_MARGIN_LATE = 0.15
 # vehicle whose integral read a little further out than any of these would be
 # reported as unable to reach an orbit it can reach. The margin costs some of
 # the screening - a first pass of the velocity share still goes 83 per cent
-# unflown against 87 at the measured band, one of the five-phase 11 against 32.
+# unflown against 87 at the measured band, one of the five-phase 16 against 42.
 ALTITUDE_RATIO_LOW = 0.95
 ALTITUDE_RATIO_HIGH = 1.40
 

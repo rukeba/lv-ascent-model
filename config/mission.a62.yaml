@@ -12,9 +12,9 @@ launch_site:
 pitch_programme:
   type: bilinear-tangent
   t1: 25.0
-  a: -0.4759856552
-  b: 550.8311338
-  c: 1.981749611
+  a: -0.3933656045
+  b: 455.2196469
+  c: 1.637422733
   te: 1182.243139
 
 cutoff:

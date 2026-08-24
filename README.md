@@ -70,8 +70,10 @@ velocities stay consistent throughout. Launching due north (`azimuth: 0`) makes
 them equal.
 
 **Forces.** Thrust interpolated between the sea-level and vacuum figures by
-ambient pressure; gravity as a central field, less the centrifugal term of the
-rotating frame; drag from a Mach-dependent coefficient and the ICAO standard
+ambient pressure; gravity as a central field on the measured gravitational
+parameter, `mu = 3.986004418e14` m³/s², rather than on a product of a
+tabulated G and mass of the Earth; less the centrifugal term of the rotating
+frame; drag from a Mach-dependent coefficient and the ICAO standard
 atmosphere, taken as zero above 100 km. The velocity budget is projected the
 same way the equations of motion are: what the propellant delivered, less the
 gravity and aerodynamic losses, is the speed reached, to within a metre or two.
@@ -410,7 +412,7 @@ depend on how many processes answered it. `--workers` says how many, and
 What the screen saves is almost all on the first pass, the only one that covers
 the whole range of a family: of a Falcon 9 first pass to 500 km it drops four
 fifths of the velocity-share nodes unflown, half of the bilinear-tangent ones
-and a tenth of the five-phase ones, which have a single axis and less to
+and a sixth of the five-phase ones, which have a single axis and less to
 reject. On the passes after it, already gathered about an answer, it drops
 nothing, and it is not meant to. `--steps` and `--coarse` are there for a
 quicker look: the orbit a set reaches is the same to within a few metres at one
@@ -425,7 +427,7 @@ and a flatter one goes faster lower down. The set found is reported with the
 peak dynamic pressure it asks of the airframe, beside the figure the vehicle
 file declares it is designed for, and with the peak thrust deflection it asks
 of the guidance — and the first of those is not free. Searching Falcon 9 to
-500 km on the bilinear tangent returns a set that cuts off at 499.202 s rather
+500 km on the bilinear tangent returns a set that cuts off at 499.203 s rather
 than the 500.910 on file, and it peaks at 37.8 kPa against a design figure of
 35. Neither figure enters the ranking unless you say so: `--max-q` puts the
 airframe into the constraint, and a set that peaks above it is then not an
@@ -443,11 +445,11 @@ preferred the smallest steering loss among the sets that reach the orbit; this
 prefers the earliest cut-off. For the five-phase family there is nothing to
 prefer — two conditions and two unknowns leave no freedom — and the two agree
 to the figures the grid resolves: searching Falcon 9 to 500 km returns a
-cut-off of 502.693 s against the 502.707 on file, and the same velocity budget
+cut-off of 502.698 s against the 502.712 on file, and the same velocity budget
 to within a metre per second, as it does at 650 km and as H3 does at 1100. The
 other two families keep a parameter to spend, and the search spends it
-differently: Falcon 9 to 500 km on the velocity share cuts off at 501.696 s
-rather than 502.188, for 2916.6 m/s of losses rather than 2996.4.
+differently: Falcon 9 to 500 km on the velocity share cuts off at 501.700 s
+rather than 502.193, for 2916.5 m/s of losses rather than 2996.4.
 
 The second of those figures need not follow the first, and on H3 it does not.
 An earlier cut-off is always less propellant burned — the burn is shorter — but
@@ -472,9 +474,12 @@ uv run python examples/steering_loss_comparison.py
 
 ```
 programme                gravity  aerodynamic  steering     total   perigee   apogee
-five-phase                2568.7         29.3     526.5    3124.6     500.1    501.0
-velocity-share            2537.9         29.7     411.1    2978.7     500.4    507.6
-bilinear-tangent          2500.0         29.6     433.1    2962.7     500.1    500.5
+five-phase                2568.8         29.3     526.4    3124.6     499.4    501.0
+  published               2568.8         29.3     526.4    3124.5
+velocity-share            2538.0         29.7     411.0    2978.7     500.4    506.9
+  published               2538.0         29.7     411.0    2978.7
+bilinear-tangent          2500.0         29.6     433.0    2962.7     499.4    500.4
+  published               2500.0         29.6     433.0    2962.6
 
 largest deviation from the published figures: 0.04 m/s
 ```
