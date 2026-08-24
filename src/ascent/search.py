@@ -865,13 +865,19 @@ def search(vehicle: LaunchVehicle, target_altitude: float, programme: str,
 def _order(candidate: Candidate, result: SearchResult) -> tuple:
     """Where a set comes in the table, and so which of them is the answer.
 
-    Whether it reached the orbit first, then the criterion. The reaching comes
-    first because the terminal condition is a condition and not a preference:
-    a set half a kilometre out is not a cheaper answer than one on the orbit,
-    it is not an answer. Where nothing reached, the order is the criterion
-    alone and the table is what there is to look at.
+    Whether it reached the orbit comes first, because the terminal condition is
+    a condition and not a preference: a set half a kilometre out is not a
+    cheaper answer than one on the orbit, it is not an answer. Among the sets
+    that reached it, the criterion decides.
+
+    Among the sets that missed, what decides is how far they missed by,
+    whatever the criterion - the cheapest way to miss an orbit is of no use to
+    anyone, and where nothing reached, the closest sets are the whole of what
+    there is to look at.
     """
-    return (candidate.miss > result.tolerance, *_rank(candidate, result))
+    if candidate.miss > result.tolerance:
+        return (True, candidate.miss, 0.0)
+    return (False, *_rank(candidate, result))
 
 
 def _distinct(candidates: list[Candidate], value) -> list[Candidate]:
@@ -1329,15 +1335,15 @@ def _sweep(flight: _Flight, axes: dict[str, Axis], bracket: tuple[float, float],
 
 
 def _best_so_far(result: SearchResult, solved: list[Candidate]) -> Candidate:
-    """The best set found by the whole search up to and including this pass."""
+    """The best set found by the whole search up to and including this pass.
+
+    By the same order the table of sets comes back in, so that the set reported
+    is the one at the head of it - which is what `_order` is for. Nothing has
+    reached the orbit at the start of a search, and then the closest is what
+    there is to show and `reaches_orbit` is what says it does not count.
+    """
     seen = solved if result.best is None else [*solved, result.best]
-    reaching = [candidate for candidate in seen
-                if candidate.miss <= result.tolerance]
-    if reaching:
-        return min(reaching, key=lambda candidate: _rank(candidate, result))
-    # nothing has reached the orbit yet: the closest is what there is to show,
-    # and `reaches_orbit` is what says it does not count
-    return min(seen, key=lambda candidate: candidate.miss)
+    return min(seen, key=lambda candidate: _order(candidate, result))
 
 
 def _rank(candidate: Candidate, result: SearchResult) -> tuple[float, float]:
