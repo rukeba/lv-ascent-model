@@ -39,6 +39,11 @@ class FlightState:
     steering_demand: float = 0.0
     # velocity lost to that deflection since lift-off, m/s
     steering_loss: float = 0.0
+    # the control-effort functional since lift-off, m^2/s^3: the square of the
+    # normal acceleration the programme demands, integrated over the powered
+    # flight. Built on the demand before it is clamped, so it goes on measuring
+    # where the loss above saturates
+    control_effort: float = 0.0
     # index of the stage burning at this instant
     stage: int = 0
 

@@ -34,6 +34,7 @@ COLUMNS = (
     ('steering_angle', 'deg', lambda s: s.steering_angle * DEGREES),
     ('steering_demand', '', lambda s: s.steering_demand),
     ('steering_loss', 'm/s', lambda s: s.steering_loss),
+    ('control_effort', 'm^2/s^3', lambda s: s.control_effort),
     ('stage', '', lambda s: s.stage),
 )
 
