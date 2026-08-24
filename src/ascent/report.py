@@ -63,6 +63,13 @@ BLUE, ORANGE, GREEN = '#1f4fd8', '#e07b00', '#2e7d32'
 RED, PURPLE, TEAL = '#c62828', '#6a1b9a', '#00695c'
 GUIDE = '#b6bec9'
 
+# the trajectory is drawn over the Earth itself: the ground below the surface
+# is filled in the muted blue-green of a sea, and the sky over it is shaded,
+# at its deepest at the top of the drawing
+GROUND = '#a3c1bd'
+SKY = '#4a86d0'
+SKY_DEPTH = 0.5
+
 STYLE = {
     'figure.facecolor': 'white',
     'savefig.facecolor': 'white',
@@ -351,16 +358,41 @@ def _plot(mission: Mission, telemetry: Telemetry, burnout: float,
         axes.set_ylabel('h, km')
 
     def trajectory(axes):
-        arc = np.linspace(0, np.radians(max(telemetry.polar_angle)) * 1.05, 400)
-        axes.plot(EARTH_RADIUS * np.sin(arc) / 1000,
-                  (EARTH_RADIUS * np.cos(arc) - EARTH_RADIUS) / 1000,
-                  color='0.4', label='surface')
-        radius = EARTH_RADIUS + target
-        axes.plot(radius * np.sin(arc) / 1000,
-                  (radius * np.cos(arc) - EARTH_RADIUS) / 1000,
-                  color=RED, linestyle=':', label='target orbit')
+        # a flight that goes a long way round runs the drawing into the
+        # horizon, where a height over a downrange stops meaning anything;
+        # the frame stops just short of it
+        reach = min(telemetry.downrange_x.max() * 1.05, 0.99 * EARTH_RADIUS)
+        # the ground and the sky run to the axis, but the pad does not sit on
+        # it: the frame opens a little before the launch
+        left = -0.02 * reach
+        # the surface and the orbit are circles about the centre of the Earth;
+        # taking them as a height over the downrange, rather than as an arc
+        # over an angle, is what makes each of them span the axis exactly
+        x = np.linspace(left, reach, 400)
+        surface = np.sqrt(EARTH_RADIUS ** 2 - x ** 2) - EARTH_RADIUS
+        orbit = np.sqrt((EARTH_RADIUS + target) ** 2 - x ** 2) - EARTH_RADIUS
+        # the frame holds the deepest the surface falls away and the highest
+        # the flight or the orbit reaches; the flight itself stays over the
+        # surface, because the model stops if it does not
+        deepest, highest = surface[-1], max(orbit[0], telemetry.downrange_y.max())
+        top = highest + 0.05 * (highest - deepest)
+        # a band of ground under the surface, enough of it to read as a body
+        bottom = deepest - 0.09 * (top - deepest)
+
+        # thinner than the plots against time: this one is read as a shape
+        # over a filled Earth, and a heavy line coarsens the curves
+        thin = 1.4
+        _sky(axes, left, reach, bottom, top)
+        axes.fill_between(x / 1000, bottom / 1000, surface / 1000,
+                          color=GROUND, zorder=1.1)
+        axes.plot(x / 1000, surface / 1000, color='0.4', linewidth=thin,
+                  zorder=1.2, label='surface')
+        axes.plot(x / 1000, orbit / 1000, color=RED, linestyle=':',
+                  linewidth=thin, label='target orbit')
         axes.plot(telemetry.downrange_x / 1000, telemetry.downrange_y / 1000,
-                  color=BLUE, label='trajectory')
+                  color=BLUE, linewidth=thin, label='trajectory')
+        axes.set_xlim(left / 1000, reach / 1000)
+        axes.set_ylim(bottom / 1000, top / 1000)
         axes.set_xlabel('downrange, km')
         axes.set_ylabel('height above the pad, km')
         axes.set_aspect('equal')
@@ -415,6 +447,27 @@ def _plot(mission: Mission, telemetry: Telemetry, burnout: float,
          'end of the flight.',
          trajectory, size=SPREAD, wide=True, marks=False)
     return figures
+
+
+def _sky(axes, left: float, reach: float, bottom: float, top: float) -> None:
+    """Shade the sky, white at the ground and blue at the top of the drawing.
+
+    Painted as an image and not as bands, because the shade follows the
+    distance from the centre of the Earth: its lines are arcs concentric with
+    the surface, curving away with it as the ground does. It runs the whole
+    height of the frame, deepest at the corner furthest from the centre.
+    """
+    x, y = np.meshgrid(np.linspace(left, reach, 400),
+                       np.linspace(bottom, top, 300) + EARTH_RADIUS)
+    altitude = np.hypot(x, y) - EARTH_RADIUS
+    shade = np.clip(altitude / altitude.max(), 0.0, 1.0)
+    image = np.zeros(shade.shape + (4,))
+    image[..., :3] = matplotlib.colors.to_rgb(SKY)
+    image[..., 3] = shade * SKY_DEPTH
+
+    axes.imshow(image, origin='lower', aspect='auto', interpolation='bilinear',
+                extent=(left / 1000, reach / 1000, bottom / 1000, top / 1000),
+                zorder=1)
 
 
 def _twin(axes):
