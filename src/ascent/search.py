@@ -257,6 +257,22 @@ class Candidate:
     def total_loss(self) -> float:
         return self.gravity_loss + self.aerodynamic_loss + self.steering_loss
 
+    @property
+    def described(self) -> dict[str, float]:
+        """Everything that names this set: the specification and the grid.
+
+        The two overlap and neither holds the other. The bilinear tangent is
+        searched through the angles its turn passes and specified through the
+        coefficients those angles give, so a table built from the
+        specification alone cannot say where on the grid its rows came from,
+        and one built from the grid alone cannot be flown.
+        """
+        named = {name: value for name, value in self.parameters.items()
+                 if name != 'type'}
+        named.update({name: value for name, value in self.shape.items()
+                      if name not in named})
+        return named
+
     def errors(self, target_altitude: float) -> tuple[float, float, float]:
         """The three terminal errors, relative: altitude, speed, orbit shape.
 
@@ -905,6 +921,15 @@ def _narrow(axes: dict[str, Axis],
     if unknown:
         raise ValueError(f'cannot narrow {", ".join(unknown)}: this search '
                          f'runs over {", ".join(axes)}')
+    for name, given in ranges.items():
+        axis = axes[name]
+        if given.low < axis.low - 1e-12 or given.high > axis.high + 1e-12:
+            raise ValueError(
+                f'cannot narrow {name} to {given.low:g}-{given.high:g}: the '
+                f'family searches {axis.low:g}-{axis.high:g}, and a range '
+                f'outside that is a different family rather than a narrower '
+                f'search - the screen and the terminal conditions are read '
+                f'against what the family declares')
     return {name: ranges.get(name, axis) for name, axis in axes.items()}
 
 
@@ -1244,10 +1269,14 @@ def _terminal_state(telemetry: Telemetry,
     row = telemetry.at(end)
     columns = (telemetry.altitude, telemetry.inertial_speed,
                telemetry.flight_path_angle)
-    if row + 1 >= len(telemetry.t) or telemetry.t[row] >= end:
+    if row < 1 or telemetry.t[row] >= end:
         return tuple(float(column[row]) for column in columns)
-    weight = (end - telemetry.t[row]) / (telemetry.t[row + 1] - telemetry.t[row])
-    return tuple(float(column[row] + (column[row + 1] - column[row]) * weight)
+    # forward from the two rows before the cut-off, not across it. The engines
+    # stop at `end`, so a line drawn to the row after it is half powered and
+    # half coast and lands between the two; the rows behind it are both under
+    # thrust, and the step to carry forward is a fraction of one
+    weight = (end - telemetry.t[row]) / (telemetry.t[row] - telemetry.t[row - 1])
+    return tuple(float(column[row] + (column[row] - column[row - 1]) * weight)
                  for column in columns)
 
 
@@ -1260,11 +1289,17 @@ def _demands(telemetry: Telemetry, end: float) -> tuple[float, float]:
     guidance; where it passes one there is no such deflection and the vehicle
     cannot hold the programme, so it says how far the steering loss beside it
     is a measurement at all.
+
+    Both are the height of a curve sampled at the step the flight was
+    integrated at, so both are read off the parabola through the largest row
+    and its neighbours rather than off that row: a peak between two rows is
+    read low otherwise, and at a coarse step by enough to matter to a limit
+    imposed on either figure.
     """
     up_to = telemetry.at(end) + 1
     demand = telemetry.steering_demand[:up_to][telemetry.thrust[:up_to] > 0.0]
     return (_peak(telemetry.dynamic_pressure[:up_to]),
-            float(np.abs(demand).max()) if len(demand) else 0.0)
+            _peak(np.abs(demand)) if len(demand) else 0.0)
 
 
 def _peak(series: np.ndarray) -> float:

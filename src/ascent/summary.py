@@ -393,10 +393,9 @@ def _band(lines: list[str], result) -> None:
              f'{len(band):,} of the {len(result.reaching):,} sets found that '
              f'reach the orbit, within {result.band_tolerance:g} {unit} of the '
              f'set above')]
-    for key in band[0].parameters:
-        if key != 'type':
-            rows.append((key, _spread((c.parameters[key] for c in band),
-                                      UNITS.get(key, ''))))
+    for key in band[0].described:
+        rows.append((key, _spread((c.described[key] for c in band),
+                                  UNITS.get(key, ''))))
     rows.append(('cut-off', _spread((c.cutoff_time for c in band), 's')))
     if result.programme == 'five-phase':
         # the fifth phase is what the search calls t4 against what it calls
@@ -425,18 +424,12 @@ def _top(result) -> list[str]:
     if not found:
         return []
     target = result.target_altitude
-    keys = [key for key in found[0].parameters if key != 'type']
-    # and the coordinates of the grid that are not among them. The bilinear
-    # tangent is searched through the angles it passes and specified through
-    # the coefficients they give, so without this its new axes would be
-    # searched and never shown
-    keys += [key for key in found[0].shape if key not in keys]
+    keys = list(found[0].described)
     columns = [('#', 3, lambda number, set_, errors: f'{number}')]
     # ten wide because the bilinear coefficients run to `-0.0096468` and a
     # column that overflows takes the row out of line with the header
     columns += [(key, 10, lambda number, set_, errors, key=key:
-                 f'{(set_.parameters.get(key, set_.shape.get(key))):.5g}')
-                for key in keys]
+                 f'{set_.described[key]:.5g}') for key in keys]
     columns += [
         ('t5', 8, lambda number, set_, errors: f'{set_.cutoff_time:.2f}'),
         ('gamma', 7, lambda number, set_, errors:

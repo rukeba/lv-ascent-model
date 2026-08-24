@@ -269,7 +269,7 @@ def _ranges(parser, given: list[str], programme: str,
     traceback.
     """
     family = FAMILIES.get(programme)
-    axes = tuple(family(free=free).axes()) if family is not None else ()
+    axes = family(free=free).axes() if family is not None else {}
     ranges = {}
     for text in given:
         name, _, span = text.partition('=')
@@ -289,6 +289,14 @@ def _ranges(parser, given: list[str], programme: str,
         if axes and name not in axes:
             parser.error(f'--range {name}: this search runs over '
                          f'{", ".join(axes)}')
+        # a range is a narrowing. Outside what the family declares, the screen
+        # and the terminal conditions are being read against a family that is
+        # not the one being flown, so it is refused here rather than searched
+        if name in axes and (low < axes[name].low - 1e-12
+                             or high > axes[name].high + 1e-12):
+            parser.error(f'--range {name}: the {programme} family searches '
+                         f'{axes[name].low:g} to {axes[name].high:g}, and '
+                         f'{text!r} asks outside that')
         ranges[name] = Axis(low, high, nodes)
     return ranges
 
@@ -389,7 +397,7 @@ def search_main(argv: list[str] | None = None) -> int:
                         help='write the whole band to a CSV file - every set, '
                              'the orbit it reaches, what it costs and what it '
                              'demands - where the summary prints the first '
-                             'twenty')
+                             '--top of them')
     parser.add_argument('--tolerance', type=float, default=0.5, metavar='KM',
                         help='how close the perigee and the apogee have to come '
                              'to the target for the set to count (default 0.5)')
@@ -500,17 +508,18 @@ def search_main(argv: list[str] | None = None) -> int:
 def _write_band(path: Path, result) -> int:
     """The whole band as a table, one set to a row. How many were written.
 
-    The summary prints the first twenty and says how wide the band is; a study
-    wants all of them, to be sorted and filtered by whatever it is looking for
-    at the time. The columns are the parameters of the programme, the orbit
-    each set reaches, what it misses the target by, what it costs and what it
-    asks of the airframe and the guidance.
+    The summary prints as many of them as `--top` asks for and says how wide
+    the band is; a study wants all of them, to be sorted and filtered by
+    whatever it is looking for at the time. The columns are what names each set
+    - the parameters of the programme and the coordinates of the grid, which
+    are not the same list - then the orbit it reaches, what it misses the
+    target by, what it costs and what it asks of the airframe and the guidance.
     """
     band = result.band
     if not band:
         path.write_text('')
         return 0
-    keys = [key for key in band[0].parameters if key != 'type']
+    keys = list(band[0].described)
     with path.open('w', newline='') as stream:
         writer = csv.writer(stream)
         writer.writerow([*keys, 'cutoff_s', 'perigee_km', 'apogee_km',
@@ -519,7 +528,7 @@ def _write_band(path: Path, result) -> int:
                          'steering_demand'])
         for found in band:
             writer.writerow(
-                [f'{found.parameters[key]:.9g}' for key in keys]
+                [f'{found.described[key]:.9g}' for key in keys]
                 + [f'{found.cutoff_time:.6f}',
                    f'{found.orbit.perigee_altitude / 1000:.4f}',
                    f'{found.orbit.apogee_altitude / 1000:.4f}',
