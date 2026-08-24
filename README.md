@@ -205,11 +205,57 @@ longer. `examples/steering_loss_comparison.py` flies all three into a 500 km
 orbit and prints the three budgets side by side; the programme with the
 smallest steering loss is not the one with the smallest total.
 
+### How hard they work the guidance
+
+The steering loss weighs propellant: how much of the thrust went the wrong way.
+It says nothing about how that demand is spread over the burn, and two
+programmes that cost the same can reach it very differently. The second measure
+is the control-effort functional
+
+    J = integral over the powered flight of a_control^2 dt,   m²/s³
+
+where `a_control` is the normal acceleration the guidance has to produce to
+hold the programme — the same quantity the steering loss is recovered from,
+one step before it is turned into a deflection:
+
+    a_control = v gamma' + (g - v²/r - omega² r) cos(gamma) - 2 omega v
+
+The square is the point of it: an abrupt stretch is charged more than an even
+one, so two programmes with the same loss are still told apart by how smoothly
+they ask for it. And it is built on the demand before that demand is clamped to
+a deflection of 90 degrees, deliberately — so, unlike the loss, it does not
+saturate where the thrust cannot hold the programme. On H3 the demand reaches
+2.9 and the steering losses of the three programmes stop being comparable,
+while `J` goes on separating them. It is not part of the velocity budget: it is
+not a velocity, and a sum with it would mean nothing.
+
+`examples/control_effort_comparison.py` flies the same three Falcon 9 sets and
+draws the two accumulations side by side — where the curves part is where the
+programme swings the flight-path angle:
+
+```sh
+uv run python examples/control_effort_comparison.py    # writes out/control-effort.png
+```
+
+```
+programme               steering      effort  peak demand
+five-phase                 526.4       11169        0.919
+velocity-share             411.0        9627        0.841
+bilinear-tangent           433.0        9779        1.031
+```
+
+On these three the two measures agree on the order, which is worth knowing
+rather than assuming, but not on the margins: the five-phase turn costs a fifth
+more velocity than the bilinear tangent and a seventh more effort. And the
+bilinear tangent is the case the second measure exists for — its demand peaks
+at 1.031 just after separation, so its loss sits on the clamp for four seconds
+of the burn, where the effort is still reading the demand itself.
+
 ## Modules
 
 | Module | What is in it |
 |---|---|
-| `mission.py` | the equations of motion, the stepping that solves them, the cutting of the step at events, and the steering-loss accounting |
+| `mission.py` | the equations of motion, the stepping that solves them, the cutting of the step at events, and the steering-loss and control-effort accounting |
 | `pitch.py` | the three pitch programmes and the tabulation they share |
 | `vehicle.py` | stages, propulsion, mass and drag of the launch vehicle |
 | `atmosphere.py` | ICAO standard atmosphere and the gravity field |
