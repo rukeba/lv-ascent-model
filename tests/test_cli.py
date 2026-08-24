@@ -77,8 +77,9 @@ def test_the_search_writes_out_the_set_it_found(capsys):
     file rather than a file with a summary printed across the top.
     """
     assert search_main(['f9', '--altitude', '500', '--programme', 'five-phase',
-                        '--tolerance', '20', '--coarse', '0.3',
-                        '--refinements', '1', '--steps', '1', '--yaml']) == 0
+                        '--free', 'none', '--tolerance', '20',
+                        '--coarse', '0.3', '--refinements', '1',
+                        '--steps', '1', '--yaml']) == 0
 
     written = capsys.readouterr()
     assert 'Falcon 9 to 500 km' in written.err
@@ -93,8 +94,9 @@ def test_the_search_writes_out_the_set_it_found(capsys):
 def test_a_search_that_reaches_nothing_writes_nothing_out(capsys):
     """A set that misses the orbit is shown, and is not filed as an entry."""
     assert search_main(['f9', '--altitude', '500', '--programme', 'five-phase',
-                        '--tolerance', '0.001', '--coarse', '0.3',
-                        '--refinements', '0', '--steps', '1', '--yaml']) == 1
+                        '--free', 'none', '--tolerance', '0.001',
+                        '--coarse', '0.3', '--refinements', '0',
+                        '--steps', '1', '--yaml']) == 1
     written = capsys.readouterr()
     assert 'reaches the orbit       no' in written.err
     assert written.out.strip() == ''
@@ -103,8 +105,9 @@ def test_a_search_that_reaches_nothing_writes_nothing_out(capsys):
 def test_the_search_summary_is_the_output_without_yaml(capsys):
     """Without `--yaml` there is nothing to redirect, so it reads normally."""
     assert search_main(['f9', '--altitude', '500', '--programme', 'five-phase',
-                        '--tolerance', '20', '--coarse', '0.3',
-                        '--refinements', '1', '--steps', '1']) == 0
+                        '--free', 'none', '--tolerance', '20',
+                        '--coarse', '0.3', '--refinements', '1',
+                        '--steps', '1']) == 0
     written = capsys.readouterr()
     assert 'Falcon 9 to 500 km' in written.out
     assert 'missions:' not in written.out
@@ -115,9 +118,32 @@ def test_the_search_is_refused_an_orbit_out_of_reach():
         search_main(['f9', '--altitude', '20000'])
 
 
+def test_the_grid_runs_over_every_axis_of_the_family_by_default(capsys):
+    """And `--band` reports what the passes flew, not the best of it alone.
+
+    Coarse and shallow, as the searches above: what is under test is that the
+    default reaches the search - the grid runs over four axes rather than one
+    - and that the summary comes back with a band on the end of it.
+    """
+    assert search_main(['f9', '--altitude', '500', '--programme', 'five-phase',
+                        '--band', '5', '--tolerance', '20', '--coarse', '0.2',
+                        '--refinements', '0', '--steps', '1']) == 0
+    written = capsys.readouterr().out
+    assert 'k3 4 x t1 3 x k2 3 x t4 3' in written
+    assert 'BAND' in written
+    assert 'fifth phase' in written
+
+
+def test_an_axis_the_family_does_not_have_is_refused(capsys):
+    """Told at the command line, with what the family does have."""
+    with pytest.raises(SystemExit):
+        search_main(['f9', '-a', '500', '-p', 'vs', '--free', 'k2'])
+    assert 'can search all, none, or any of t1' in capsys.readouterr().err
+
+
 @pytest.mark.parametrize('argument', ['--steps=0', '--tolerance=0',
                                       '--coarse=-1', '--refinements=-1',
-                                      '--max-q=0'])
+                                      '--max-q=0', '--band=-1'])
 def test_a_setting_that_cannot_be_searched_with_is_refused(argument):
     """Told at the command line rather than met as an arithmetic error."""
     with pytest.raises(SystemExit):

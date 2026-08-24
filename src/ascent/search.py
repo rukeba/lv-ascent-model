@@ -1,22 +1,42 @@
 """Grid search for the parameters of a pitch programme.
 
 Ask for a vehicle, a circular orbit and one of the three programme families,
-and this returns the parameters that fly that vehicle into that orbit in the
-shortest time. The orbit is the constraint - the perigee and the apogee both
-within a tolerance of the target altitude, which is what makes it circular and
-at the right height - and the ascent time is what is minimised among the sets
-that meet it.
+and this returns the sets of parameters that fly that vehicle into that orbit,
+best first. Best at how close the orbit came to the one asked for: the apogee
+and the perigee against the circle, which is the terminal condition itself and
+the only ranking that means anything while the parameters are still being
+looked over. `CRITERIA` is where the others are, for when the question has
+moved on from whether a set reaches the orbit to what it costs to fly.
 
-The grid runs over the shape of the turn, and only over the shape. The cut-off
-is not one of its axes: it is what the terminal condition on the speed fixes,
-and it is solved for at every node instead. That division is not a convenience
-- it is how the two conditions of a circular orbit divide between the
-parameters. The speed at cut-off answers to the cut-off time and to almost
-nothing else, at some tens of metres per second for each second of burn, so a
-grid fine enough to resolve it along that axis would be enormous and a grid
-coarse enough to afford would resolve nothing. The altitude reached, on the
-other hand, is what the shape of the turn decides. So the cut-off is solved and
-the shape is searched.
+A search is a table before it is an answer. What comes back is every distinct
+set that closed an orbit, in that order, each with the three errors it is
+judged by - the altitude at cut-off, the speed there, and the shape of the
+orbit the two of them made - so that the choice between a set that is closer
+and one that is cheaper stays with whoever is reading.
+
+The grid runs over the shape of the turn. The cut-off is not one of its axes:
+it is what the terminal condition on the speed fixes, and it is solved for at
+every node instead. That division is not a convenience - it is how the two
+conditions of a circular orbit divide between the parameters. The speed at
+cut-off answers to the cut-off time and to almost nothing else, at some tens
+of metres per second for each second of burn, so a grid fine enough to resolve
+it along that axis would be enormous and a grid coarse enough to afford would
+resolve nothing. The altitude reached, on the other hand, is what the shape of
+the turn decides. So the cut-off is solved and the shape is searched.
+
+The shape is not all a family has. The vertical rise, the share of the
+five-phase turn spent building the pitch rate up, the instant the turn ends:
+each of these was held while the catalogue was solved, and each is an axis of
+the grid now. `free` is what says so - `all` by default, `none` for the search
+that solved the catalogue, or the names of the ones to open. The nodes of a
+pass are the product over the axes, so the difference is not small: the
+five-phase grid goes from 19 nodes in its first pass to 5,700, and from 5 in
+each pass after it to 625.
+
+`band_tolerance` is the other half of that question. What comes back then is
+not the one set but every set the passes flew that reaches the orbit and cuts
+off within that of it - a range along each parameter rather than a value, which
+is what a flat minimum looks like when it is not flattened into its best node.
 
 Two estimates keep the cost down, and both are quadrature rather than
 integration - see `estimates.py`:
@@ -39,8 +59,8 @@ solved over its own handful of trajectories - so they are answered over a pool
 of processes, two thirds of the cores by default, and collected in the order of
 the grid. A search returns the same set however many processes answered it.
 
-Which node a pass refines about is not simply the quickest one that reached the
-orbit. At the resolution of an early pass, whether a node lands on the orbit at
+Which node a pass refines about, where the ranking is by what the ascent costs
+rather than by the orbit, is not simply the cheapest one that reached the orbit. At the resolution of an early pass, whether a node lands on the orbit at
 all is largely luck, and a set half a kilometre out but two seconds quicker is
 the better thing to look near. What the passes follow instead is the cut-off
 each node would need to reach the target, read off the line its own pass draws
@@ -52,13 +72,14 @@ alone, and the better of the two answers is the one reported.
 
 import math
 import os
+from collections.abc import Sequence
 from concurrent.futures import ProcessPoolExecutor
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from itertools import product
 
 import numpy as np
 
-from .constants import EARTH_RADIUS
+from .constants import EARTH_RADIUS, circular_velocity
 from .cutoff import CutoffAtTime
 from .estimates import (analytic_altitude, burns, equivalent_time,
                         required_velocity, vacuum_time)
@@ -75,6 +96,14 @@ from .vehicle import DRAG_CEILING, LaunchVehicle
 # turn that does not depend on the orbit, so it mostly reads low; against the
 # catalogue it sits between 4.8 per cent high and 9.1 per cent low, and these
 # carry that band with something to spare.
+#
+# The axes a search can open move the ascent - thirty seconds of vertical rise
+# is gravity the estimate does not price, and a turn that ends early is speed
+# spent differently - so the window was measured again over them, on three
+# vehicles and eight orbits: every set that came within 20 km of its target cut
+# off inside it. What clips it on Falcon 9 and Ariane 62 is not this margin
+# anyway but the instant the last tank is dry, some 5 and 11 per cent past the
+# estimate.
 TIME_MARGIN_EARLY = 0.06
 TIME_MARGIN_LATE = 0.15
 
@@ -84,18 +113,56 @@ TIME_MARGIN_LATE = 0.15
 # and 1.185 times the altitude the flight reaches, and a node is screened out
 # only when the target lies outside what these two allow.
 #
-# They are wider than that measurement because the measurement is of three
-# vehicles and the screen is a gate: a node it rejects is never flown, so a
-# vehicle whose integral read a little further out than any of these would be
-# reported as unable to reach an orbit it can reach. The margin costs some of
-# the screening - a first pass of the velocity share still goes 83 per cent
-# unflown against 87 at the measured band, one of the five-phase 16 against 42.
-ALTITUDE_RATIO_LOW = 0.95
+# The axes a search can open ask it about turns no entry of the catalogue
+# holds - a rise of thirty seconds, k2 at three thousandths, a turn that ends
+# well before the burn - so it was measured again over them: three vehicles,
+# eight orbits, eleven hundred flights each, and the figure comes out between
+# 0.961 and 1.222 times the altitude flown. It does not read high everywhere
+# any more, which is what moved the low end from 0.95 to where it is.
+#
+# Both are wider than either measurement because the screen is a gate: a node
+# it rejects is never flown, so a vehicle whose integral read a little further
+# out than any of these would be reported as unable to reach an orbit it can
+# reach. The margin costs some of the screening - a first pass of the velocity
+# share still goes 83 per cent unflown against 87 at the measured band.
+ALTITUDE_RATIO_LOW = 0.92
 ALTITUDE_RATIO_HIGH = 1.40
 
 # Both the perigee and the apogee have to land within this of the target for a
 # set to count as reaching the orbit, m
 TOLERANCE = 500.0
+
+# What the sets a search found are ranked by, and so what the search reports
+# first. Each takes the set and the search it belongs to.
+#
+# `orbit` is the default and is the terminal condition itself: how far the
+# apogee and the perigee ended up from the circle that was asked for, added, in
+# units of its radius. It is nought only when both apsides and the target are
+# the same circle, so an eccentric orbit at the right mean altitude is caught by
+# it where the altitude alone would pass. It is what the search this one grew
+# out of ranked on, and while the parameters of a programme are still being
+# looked over it is the only ranking that says anything: a set that does not
+# reach the orbit is not cheap, it is wrong.
+#
+# The other two rank sets that all reach the orbit, by what they cost to fly.
+# They are worth having and they are not the place to start: fix the orbit on
+# Falcon 9 at 500 km and the cut-off of every set that reaches it falls in a
+# quarter of a second, so `time` ranks by rounding, while `loss` spans some
+# 60 m/s and walks the turn to the bounds of the grid on both t1 and k2.
+CRITERIA = {
+    'orbit': lambda candidate, result:
+        candidate.errors(result.target_altitude)[2],
+    'loss': lambda candidate, result: candidate.total_loss,
+    'time': lambda candidate, result: candidate.cutoff_time,
+}
+
+# The sine of the thrust deflection a set asks of the guidance, above which it
+# is not an answer. At one there is no deflection that holds the programme -
+# the thrust would have to be at right angles to the velocity - so a set past
+# it is arithmetic rather than a trajectory, however cheap its budget. It is a
+# limit and not a measurement, so it can be lifted with `max_steering_demand`
+# set to None, which is how the sets on file that pass it were solved
+MAX_STEERING_DEMAND = 1.0
 
 # The vertical rise is a construction choice rather than a solved unknown, s
 VERTICAL_RISE = 20.0
@@ -120,6 +187,12 @@ REFINED_NODES = 5
 # before the whole window is fallen back on, s
 NEIGHBOURING_CUT_OFF = 2.0
 
+# What one node of the grid costs in trajectories. The cut-off solve takes a
+# handful of them and a screened node takes none, and across the searches here
+# it comes out near twelve. Nothing depends on it: it is what a search says it
+# is about to cost, before it has flown anything to find out
+FLIGHTS_PER_NODE = 12
+
 # What one node of the grid can come to. Each is a field of `SearchResult`, and
 # every node increments exactly one of them
 OUTCOMES = ('screened', 'refused', 'no_cut_off', 'no_orbit', 'closed')
@@ -139,6 +212,14 @@ def default_workers() -> int:
 
 
 @dataclass(frozen=True)
+class Axis:
+    """One axis of the grid: what is searched, over what, at what step."""
+    low: float
+    high: float
+    nodes: int
+
+
+@dataclass(frozen=True)
 class Candidate:
     """One node of the grid, with the cut-off that closes its orbit."""
     # the grid coordinates, which is what the grid is refined about
@@ -155,6 +236,11 @@ class Candidate:
     # how far the orbit is from circular: the semi-major axis less the radius
     # at cut-off, m. What the cut-off was solved to drive to zero
     residual: float = 0.0
+    # the state at cut-off, which is what the terminal conditions are conditions
+    # on: altitude m, inertial speed m/s, flight-path angle deg
+    altitude: float = 0.0
+    speed: float = 0.0
+    flight_path_angle: float = 0.0
     # what the ascent asks of the airframe and of the guidance. Neither enters
     # the ranking unless the caller sets a limit on the first, but a quicker
     # ascent is a flatter one and both are what it is paid for
@@ -164,6 +250,27 @@ class Candidate:
     @property
     def total_loss(self) -> float:
         return self.gravity_loss + self.aerodynamic_loss + self.steering_loss
+
+    def errors(self, target_altitude: float) -> tuple[float, float, float]:
+        """The three terminal errors, relative: altitude, speed, orbit shape.
+
+        The first two are read at cut-off and against the circular orbit that
+        was asked for - the altitude of it, and the speed that holds it. The
+        third is the shape: how far the apogee and the perigee each ended up
+        from the radius of that orbit, added, so that it is nought only when
+        the two apsides and the target are the same circle. An eccentric orbit
+        at the right mean altitude shows up there and in neither of the others,
+        which is why the old search this one grew out of ranked on it.
+        """
+        radius = EARTH_RADIUS + target_altitude
+        altitude = abs(self.altitude - target_altitude) / target_altitude
+        speed = abs(self.speed - circular_velocity(target_altitude)) \
+            / circular_velocity(target_altitude)
+        if not self.orbit.is_closed:
+            return (altitude, speed, math.inf)
+        shape = (abs(self.orbit.apogee_altitude - target_altitude)
+                 + abs(self.orbit.perigee_altitude - target_altitude)) / radius
+        return (altitude, speed, shape)
 
 
 @dataclass(frozen=True)
@@ -189,6 +296,9 @@ class SearchResult:
     latitude_deg: float
     azimuth_deg: float
     steps_per_second: float = 10
+    # the grid of the first pass, name by name: what was searched and how
+    # finely. The passes after it are `REFINED_NODES` along every one of these
+    axes: dict[str, Axis] = field(default_factory=dict)
     # the estimates the search was bounded by
     required_velocity: float = 0.0
     vacuum_time: float = 0.0
@@ -223,12 +333,34 @@ class SearchResult:
     pass_node: int = 0
     planned_nodes: int = 0
     tolerance: float = TOLERANCE
+    criterion: str = 'orbit'
+    # how many of the sets found are worth printing, best first
+    top: int = 10
     max_dynamic_pressure: float | None = None
+    max_steering_demand: float | None = MAX_STEERING_DEMAND
+    # sets that reached an orbit and were put aside for asking of the guidance
+    # a deflection the thrust cannot give
+    over_demand: int = 0
+    # how much dearer than the set reported another may be and still be
+    # counted part of the band, in the unit of the criterion: m/s of velocity
+    # budget, or seconds of ascent. Nought reports the one set, as before
+    band_tolerance: float = 0.0
+    # every distinct set the search flew that closed an orbit at all, best
+    # first by the criterion. What the top of the report is taken from, and
+    # what the band is drawn from
+    found: list[Candidate] = field(default_factory=list)
+    band: tuple[Candidate, ...] = ()
     # processes the nodes of a pass were divided over
     workers: int = 1
     # axes whose best value came out on a bound of the grid, where a better set
     # may lie just outside
     on_edge: tuple[str, ...] = ()
+
+    @property
+    def reaching(self) -> list[Candidate]:
+        """The sets found that meet the tolerance, best first."""
+        return [candidate for candidate in self.found
+                if candidate.miss <= self.tolerance]
 
     @property
     def solved(self) -> int:
@@ -285,23 +417,73 @@ class SearchResult:
 # --- the three families, as a search sees them ----------------------------
 
 
-@dataclass(frozen=True)
-class Axis:
-    low: float
-    high: float
-    nodes: int
+# What the vertical rise covers where it is searched rather than held. Every
+# family has it and every family holds it at `VERTICAL_RISE` unless it is
+# asked for. Twelve seconds is about as short a rise as a vehicle at a thrust
+# to weight of one and a half has cleared the tower by; past thirty the rise
+# is most of the gravity loss of the whole ascent, and no set on file is near
+# either end
+RISE_AXIS = Axis(12.0, 30.0, 5)
 
 
 class Family:
     """A pitch programme with the shape of its turn laid out as a grid.
 
-    Every family here ends its programme at cut-off, so the cut-off is a
-    parameter of all three - and none of them has it as an axis. What is left
-    is the shape: one number for the five-phase turn, two for each of the
-    others. The vertical rise is not an axis either: it is a construction
-    choice, a few seconds long, and no terminal condition has a lever on it.
+    None of the three has the cut-off as an axis: it is what the terminal
+    condition on the speed solves for. What is gridded is the shape - one
+    number for the five-phase turn, two for each of the others - and, where
+    the caller asks for them, the numbers the family would otherwise hold.
+
+    Those are the axes named in `FREE`, and they are searched unless the
+    caller says otherwise: `free='all'` is the default, `free='none'` holds
+    every one of them where the catalogue holds it, and a sequence of names
+    opens those and holds the rest. `none` is the search that solved
+    `config/catalogue.yaml` before any of this was gridded, which is why it is
+    still reachable and still tested.
+
+    The default is `all` because holding them was never a statement about the
+    physics. The vertical rise and the five-phase k2 are construction choices
+    that were fixed to make the problem square - two unknowns for two terminal
+    conditions - and a turn ending at cut-off was a degree of freedom nobody
+    had the nodes to pay for. None of that says the minimum lies where they
+    were fixed, and a study of how the turn changes with altitude cannot be
+    made of parameters that were pinned before it started.
+
+    The nodes of a pass are the product over the axes, so every axis searched
+    multiplies the pass. The counts in `FREE` are coarser than the shape's own
+    for that reason - the passes halve their step whatever they start at, and
+    a first pass as fine along four axes as along one is a search nobody
+    waits for.
     """
     name: str
+    # what this family holds constant and a search may open, with the nodes of
+    # the first pass along each
+    FREE: dict[str, Axis] = {}
+
+    def __init__(self, *, free: "Sequence[str] | str" = 'all') -> None:
+        names = self.names(free)
+        unknown = [name for name in names if name not in self.FREE]
+        if unknown:
+            raise ValueError(
+                f'the {self.name} family cannot search '
+                f'{", ".join(unknown)}: what it can search beside its own '
+                f'shape is {", ".join(self.FREE) if self.FREE else "nothing"}')
+        # in the order `FREE` gives rather than the order they were asked for,
+        # so that a grid is laid out the same way however the flags were typed
+        self.free = {name: axis for name, axis in self.FREE.items()
+                     if name in names}
+
+    @classmethod
+    def names(cls, free: "Sequence[str] | str") -> tuple[str, ...]:
+        """The axes `free` stands for: all of them, none, or the ones named."""
+        if free == 'all':
+            return tuple(cls.FREE)
+        if free == 'none':
+            return ()
+        if isinstance(free, str):
+            raise ValueError(f'free is `all`, `none` or a sequence of axis '
+                             f'names, and not {free!r}')
+        return tuple(free)
 
     def axes(self) -> dict[str, Axis]:
         raise NotImplementedError
@@ -314,34 +496,88 @@ class Family:
                    shape: dict[str, float]) -> dict[str, float]:
         raise NotImplementedError
 
+    def rise(self, t1: float, shape: dict[str, float]) -> float:
+        """The vertical rise: off the grid where it is one of the axes."""
+        return shape.get('t1', t1)
+
 
 class FivePhase(Family):
     """The turn built from constant angular accelerations.
 
-    k2 - the share of the turn spent building the pitch rate up - is held
-    rather than searched. Driving it towards zero always pays, because a step
-    in pitch rate costs nothing to a model that prices only the angle, and what
-    it buys is a phase no vehicle could fly. So it is a design choice, as it is
-    in the catalogue, and the single axis left is the share spent at a constant
-    rate.
+    Four numbers describe it and the grid runs over all four: the vertical
+    rise t1, the share k2 of the turn spent building the pitch rate up, the
+    share k3 spent holding it, and the instant t4 the turn ends at - that last
+    one as a share of the cut-off, which is solved for rather than searched.
+
+    Only k3 was gridded while the catalogue was solved, and `free='none'` is
+    still that search. What held the other three was the shape of the problem
+    rather than the physics: two terminal conditions leave room for two
+    unknowns, so k3 and the cut-off were the unknowns and the rest were fixed
+    where they looked reasonable.
+
+    k2 is the one to watch. Driving it towards zero always pays, because a
+    step in pitch rate costs nothing to a model that prices only the angle,
+    and what it buys is a phase no vehicle could fly - so a search that ranks
+    by the ascent alone walks k2 to the bottom of its axis and reports a turn
+    that starts with a jerk. The axis is there to show how wide the band is;
+    what sits at the bottom of it is a bound, not an optimum, and the peak
+    steering demand reported beside the set is where that shows.
+
+    t4 is what gives the family the fifth phase it is named for: the turn ends
+    at t4 and the vehicle flies on the attitude it reached until the cut-off,
+    so a t4 below the cut-off is a stretch of free flight and a t4 at it is
+    none. Held at the cut-off, as the catalogue holds it, the family has four
+    phases and the fifth is empty.
     """
     name = 'five-phase'
 
-    def __init__(self, k2: float = 0.05) -> None:
+    FREE = {
+        't1': RISE_AXIS,
+        # the share of the turn spent building the pitch rate up. The bottom
+        # of the range is a step in the rate in all but name and the top is
+        # three times what every set on file holds it at. Fifteen nodes rather
+        # than the five the other opened axes get: a thousandth of this share
+        # is a visibly different trajectory, so a first pass that steps it in
+        # hundredths steps over most of what it is looking for
+        'k2': Axis(0.003, 0.15, 15),
+        # where the turn ends, as a share of the cut-off rather than as an
+        # instant: the cut-off is solved for at every node, and a share is the
+        # one way of naming the end of the turn that stays inside the burn
+        # wherever the solve lands. One is the turn ending with the burn
+        't4': Axis(0.85, 1.0, 4),
+    }
+
+    def __init__(self, k2: float = 0.05, *,
+                 free: "Sequence[str] | str" = 'all') -> None:
+        # keyword-only, because `FivePhase(('t1',))` would otherwise read a
+        # list of axes as the value to hold k2 at and say nothing about it
+        super().__init__(free=free)
         self.k2 = k2
 
     def axes(self):
         # the family's own range, less a thousandth at the top: k2 + k3 = 1
         # leaves the fourth phase no time to arrest the pitch rate in, and the
-        # rate it would need to is divided by that nothing
-        return {'k3': Axis(0.0, 1.0 - self.k2 - 1e-3, 19)}
+        # rate it would need to is divided by that nothing. Where k2 is
+        # searched too, the top of k3 is what the smallest k2 on its axis
+        # allows, and the nodes past 1 - k2 are refused as they are reached -
+        # an axis cannot depend on another, and the family already says no
+        smallest = self.free['k2'].low if 'k2' in self.free else self.k2
+        return {'k3': Axis(0.0, 1.0 - smallest - 1e-3, 19), **self.free}
 
     def build(self, t1, end, shape):
-        return FivePhaseProgramme(t1=t1, t4=end, k2=self.k2, k3=shape['k3'])
+        return FivePhaseProgramme(t1=self.rise(t1, shape),
+                                  t4=self._end_of_turn(end, shape),
+                                  k2=shape.get('k2', self.k2), k3=shape['k3'])
 
     def parameters(self, t1, end, shape):
-        return {'type': self.name, 't1': t1, 't4': end,
-                'k2': self.k2, 'k3': shape['k3']}
+        return {'type': self.name, 't1': self.rise(t1, shape),
+                't4': self._end_of_turn(end, shape),
+                'k2': shape.get('k2', self.k2), 'k3': shape['k3']}
+
+    @staticmethod
+    def _end_of_turn(end: float, shape: dict[str, float]) -> float:
+        """Where the turn ends: at the cut-off, or at the share of it searched."""
+        return shape.get('t4', 1.0) * end
 
 
 class VelocityShare(Family):
@@ -354,16 +590,22 @@ class VelocityShare(Family):
     """
     name = 'velocity-share'
 
+    # the end of the turn is already an axis here, as a share of the cut-off,
+    # so the vertical rise is the whole of what this family holds
+    FREE = {'t1': RISE_AXIS}
+
     def axes(self):
-        return {'turn': Axis(0.5, 1.0, 11), 's': Axis(-3.0, 3.0, 13)}
+        return {'turn': Axis(0.5, 1.0, 11), 's': Axis(-3.0, 3.0, 13),
+                **self.free}
 
     def build(self, t1, end, shape):
-        return VelocityShareProgramme(t1=t1, tf=shape['turn'] * end, te=end,
+        return VelocityShareProgramme(t1=self.rise(t1, shape),
+                                      tf=shape['turn'] * end, te=end,
                                       s=shape['s'])
 
     def parameters(self, t1, end, shape):
-        return {'type': self.name, 't1': t1, 'tf': shape['turn'] * end,
-                'te': end, 's': shape['s']}
+        return {'type': self.name, 't1': self.rise(t1, shape),
+                'tf': shape['turn'] * end, 'te': end, 's': shape['s']}
 
 
 class BilinearTangent(Family):
@@ -391,20 +633,37 @@ class BilinearTangent(Family):
     """
     name = 'bilinear-tangent'
 
+    FREE = {
+        't1': RISE_AXIS,
+        # where along the turn the middle angle is prescribed, as a share of
+        # it. Half way is a choice of coordinates rather than of shape - the
+        # law is the same three coefficients wherever the angle is read off -
+        # but which turns the grid can reach depends on it, and a middle read
+        # early bends the first half of the turn where one read late bends the
+        # second. The ends are left out: an angle prescribed next to either
+        # end of the turn is two conditions on almost the same instant, and
+        # the recovery of the coefficients is ill-conditioned there
+        'middle_at': Axis(0.2, 0.8, 5),
+    }
+
     def axes(self):
-        return {'start': Axis(78.0, 89.6, 12), 'middle': Axis(2.0, 60.0, 13)}
+        return {'start': Axis(78.0, 89.6, 12), 'middle': Axis(2.0, 60.0, 13),
+                **self.free}
 
     def build(self, t1, end, shape):
         a, b, c = self._coefficients(t1, end, shape)
-        return BilinearTangentProgramme(t1=t1, a=a, b=b, c=c, te=end)
+        return BilinearTangentProgramme(t1=self.rise(t1, shape), a=a, b=b, c=c,
+                                        te=end)
 
     def parameters(self, t1, end, shape):
         a, b, c = self._coefficients(t1, end, shape)
-        return {'type': self.name, 't1': t1, 'a': a, 'b': b, 'c': c, 'te': end}
+        return {'type': self.name, 't1': self.rise(t1, shape), 'a': a, 'b': b,
+                'c': c, 'te': end}
 
-    @staticmethod
-    def _coefficients(t1, end, shape):
-        return bilinear_coefficients(t1, shape['start'], 0.5 * (t1 + end),
+    def _coefficients(self, t1, end, shape):
+        rise = self.rise(t1, shape)
+        middle_at = rise + shape.get('middle_at', 0.5) * (end - rise)
+        return bilinear_coefficients(rise, shape['start'], middle_at,
                                      shape['middle'], end, 0.0)
 
 
@@ -418,22 +677,50 @@ FAMILIES = {family.name: family for family in
 def search(vehicle: LaunchVehicle, target_altitude: float, programme: str,
            *, latitude_deg: float = 0.0, azimuth_deg: float = 90.0,
            t1: float = VERTICAL_RISE, k2: float = 0.05,
-           tolerance: float = TOLERANCE, refinements: int = 10,
+           free: "Sequence[str] | str" = 'all', band_tolerance: float = 0.0,
+           ranges: "dict[str, Axis] | None" = None, criterion: str = 'orbit',
+           top: int = 10, tolerance: float = TOLERANCE, refinements: int = 10,
            max_dynamic_pressure: float | None = None,
+           max_steering_demand: float | None = MAX_STEERING_DEMAND,
            coarseness: float = 1.0, steps_per_second: float = 10,
            workers: int | None = None, report=None) -> SearchResult:
     """Parameters that fly `vehicle` into a circular orbit at `target_altitude`.
 
-    Among the sets whose perigee and apogee both land within `tolerance` of the
-    target, the one that reaches cut-off soonest.
+    What comes back is every set the search flew that closed an orbit, ranked
+    by `criterion` - by default how far the orbit it closed is from the one
+    asked for, and otherwise by what the ascent cost. `result.found` is that
+    list, `result.best` its head, and `reaches_orbit` says whether the head
+    meets `tolerance`.
 
     The grid is run twice if the first run does not reach the orbit: once
-    preferring the quickest set within reach, once preferring the closest.
+    preferring the cheapest set within reach, once preferring the closest.
+    Ranked by the orbit, the first of those already is the second, and the grid
+    is run once.
 
     `max_dynamic_pressure` puts the airframe into the constraint: a set that
-    asks more of it than that is put aside however quick it is. Left out, the
+    asks more of it than that is put aside however cheap it is. Left out, the
     peak is reported and nothing more, which is how the rest of the model
-    treats the figure.
+    treats the figure. `max_steering_demand` does the same for the guidance and
+    is not left out by default: a set that asks a deflection the thrust cannot
+    give is not a trajectory. None lifts it.
+
+    `ranges` replaces what a family says an axis covers, one axis at a time -
+    `{'k2': Axis(0.04, 0.08, 9)}` - which is how a search is narrowed on to
+    what a coarser one found. The bounds it gives are bounds on the refining
+    passes too, so a narrowed axis stays narrowed.
+
+    `free` says which of the numbers a family would otherwise hold - the
+    vertical rise, the five-phase k2, the end of the turn - are axes of the
+    grid beside the shape; `Family.FREE` is what each family offers. All of
+    them by default. `free='none'` holds every one where the catalogue holds
+    it and searches the shape alone, which is the search that solved the
+    catalogue and costs a fraction of this one.
+
+    `band_tolerance` is how much dearer than the set reported another may be
+    and still be reported beside it, in the unit of the criterion: `result.band`
+    is every set visited that reached the orbit and came inside that. It is
+    what says how flat the minimum is, and it costs nothing - the sets are the
+    ones the passes flew anyway.
 
     `refinements` is how many passes follow the first, each halving the step
     the shape is resolved to; `coarseness` scales the nodes along every axis of
@@ -447,7 +734,11 @@ def search(vehicle: LaunchVehicle, target_altitude: float, programme: str,
     if programme not in FAMILIES:
         raise ValueError(f'unknown pitch programme {programme!r}, expected one '
                          f'of {sorted(FAMILIES)}')
-    family = FivePhase(k2) if programme == 'five-phase' else FAMILIES[programme]()
+    if criterion not in CRITERIA:
+        raise ValueError(f'unknown criterion {criterion!r}, expected one of '
+                         f'{sorted(CRITERIA)}')
+    family = (FivePhase(k2, free=free) if programme == 'five-phase'
+              else FAMILIES[programme](free=free))
 
     if target_altitude <= DRAG_CEILING:
         raise ValueError(
@@ -490,9 +781,13 @@ def search(vehicle: LaunchVehicle, target_altitude: float, programme: str,
         required_velocity=required_velocity(target_altitude),
         vacuum_time=vacuum_time(vehicle, target_altitude) or 0.0,
         equivalent_time=estimate, window=window, tolerance=tolerance,
-        max_dynamic_pressure=max_dynamic_pressure)
+        criterion=criterion, top=top,
+        max_dynamic_pressure=max_dynamic_pressure,
+        max_steering_demand=max_steering_demand,
+        band_tolerance=band_tolerance)
 
-    axes = _coarsen(family.axes(), coarseness)
+    axes = _narrow(_coarsen(family.axes(), coarseness), ranges)
+    result.axes = axes
     bounds = {name: (axis.low, axis.high) for name, axis in axes.items()}
     result.passes = refinements + 1
     result.planned_nodes = _planned_nodes(axes, refinements)
@@ -507,16 +802,19 @@ def search(vehicle: LaunchVehicle, target_altitude: float, programme: str,
     try:
         settled = _passes(flight, axes, bounds, refinements, result, report,
                           pool, by_time=True)
-        if not result.reaches_orbit:
-            # minimising the ascent has led into a corner of the family where
+        if not result.reaches_orbit and criterion != 'orbit':
+            # minimising the cost has led into a corner of the family where
             # the orbit cannot be reached at all - which happens where a
-            # vehicle is near its limit, the quickest sets of a pass lying just
+            # vehicle is near its limit, the cheapest sets of a pass lying just
             # outside what it can still close. Run the grid again for the orbit
-            # alone
+            # alone. Not where the orbit was already the criterion: that second
+            # run would be the first one over again
             result.attempts = 2
             result.passes += refinements + 1
             result.planned_nodes += _planned_nodes(axes, refinements)
-            settled = _passes(flight, _coarsen(family.axes(), coarseness),
+            settled = _passes(flight,
+                              _narrow(_coarsen(family.axes(), coarseness),
+                                      ranges),
                               bounds, refinements, result, report, pool,
                               by_time=False) or settled
     finally:
@@ -534,7 +832,71 @@ def search(vehicle: LaunchVehicle, target_altitude: float, programme: str,
             name for name, (low, high) in bounds.items()
             if min(abs(result.best.shape[name] - low),
                    abs(result.best.shape[name] - high)) <= _step(settled[name]))
+    # the centre of a pass is a node of the pass that follows it, so a set
+    # kept from one pass to the next was flown by both; it is one set
+    result.found = _distinct(result.found,
+                             lambda c: CRITERIA[criterion](c, result))
+    result.band = _band(result)
     return result
+
+
+def _distinct(candidates: list[Candidate], value) -> list[Candidate]:
+    """The same sets with each node of the grid counted once, cheapest first."""
+    seen, distinct = set(), []
+    for candidate in sorted(candidates, key=value):
+        key = tuple(round(value, 9) for value in candidate.shape.values())
+        if key not in seen:
+            seen.add(key)
+            distinct.append(candidate)
+    return distinct
+
+
+def _narrow(axes: dict[str, Axis],
+            ranges: "dict[str, Axis] | None") -> dict[str, Axis]:
+    """The axes with what the caller narrowed them to put in place.
+
+    An axis the family does not have is refused rather than added: a grid is
+    the family's own coordinates, and a name that is not one of them is a
+    mistake at the command line rather than a search worth running.
+    """
+    if not ranges:
+        return axes
+    unknown = [name for name in ranges if name not in axes]
+    if unknown:
+        raise ValueError(f'cannot narrow {", ".join(unknown)}: this search '
+                         f'runs over {", ".join(axes)}')
+    return {name: ranges.get(name, axis) for name, axis in axes.items()}
+
+
+def _band(result: SearchResult) -> tuple[Candidate, ...]:
+    """Every set the search flew that reaches the orbit and costs as little.
+
+    As little meaning within `band_tolerance` of the set reported, measured in
+    whatever the criterion is - metres per second of budget, or seconds of
+    ascent. At nought, which is the default, that is the set reported and
+    whatever ties with it. Sets a shade cheaper than the one reported belong to
+    the band too, where the ranking rounded them together: it prefers the
+    earlier cut-off only down to the step the trajectory was integrated at, and
+    inside a step it takes the closer orbit.
+
+    A set is in the band only if it reaches the orbit. The closest set found is
+    worth showing when nothing reaches, and it is not one of a band of
+    solutions.
+
+    The band is drawn from the nodes the passes visited and from nothing else.
+    That is what makes it free, and it is also its limit: the first pass covers
+    the whole range of the family at the step `Family.FREE` gives, and every
+    pass after it covers one step of the pass before, so the band is a coarse
+    map of the whole range with a fine one about the minimum inside it. It says
+    the minimum is flat and roughly over what; it does not say the band ends
+    exactly where its widest set does.
+    """
+    if result.best is None or not result.reaches_orbit:
+        return ()
+    value = CRITERIA[result.criterion]
+    dearest = value(result.best, result) + result.band_tolerance
+    return tuple(candidate for candidate in result.reaching
+                 if value(candidate, result) <= dearest)
 
 
 def _passes(flight: "_Flight", axes: dict[str, Axis],
@@ -543,7 +905,7 @@ def _passes(flight: "_Flight", axes: dict[str, Axis],
             by_time: bool) -> dict[str, Axis] | None:
     """Sweep the grid, refine about the best node, sweep again.
 
-    `by_time` says what the next pass is centred on: the quickest node within
+    `by_time` says what the next pass is centred on: the cheapest node within
     reach of the orbit, or simply the closest to it. The first is what the
     search is for; the second is the fallback when the first has run out of
     family before it ran out of orbit.
@@ -740,9 +1102,13 @@ class _Flight:
         budget = velocity_budget(telemetry, mission.omega)
         miss = max(abs(orbit.perigee_altitude - self.target_altitude),
                    abs(orbit.apogee_altitude - self.target_altitude))
+        row = telemetry.at(end)
         return (residual, Candidate(shape, parameters, end, orbit, miss,
                                     budget.gravity, budget.aerodynamic,
                                     budget.steering, residual,
+                                    float(telemetry.altitude[row]),
+                                    float(telemetry.inertial_speed[row]),
+                                    float(telemetry.flight_path_angle[row]),
                                     *_demands(telemetry, end)))
 
     def _duration(self, end: float) -> float:
@@ -850,13 +1216,14 @@ def _sweep(flight: _Flight, axes: dict[str, Axis], bracket: tuple[float, float],
     The nodes are independent, so they are answered over a pool of processes
     where there is one - in the order of the grid, so that a search returns the
     same set however many of them there are. A set that asks more of the
-    airframe than the caller allowed is put aside here rather than ranked: it
-    is not a slower answer, it is not an answer.
+    airframe or of the guidance than is allowed is put aside here rather than
+    ranked: it is not a dearer answer, it is not an answer.
     """
     shapes = list(_nodes(axes))
     result.pass_nodes = len(shapes)
     result.pass_node = 0
     limit = result.max_dynamic_pressure
+    demand = result.max_steering_demand
 
     answers = ((flight.at(shape, bracket) for shape in shapes) if pool is None
                else pool.map(_answer, [(shape, bracket) for shape in shapes],
@@ -871,8 +1238,15 @@ def _sweep(flight: _Flight, axes: dict[str, Axis], bracket: tuple[float, float],
         if node.candidate is not None:
             if limit is not None and node.candidate.peak_dynamic_pressure > limit:
                 result.over_pressure += 1
+            elif demand is not None \
+                    and node.candidate.peak_steering_demand > demand:
+                result.over_demand += 1
             else:
                 solved.append(node.candidate)
+                # kept whether or not it meets the tolerance: the report is a
+                # table of what was found, best first, and a set that missed by
+                # a kilometre is the most useful row on it when nothing met it
+                result.found.append(node.candidate)
         if report is not None:
             report(result)
     return solved
@@ -893,31 +1267,35 @@ def _best_so_far(result: SearchResult, solved: list[Candidate]) -> Candidate:
 def _rank(candidate: Candidate, result: SearchResult) -> tuple[float, float]:
     """The order sets that reach the orbit are preferred in.
 
-    The earlier cut-off wins - the ascent time is the thing being minimised -
-    but only down to the step the trajectory was integrated at. Two cut-offs
-    less than one step apart are the same ascent as far as this model can
-    resolve, and treating them as different would trade a hundredth of a second
-    of ascent for half a kilometre of orbit. Inside a step, then, the closer
-    orbit wins.
+    The smaller velocity budget wins, or the earlier cut-off where that is what
+    was asked for - and the cut-off only down to the step the trajectory was
+    integrated at. Two cut-offs less than one step apart are the same ascent as
+    far as this model can resolve, and treating them as different would trade a
+    hundredth of a second of ascent for half a kilometre of orbit. Inside a
+    step, then, the closer orbit wins. The budget needs no such rounding: it is
+    resolved to a hundredth of a metre per second and sets differ in it by
+    tens.
     """
-    step = 1.0 / result.steps_per_second
-    return (math.floor(candidate.cutoff_time / step), candidate.miss)
+    if result.criterion == 'time':
+        step = 1.0 / result.steps_per_second
+        return (math.floor(candidate.cutoff_time / step), candidate.miss)
+    return (CRITERIA[result.criterion](candidate, result), candidate.miss)
 
 
 def _refine_about(solved: list[Candidate], axes: dict[str, Axis],
                   result: SearchResult) -> Candidate:
-    """The node the next pass is centred on: the quickest within reach of it.
+    """The node the next pass is centred on: the cheapest within reach of it.
 
     Every node here already sits on a circular orbit - that is what its cut-off
     was solved for - but at its own altitude rather than at the target, so
-    ranking them by the cut-off alone would prefer whichever of them stopped
+    ranking them by the criterion alone would prefer whichever of them stopped
     short. Two corrections make the ranking mean something.
 
-    The first is the altitude the node fell short by, priced in seconds. Across
-    the nodes of one pass the altitude reached and the instant of cut-off are
-    two readings of the same energy and lie on a line; the line is measured off
-    the pass itself, and each node is read against it to give the cut-off it
-    would need to reach the target.
+    The first is the altitude the node fell short by, priced in whatever the
+    criterion is. Across the nodes of one pass the altitude reached and what it
+    cost lie on a line - both are readings of the same energy - and the line is
+    measured off the pass itself, so each node can be read against it to give
+    what it would cost at the target.
 
     The second is which nodes are allowed to compete at all. A node counts as
     within reach when its miss is no larger than the altitude one step of the
@@ -936,26 +1314,32 @@ def _refine_about(solved: list[Candidate], axes: dict[str, Axis],
     if not within:
         return min(solved, key=lambda candidate: candidate.miss)
 
-    slope = _altitude_per_second(solved, reached)
+    if result.criterion == 'orbit':
+        # nothing to project: the criterion is the distance to the target, and
+        # what a node would score at the target is nought for all of them
+        return min(solved, key=lambda candidate: candidate.miss)
+    value = CRITERIA[result.criterion]
+    slope = _cost_per_metre([value(candidate, result) for candidate in solved],
+                            reached)
     if slope is None:
         return min(within, key=lambda pair: _rank(pair[0], result))[0]
-    return min(within, key=lambda pair: pair[0].cutoff_time
-               + (result.target_altitude - pair[1]) / slope)[0]
+    return min(within, key=lambda pair: value(pair[0], result)
+               + (result.target_altitude - pair[1]) * slope)[0]
 
 
-def _altitude_per_second(solved: list[Candidate],
-                         reached: list[float]) -> float | None:
-    """How much higher an orbit a second more of burn buys, m/s.
+def _cost_per_metre(values: list[float],
+                    reached: list[float]) -> float | None:
+    """What a metre more of orbit costs, in whatever the criterion is.
 
     Measured off the pass rather than assumed: it is a property of the vehicle
-    and of the orbit, some fifteen to twenty kilometres a second for the ones
-    here. None when the pass has closed in so far that its nodes no longer
-    spread far enough to measure it, and then there is nothing left to correct.
+    and of the orbit, and it is what lets a node that stopped short be compared
+    with one that overshot. None when the pass has closed in so far that its
+    nodes no longer spread far enough to measure it, or when the fit comes out
+    the wrong way round, and then there is nothing left to correct.
     """
-    times = [candidate.cutoff_time for candidate in solved]
-    if len(solved) < 3 or max(times) - min(times) < 1e-3:
+    if len(values) < 3 or max(reached) - min(reached) < 1.0:
         return None
-    slope = float(np.polyfit(times, reached, 1)[0])
+    slope = float(np.polyfit(reached, values, 1)[0])
     return slope if slope > 0.0 else None
 
 

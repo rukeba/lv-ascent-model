@@ -327,7 +327,8 @@ orbit of a given altitude - one set per vehicle, pitch programme and altitude,
 
 Each set is defined by its terminal condition: perigee and apogee both at the
 target. The vertical rise `t1` is held at 20 s and the programme ends at
-cut-off. The five-phase turn holds `k2` at 0.05 as well: minimising the loss
+cut-off — both are construction choices rather than solved unknowns, and
+`ascent-search --free` is how a search is asked to solve for them instead. The five-phase turn holds `k2` at 0.05 as well: minimising the loss
 drives that share of the turn to zero, which is a step in pitch rate and
 defeats the point of the phase, so it is a design choice rather than something
 the terminal condition can settle - which leaves `k3` and the cut-off time,
@@ -360,8 +361,10 @@ stage.
 
 `ascent-search` solves the problem the catalogue holds the answers to. Give it
 a vehicle, a circular orbit and one of the three programme families, and it
-returns the parameters that reach that orbit — and, among the sets that do, the
-ones that reach it soonest.
+returns the sets of parameters that reach that orbit, best first — best at how
+close the orbit each one closed came to the circle that was asked for. It
+prints the ten best as a table, each with the three errors it is judged by, so
+that the choosing is done by eye and not only by the ranking.
 
 ```sh
 uv run ascent-search f9 --altitude 500
@@ -370,6 +373,23 @@ uv run ascent-search a62 --altitude 700 --yaml            # as a catalogue entry
 uv run ascent-search f9 --altitude 500 --report           # fly it and report it
 uv run ascent-search h3 --altitude 1100 --coarse 0.5      # a quicker, rougher look
 uv run ascent-search f9 --altitude 500 --workers 1        # in this process alone
+uv run ascent-search f9 -a 500 --free none               # the shape of the turn alone
+uv run ascent-search f9 -a 500 --top 25 --band 0.001     # a longer table, and the band
+```
+
+A coarse pass over the whole of every axis, then a narrower and finer one on
+what it found, is how a search is actually run — `--range` is what narrows it,
+and `--refinements 0` is what stops a pass from closing in on one node before
+the map has been drawn:
+
+```sh
+uv run ascent-search f9 -a 500 --refinements 0 --tolerance 10 \
+    --range k3=0:0.95:20 --range t1=12:30:4 \
+    --range k2=0.003:0.15:8 --range t4=0.85:1:3      # 1,920 nodes, under three minutes
+
+uv run ascent-search f9 -a 500 --refinements 5 \
+    --range k3=0.45:0.65:9 --range t1=12:24:5 \
+    --range k2=0.003:0.05:6 --range t4=0.9:1:3       # and now close in on it
 ```
 
 The mission file supplies the vehicle and the launch site and nothing else;
@@ -381,9 +401,13 @@ orbit is not an entry: it is printed, and it is not flown. A search prints its p
 runs — which pass it is on, how many trajectories it has integrated and roughly
 how much longer it will take.
 
-**What is gridded and what is solved.** The grid runs over the shape of the
-turn, and only over the shape: one number for the five-phase family, two for
-each of the others. The cut-off is not one of its axes. The two conditions of a
+**What is gridded and what is solved.** The grid runs over every number of the
+turn: for the five-phase family the vertical rise `t1`, the two shares `k2` and
+`k3`, and where the turn ends. Only `k3` was gridded while the catalogue was
+solved and the rest were held, which is what `--free none` still does; holding
+them was how the problem was made square — two unknowns for two terminal
+conditions — and not a statement that the answer lies where they were held.
+The cut-off is not one of the axes. The two conditions of a
 circular orbit divide between the parameters the way the dissertation this
 model was written for divides them — the condition on the speed fixes the end
 of the powered flight, the condition on the altitude fixes the shape of the
@@ -415,11 +439,15 @@ rather than integration, and both are in `estimates.py`:
   read off the programme itself. It screens the grid: the altitude a shape
   would reach at either end of the cut-off window bounds what it can reach
   anywhere inside it, and a shape that cannot reach the target is dropped
-  without a trajectory. It reads between 1.005 and 1.185 times the altitude the
-  flight reaches — never low, because the air, the thrust deficit at sea level
-  and the fall of gravity with altitude all push the same way — and the screen
-  is that band applied backwards, widened to 0.95–1.40 because it is a gate: a
-  node it rejects is never flown, and the measurement behind it is of three
+  without a trajectory. Against the catalogue it reads between 1.005 and 1.185 times
+  the altitude the flight reaches — never low there, because the air, the
+  thrust deficit at sea level and the fall of gravity with altitude all push
+  the same way. Over the wider ranges `--free` opens it was measured again, on
+  three vehicles, eight orbits and eleven hundred flights each, and comes out
+  between 0.961 and 1.222: a rise of thirty seconds and a turn that ends
+  before the burn are enough to make it read low. The screen is that band
+  applied backwards, widened to 0.92–1.40 because it is a gate: a node it
+  rejects is never flown, and the measurement behind it is of three
   vehicles. The method behind it is not published yet; its DOI belongs here and
   is a placeholder until it is —
   [doi:XX.YYYYY/ZZZZZ](https://doi.org/XX.YYYYY/ZZZZZ).
@@ -429,8 +457,9 @@ to say which flights are worth making, and `tests/test_estimates.py` checks
 both bands against every entry in the catalogue, so the constants the search
 relies on cannot drift away from the data they were measured on.
 
-**Which node a pass closes in on.** Not simply the quickest one that reached
-the orbit. At the resolution of an early pass, whether a node lands on the
+**Which node a pass closes in on.** Ranked by the orbit, the closest one, and
+there is nothing more to say about it. Ranked by what the ascent costs, not
+simply the cheapest one that reached the orbit. At the resolution of an early pass, whether a node lands on the
 orbit at all is largely luck, and a set half a kilometre out but two seconds
 quicker is the better thing to look near. What the passes follow instead is the
 cut-off each node would need to reach the target, read off the line its own
@@ -441,11 +470,26 @@ vehicle near its limit, the grid is run a second time for the orbit alone and
 the better of the two answers is reported. Falcon 9 to 700 km on the bilinear
 tangent is the case that needs it, and the summary says when it has happened.
 
+**The three errors.** Every set that closed an orbit is reported with the
+altitude at cut-off, the speed there, and how far the orbit those two made
+ended up from the one asked for — the apogee and the perigee against its
+radius, added. That last is the ranking, and it is nought only when both
+apsides and the target are the same circle, so an eccentric orbit at the right
+mean altitude cannot pass it. The other two are printed beside it because they
+are what the terminal conditions are written in. `--criterion loss` and
+`--criterion time` rank instead by what the ascent costs, among the sets that
+reach the orbit; they are worth having once the reaching is settled, and they
+are not where to start.
+
 **What it costs.** Eleven passes: the first over the whole range of the family,
 then ten closing in, each one grid step wide about the best node of the pass
-before and halving the step. A five-phase search integrates some seven hundred
-trajectories, one of the two-axis families some three thousand, and twice that
-where the grid has to be run again.
+before and halving the step. The nodes of a pass are the product over the axes,
+so the whole of the five-phase grid is 5,700 nodes in the first pass and 625 in
+each pass after it — some 143,000 trajectories, three quarters of an hour on
+fourteen cores. `--free none` is 19 and 5, which is 800 trajectories and a
+quarter of a minute. Between the two there is `--range` and `--refinements`,
+and the recipe above — a coarse pass, then a narrow one — is two minutes and
+ten rather than forty.
 
 Not of wall-clock, though. The nodes of a pass are independent — each is its own
 cut-off solved over its own handful of trajectories — so they are divided over
@@ -477,7 +521,7 @@ of the guidance — and the first of those is not free. Searching Falcon 9 to
 than the 500.910 on file, and it peaks at 37.8 kPa against a design figure of
 35. Neither figure enters the ranking unless you say so: `--max-q` puts the
 airframe into the constraint, and a set that peaks above it is then not an
-answer however quick it is, which is where a limit on the dynamic pressure
+answer however close it is, which is where a limit on the dynamic pressure
 belongs in a search of this kind and where the dissertation puts it. Without
 the flag the peaks are reported and nothing more, which is how the rest of the
 model treats them.

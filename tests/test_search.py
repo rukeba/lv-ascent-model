@@ -12,8 +12,9 @@ import pytest
 
 from ascent.config import load_catalogue, load_vehicle, mission_from_spec
 from ascent.estimates import equivalent_time
-from ascent.search import (FAMILIES, Axis, BilinearTangent, FivePhase,
-                           VelocityShare, _Flight, _refine, search)
+from ascent.search import (FAMILIES, REFINED_NODES, VERTICAL_RISE, Axis,
+                           BilinearTangent, FivePhase, VelocityShare, _count,
+                           _Flight, _planned_nodes, _refine, search)
 
 FALCON = load_vehicle('config/lv.f9.yaml')
 CATALOGUE = load_catalogue('config/catalogue.yaml')
@@ -22,14 +23,16 @@ CATALOGUE = load_catalogue('config/catalogue.yaml')
 def quick(programme, altitude=500_000, **overrides):
     """A search coarse enough for a test but complete in every step of itself.
 
-    One step a second rather than ten and half the nodes along each axis of the
-    first pass. Neither changes what the search finds; both change how long it
-    takes, and a search at the settings the command line defaults to is minutes
-    of integration, which is not what a test suite is for. The nodes are
-    divided over processes as they would be in earnest.
+    One step a second rather than ten, half the nodes along each axis of the
+    first pass, and the shape of the turn alone. None of the three changes what
+    the search does; all three change how long it takes, and a five-phase
+    search at the settings the command line defaults to is twelve thousand
+    nodes, which is not what a test suite is for. The tests that are about the
+    other axes open them and pay for it. The nodes are divided over processes
+    as they would be in earnest.
     """
     settings = dict(latitude_deg=28.5, azimuth_deg=90.0, coarseness=0.5,
-                    steps_per_second=1)
+                    steps_per_second=1, free='none')
     settings.update(overrides)
     return search(FALCON, altitude, programme, **settings)
 
@@ -50,6 +53,117 @@ def test_the_five_phase_search_recovers_the_set_on_file():
     assert result.best.steering_loss == pytest.approx(516.8, abs=1.0)
 
 
+def test_a_family_searches_everything_it_has_unless_it_is_told_not_to():
+    """All four numbers of the five-phase turn, and `none` for the old one.
+
+    The axes come in the order the family lists them, so that a grid is laid
+    out the same way however the names were typed.
+    """
+    assert list(FivePhase().axes()) == ['k3', 't1', 'k2', 't4']
+    assert list(FivePhase(free='none').axes()) == ['k3']
+    assert list(FivePhase(free=('t4', 't1')).axes()) == ['k3', 't1', 't4']
+    assert list(VelocityShare().axes()) == ['turn', 's', 't1']
+    assert list(BilinearTangent(free=('middle_at',)).axes()) == \
+        ['start', 'middle', 'middle_at']
+
+
+def test_a_family_refuses_an_axis_it_does_not_have():
+    """The velocity share has no k2, and says so before anything is flown."""
+    with pytest.raises(ValueError, match='cannot search k2'):
+        VelocityShare(free=('k2',))
+    with pytest.raises(ValueError, match='`all`, `none` or a sequence'):
+        FivePhase(free='everything')
+
+
+def test_the_axes_searched_reach_the_programme():
+    """A shape carrying t1, k2 and t4 builds the programme they describe."""
+    family = FivePhase()
+    shape = {'k3': 0.5, 't1': 14.0, 'k2': 0.01, 't4': 0.9}
+    programme = family.build(VERTICAL_RISE, 500.0, shape)
+    assert (programme.t1, programme.k2, programme.k3) == (14.0, 0.01, 0.5)
+    # the axis is a share of the cut-off; what is flown and what is written
+    # down is the instant it stands for
+    assert programme.t4 == 450.0
+    assert family.parameters(VERTICAL_RISE, 500.0, shape)['t4'] == 450.0
+
+    # and a family told to search none of them holds what the caller passed,
+    # whatever a shape happens to carry
+    held = FivePhase(free='none').build(VERTICAL_RISE, 500.0, {'k3': 0.5})
+    assert (held.t1, held.t4, held.k2) == (VERTICAL_RISE, 500.0, 0.05)
+
+
+def test_the_fifth_phase_is_the_turn_ending_before_the_cut_off():
+    """What opening t4 buys: free flight on the attitude the turn reached.
+
+    The family is named for five phases and flies four of them while the turn
+    ends with the burn, which is what it does unless t4 is searched.
+    """
+    window = (470.0, 570.0)
+    flight = _Flight(FALCON, FivePhase(free=('t4',)), VERTICAL_RISE, 500_000,
+                     window, 28.5, 90.0, 1, 50.0)
+
+    node = flight.at({'k3': 0.5296, 't4': 0.93}, window)
+    assert node.outcome == 'closed', f'came to {node.outcome}'
+    found = node.candidate
+    assert found.parameters['t4'] == pytest.approx(0.93 * found.cutoff_time)
+    assert found.parameters['t4'] < found.cutoff_time
+
+
+def test_an_axis_multiplies_the_pass_rather_than_adding_to_it():
+    """Which is the whole cost of a search, and what `free='none'` buys back."""
+    shape_alone = FivePhase(free='none').axes()
+    everything = FivePhase().axes()
+    assert _count(everything) == _count(shape_alone) * 5 * 15 * 4
+    assert _planned_nodes(everything, 10) == \
+        _count(everything) + 10 * REFINED_NODES ** 4
+
+
+def test_the_band_is_every_set_as_cheap_as_the_one_reported():
+    """The minimum is flat, and the band is the shape of that flatness.
+
+    One pass over every axis, wide enough in the orbit for a grid this coarse
+    to reach it: what is under test is that the band is a set of sets spread
+    along the axes rather than the answer repeated. Its width is in the unit
+    of the criterion, so a hundred here is a hundred metres per second of
+    velocity budget.
+    """
+    result = quick('five-phase', free='all', refinements=0,
+                   coarseness=0.4, tolerance=20_000.0, band_tolerance=200.0)
+    assert result.reaches_orbit
+    assert len(result.band) > 1, 'the band came out a single set'
+
+    dearest = result.best.total_loss + result.band_tolerance
+    assert all(found.miss <= result.tolerance for found in result.band)
+    assert all(found.total_loss <= dearest for found in result.band)
+    assert any(found.total_loss == result.best.total_loss
+               for found in result.band)
+    # spread along the axes that were opened, which is what makes it a band
+    assert len({found.parameters['t1'] for found in result.band}) > 1
+
+
+def test_nothing_that_reaches_the_orbit_is_no_band_at_all():
+    """The closest set found is worth showing; it is not a band of solutions."""
+    result = quick('five-phase', refinements=0, coarseness=0.3,
+                   band_tolerance=5.0)
+    assert not result.reaches_orbit
+    assert result.band == ()
+
+
+def test_a_search_without_a_band_asked_for_reports_what_it_found():
+    """A band of nothing but the answer, which is what the catalogue holds.
+
+    Nothing but, rather than only: the ranking rounds together sets it cannot
+    tell apart, so a set a shade cheaper than the one reported belongs to the
+    band of it.
+    """
+    result = quick('five-phase')
+    assert result.band_tolerance == 0.0
+    assert result.reaches_orbit
+    assert result.band, 'the set found is a band of one, not of none'
+    assert all(found.total_loss <= result.best.total_loss
+               for found in result.band)
+
+
 def test_a_family_with_a_parameter_to_spare_reaches_the_orbit_sooner():
     """The velocity share keeps a third parameter, and the search spends it.
 
@@ -68,9 +182,9 @@ def test_a_family_with_a_parameter_to_spare_reaches_the_orbit_sooner():
 # uses: the share of the cut-off the turn ends at, and the angles the bilinear
 # tangent starts at and has reached halfway
 SHAPES = (
-    (FivePhase(), {'k3': 0.5296}),
-    (VelocityShare(), {'turn': 0.9732, 's': 1.1194}),
-    (BilinearTangent(), {'start': 87.934, 'middle': 29.506}),
+    (FivePhase(free='none'), {'k3': 0.5296}),
+    (VelocityShare(free='none'), {'turn': 0.9732, 's': 1.1194}),
+    (BilinearTangent(free='none'), {'start': 87.934, 'middle': 29.506}),
 )
 
 
@@ -159,7 +273,7 @@ def test_a_tighter_tolerance_tightens_the_cut_off_solve():
     window = (470.0, 570.0)
     for tolerance in (500.0, 100.0):
         stop = tolerance * CIRCULAR_SHARE
-        flight = _Flight(FALCON, FivePhase(), 20.0, 500_000, window,
+        flight = _Flight(FALCON, FivePhase(free='none'), 20.0, 500_000, window,
                          28.5, 90.0, 1, stop)
         node = flight.at({'k3': 0.5296}, window)
         assert node.outcome == 'closed'
@@ -255,14 +369,18 @@ def test_the_work_is_counted_out_before_any_of_it_is_done():
     assert nodes == 10 + 3 * 5
 
 
-def test_the_fallback_runs_when_minimising_the_ascent_reaches_nothing():
+def test_the_fallback_runs_when_ranking_by_cost_reaches_nothing():
     """A search that reaches nothing runs the grid again for the orbit alone.
 
     Forced here by asking for the orbit to a metre, which no grid this coarse
     can meet, so that the branch is exercised whether or not a vehicle near its
     limit is to hand. Both attempts are walked and both are counted.
+
+    Only where the ranking was by what the ascent costs. Rank by the orbit and
+    the first attempt was already the fallback, so running it again would walk
+    the same nodes to the same answer.
     """
-    result = quick('five-phase', refinements=0, tolerance=1.0)
+    result = quick('five-phase', refinements=0, tolerance=1.0, criterion='loss')
 
     assert not result.reaches_orbit
     assert result.attempts == 2
@@ -270,6 +388,11 @@ def test_the_fallback_runs_when_minimising_the_ascent_reaches_nothing():
     assert result.nodes == 2 * 10
     # and the closest set found is still there to be shown
     assert result.best is not None
+
+    ranked_by_orbit = quick('five-phase', refinements=0, tolerance=1.0)
+    assert not ranked_by_orbit.reaches_orbit
+    assert ranked_by_orbit.attempts == 1
+    assert ranked_by_orbit.nodes == 10
 
 
 def test_a_set_that_overstresses_the_airframe_is_not_an_answer():

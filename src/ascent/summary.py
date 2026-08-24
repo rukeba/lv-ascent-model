@@ -6,6 +6,7 @@ rows are built once, as blocks, and then either printed as lines or laid out
 as cards by the report: the two cannot disagree about a figure.
 """
 
+import math
 from dataclasses import dataclass
 
 import numpy as np
@@ -17,6 +18,10 @@ from .telemetry import Telemetry
 from .vehicle import LaunchVehicle
 
 LABEL_WIDTH = 24
+
+# What each parameter of a programme is measured in, where it is measured in
+# anything: the shares are pure numbers and the instants are seconds
+UNITS = {'t1': 's', 't4': 's', 'tf': 's', 'te': 's'}
 
 
 @dataclass(frozen=True)
@@ -207,10 +212,10 @@ def summarise_search(result) -> str:
     _block(lines, 'search', [
         ('launch site', f'{result.latitude_deg:g} deg latitude, '
                         f'azimuth {result.azimuth_deg:g} deg'),
-        ('criterion', 'the earliest cut-off that closes the orbit, to the '
-                      'step the flight was integrated at'),
+        ('criterion', _criterion(result)),
         ('orbit reached when', f'perigee and apogee are both within '
                                f'{result.tolerance / 1000:g} km of the target'),
+        ('programme held when', _demand_limit(result)),
     ])
 
     early, late = result.window
@@ -224,6 +229,7 @@ def summarise_search(result) -> str:
 
     nodes = max(result.nodes, 1)
     _block(lines, 'grid', [
+        ('axes', _axes(result)),
         ('passes', f'{result.passes}, the first over the whole range of the '
                    f'family and the rest closing in'
                    + (' - run twice, the second time for the orbit alone'
@@ -236,6 +242,7 @@ def summarise_search(result) -> str:
         ('no cut-off closes it', f'{result.no_cut_off:,}'),
         ('closed on no orbit', f'{result.no_orbit:,}'),
         ('cut-offs solved', f'{result.solved:,}'),
+        ('put aside, unholdable', f'{result.over_demand:,}'),
         ('trajectories flown', f'{result.flown:,}, '
                               f'{result.flown / max(result.solved, 1):.1f} '
                               f'per cut-off solved'),
@@ -288,9 +295,155 @@ def summarise_search(result) -> str:
                      f'put aside for asking more of the airframe than '
                      f'{result.max_dynamic_pressure / 1000:g} kPa')
 
+    if result.over_demand:
+        lines.append('')
+        lines.append(f'{result.over_demand:,} sets reached an orbit and were put '
+                     f'aside for asking the guidance for a deflection the '
+                     f'thrust cannot give')
+
+    lines.extend(_top(result))
+
+    if result.band_tolerance > 0.0:
+        _band(lines, result)
+
     if result.on_edge:
         lines.append('')
         lines.append(f'the set found sits on a bound of the grid in '
                      f'{", ".join(result.on_edge)}: either the family gives out '
                      f'there, or a better set lies outside the range searched')
     return '\n'.join(lines)
+
+
+def _criterion(result) -> str:
+    """What the sets the search flew were ranked by."""
+    if result.criterion == 'time':
+        return ('the earliest cut-off among the sets that reach the orbit, to '
+                'the step the flight was integrated at')
+    if result.criterion == 'loss':
+        return ('the smallest velocity budget among the sets that reach the '
+                'orbit - gravity, drag and steering together')
+    return ('the orbit itself: apogee and perigee together, against the '
+            'circle asked for')
+
+
+def _demand_limit(result) -> str:
+    """What the guidance was allowed to be asked for.
+
+    A set past a demand of one asks the thrust to point where it cannot, so it
+    is not a trajectory at all; the limit is what keeps such a set out of the
+    ranking rather than at the top of it.
+    """
+    limit = result.max_steering_demand
+    if limit is None:
+        return 'never - the steering demand is reported, not limited'
+    return (f'the steering demand stays under {limit:g}, which is the whole '
+            f'of what the thrust can give')
+
+
+def _axes(result) -> str:
+    """What the first pass was laid out over, axis by axis.
+
+    Worth a row of its own because it is the whole cost of a search: the nodes
+    of a pass are the product over the axes, so opening one more multiplies
+    what follows rather than adding to it.
+    """
+    if not result.axes:
+        return 'not recorded'
+    layout = ' x '.join(f'{name} {axis.nodes}'
+                        for name, axis in result.axes.items())
+    first = math.prod(axis.nodes for axis in result.axes.values())
+    return f'{layout} = {first:,} nodes in the first pass'
+
+
+def _band(lines: list[str], result) -> None:
+    """The band of sets that reach the orbit and are as quick as the one found.
+
+    Reported as a range along each parameter one at a time, which is the form
+    the parametric study wants. The band itself is a region of the grid and
+    not the box these ranges draw around it: every set counted here flies, a
+    corner of the box need not.
+    """
+    band = result.band
+    if not band:
+        lines.append('')
+        lines.append('no band: nothing found reaches the orbit')
+        return
+
+    unit = {'loss': 'm/s of budget', 'time': 's of ascent',
+            'orbit': 'radii of orbit error'}[result.criterion]
+    rows = [('sets in the band',
+             f'{len(band):,} of the {len(result.reaching):,} sets found that '
+             f'reach the orbit, within {result.band_tolerance:g} {unit} of the '
+             f'set above')]
+    for key in band[0].parameters:
+        if key != 'type':
+            rows.append((key, _spread((c.parameters[key] for c in band),
+                                      UNITS.get(key, ''))))
+    rows.append(('cut-off', _spread((c.cutoff_time for c in band), 's')))
+    if result.programme == 'five-phase':
+        # the fifth phase is what the search calls t4 against what it calls
+        # the cut-off, and the one the parametric study reads as a length
+        rows.append(('fifth phase',
+                     _spread((c.cutoff_time - c.parameters['t4']
+                              for c in band), 's')))
+    rows.append(('total loss', _spread((c.total_loss for c in band), 'm/s')))
+    _block(lines, 'band', rows)
+
+
+def _top(result) -> list[str]:
+    """The best sets found, one to a line, to be chosen between by eye.
+
+    A search is a table of candidates before it is an answer, and this is that
+    table: the parameters of each set, the state it left the vehicle in and the
+    three errors that state is judged by - the altitude at cut-off, the speed
+    there against the speed a circular orbit at the target needs, and the shape
+    of the orbit that came out of the two. The last of those is the ranking.
+
+    Every set here closed an orbit; not every one of them reaches the target,
+    and the ones that miss are the most useful rows on the table when nothing
+    reaches it. The summary above says which case it is.
+    """
+    found = result.found[:max(result.top, 0)]
+    if not found:
+        return []
+    target = result.target_altitude
+    keys = [key for key in found[0].parameters if key != 'type']
+    columns = [('#', 3, lambda number, set_, errors: f'{number}')]
+    columns += [(key, 8, lambda number, set_, errors, key=key:
+                 f'{set_.parameters[key]:.5g}') for key in keys]
+    columns += [
+        ('t5', 8, lambda number, set_, errors: f'{set_.cutoff_time:.2f}'),
+        ('gamma', 7, lambda number, set_, errors:
+         f'{set_.flight_path_angle:.3f}'),
+        ('h km', 8, lambda number, set_, errors: f'{set_.altitude / 1000:.2f}'),
+        ('h err', 8, lambda number, set_, errors: f'{errors[0]:.5f}'),
+        ('v m/s', 8, lambda number, set_, errors: f'{set_.speed:.1f}'),
+        ('v err', 8, lambda number, set_, errors: f'{errors[1]:.5f}'),
+        ('ecc', 8, lambda number, set_, errors:
+         f'{set_.orbit.eccentricity:.5f}'),
+        ('orb err', 8, lambda number, set_, errors: f'{errors[2]:.5f}'),
+    ]
+
+    lines = ['', f'TOP {len(found)} OF THE {len(result.found):,} SETS THAT '
+                 f'CLOSED AN ORBIT, BEST FIRST',
+             ' '.join(f'{header:>{width}}' for header, width, _ in columns),
+             ' '.join('-' * width for _, width, _ in columns)]
+    for number, set_ in enumerate(found, start=1):
+        errors = set_.errors(target)
+        lines.append(' '.join(f'{cell(number, set_, errors):>{width}}'
+                              for _, width, cell in columns))
+    lines.append('h and v are read at cut-off, h err and v err against the '
+                 'circular orbit asked for,')
+    lines.append('and orb err is how far the apogee and the perigee ended up '
+                 'from it, added, in radii.')
+    return lines
+
+
+def _spread(values, unit: str = '') -> str:
+    """What a quantity covers across the band, low to high."""
+    numbers = list(values)
+    low, high = min(numbers), max(numbers)
+    suffix = f' {unit}' if unit else ''
+    if high - low <= abs(high) * 1e-12:
+        return f'{low:g}{suffix}, the same in every set'
+    return f'{low:g} to {high:g}{suffix}'

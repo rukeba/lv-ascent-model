@@ -11,12 +11,15 @@
 
     ascent-search f9 --altitude 500        # solve for a set instead of flying one
     ascent-search f9 --altitude 500 -r     # and a report of the set it found
+    ascent-search f9 -a 500 --band 1             # a band of sets, not one
+    ascent-search f9 -a 500 --free none          # the shape of the turn alone
 
 A pitch programme can be named in full or by the short form beside it - `5f`,
 `vs`, `bt`.
 """
 
 import argparse
+import csv
 import os
 import shlex
 import sys
@@ -29,7 +32,8 @@ import yaml
 from .config import (PITCH_PROGRAMMES, PROGRAMME_ALIASES, find_in_catalogue,
                      load_catalogue, load_vehicle, mission_from_spec,
                      programme_name, read_spec, resolve)
-from .search import FAMILIES, default_workers, search
+from .search import (CRITERIA, FAMILIES, FLIGHTS_PER_NODE,
+                     MAX_STEERING_DEMAND, Axis, default_workers, search)
 from .summary import summarise, summarise_search
 
 
@@ -194,8 +198,20 @@ class _Progress:
         self.start = self.last = time.monotonic()
         self.width = 0
         self.written = False
+        self.counted = False
 
     def __call__(self, result) -> None:
+        if not self.counted:
+            # what the search is about to cost, said before it has cost it.
+            # The nodes are known exactly; the trajectories are a rate measured
+            # off other searches, and it is the figure worth seeing beforehand
+            self.counted = True
+            layout = ' x '.join(f'{name} {axis.nodes}'
+                                for name, axis in result.axes.items())
+            print(f'{result.planned_nodes:,} nodes over {result.passes} passes '
+                  f'({layout}), some '
+                  f'{result.planned_nodes * FLIGHTS_PER_NODE:,} trajectories',
+                  file=self.stream)
         now = time.monotonic()
         done = result.pass_node == result.pass_nodes
         if now - self.last < self.INTERVAL and not done:
@@ -221,6 +237,76 @@ def _clock(seconds: float) -> str:
     return f'{int(seconds) // 60}:{int(seconds) % 60:02d}'
 
 
+def _demand_limit(parser, given: str) -> float | None:
+    """How hard a set may lean on the guidance and still be an answer.
+
+    `none` lifts the limit, which is how every set on file was solved: a third
+    of them ask a deflection the thrust cannot give, and they are on file
+    because the figure was reported rather than imposed.
+    """
+    if given.lower() == 'none':
+        return None
+    try:
+        limit = float(given)
+    except ValueError:
+        parser.error(f'--max-demand takes a number or `none`, and not {given!r}')
+    if limit <= 0.0:
+        parser.error(f'--max-demand has to be above zero, and is {limit:g}')
+    return limit
+
+
+def _ranges(parser, given: list[str]) -> dict[str, Axis]:
+    """The axes the command line narrowed, as the grid reads them.
+
+    `k2=0.04:0.08:9` is nine nodes from 0.04 to 0.08. Whether the name is an
+    axis of the search about to run is checked where the grid is built rather
+    than here: this only has to turn the text into numbers.
+    """
+    ranges = {}
+    for text in given:
+        name, _, span = text.partition('=')
+        parts = span.split(':')
+        if not name or len(parts) != 3:
+            parser.error(f'--range takes AXIS=LOW:HIGH:NODES, and not {text!r}')
+        try:
+            low, high, nodes = float(parts[0]), float(parts[1]), int(parts[2])
+        except ValueError:
+            parser.error(f'--range takes numbers, and not {text!r}')
+        if high < low or nodes < 1:
+            parser.error(f'--range needs low to high and at least one node, '
+                         f'and not {text!r}')
+        ranges[name] = Axis(low, high, nodes)
+    return ranges
+
+
+def _free_axes_help() -> str:
+    """What each family can search beside the shape of its turn."""
+    return '; '.join(f'{name} {", ".join(family.FREE)}'
+                     for name, family in sorted(FAMILIES.items()) if family.FREE)
+
+
+def _free_axes(parser, programme: str, asked) -> tuple[str, ...]:
+    """The axes to search, with `all` and `none` standing for the two ends.
+
+    A name the family does not have is a typed mistake rather than a search
+    worth running, so it is refused here with what the family does have. A
+    programme this command does not know is left to the search to refuse,
+    which it does before anything is flown.
+    """
+    family = FAMILIES.get(programme)
+    if family is None:
+        return tuple(asked)
+    names = (family.names(asked[0]) if len(asked) == 1
+             and asked[0] in ('all', 'none') else tuple(asked))
+    unknown = [name for name in names if name not in family.FREE]
+    if unknown:
+        parser.error(f'--free {" ".join(unknown)}: the {programme} family can '
+                     f'search all, none, or any of '
+                     f'{", ".join(family.FREE) or "nothing"} beside the shape '
+                     f'of its turn')
+    return names
+
+
 def search_main(argv: list[str] | None = None) -> int:
     """Entry point of `ascent-search`: solve for a programme instead of flying one.
 
@@ -228,6 +314,8 @@ def search_main(argv: list[str] | None = None) -> int:
         ascent-search f9 -a 650 -p bt --yaml
         ascent-search f9 --altitude 500 --report        # fly the set found, too
         ascent-search a62 --altitude 700 --coarse 0.5   # a quicker, rougher look
+        ascent-search f9 -a 500 --band 1                # the band, not one set
+        ascent-search f9 -a 500 --free none             # the shape alone
 
     The mission file supplies the vehicle and the launch site, and its own
     target altitude and programme type stand in for `--altitude` and
@@ -237,7 +325,7 @@ def search_main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog='ascent-search',
         description='Search for the pitch-programme parameters that reach a '
-                    'circular orbit in the shortest time.')
+                    'circular orbit, best first.')
     parser.add_argument('mission', help='mission name (f9) or path to a mission '
                                         'YAML file: the vehicle and the launch '
                                         'site are taken from it')
@@ -246,6 +334,46 @@ def search_main(argv: list[str] | None = None) -> int:
     parser.add_argument('--programme', '-p', metavar='NAME',
                         choices=sorted(FAMILIES) + sorted(PROGRAMME_ALIASES),
                         help=f'pitch programme to search: {_programmes(FAMILIES)}')
+    parser.add_argument('--free', nargs='+', metavar='AXIS', default=('all',),
+                        help=f'what to search beside the shape of the turn: '
+                             f'`all`, the default, or `none` for the search '
+                             f'that solved the catalogue, or any of '
+                             f'{_free_axes_help()}')
+    parser.add_argument('--band', type=float, default=0.0, metavar='WIDTH',
+                        help='report not the one set but every set found that '
+                             'reaches the orbit and comes within this of it, '
+                             'as a range along each parameter and as a table '
+                             'of the sets themselves. In the unit of the '
+                             'criterion: m/s of velocity budget, or seconds of '
+                             'ascent')
+    parser.add_argument('--criterion', default='orbit',
+                        choices=sorted(CRITERIA),
+                        help='what to rank the sets found by: `orbit`, how far '
+                             'the orbit each closed is from the one asked for, '
+                             'or - among those that reach it - `loss`, the '
+                             'whole velocity budget, or `time`, the earliest '
+                             'cut-off (default orbit)')
+    parser.add_argument('--top', type=int, default=10, metavar='N',
+                        help='how many of the sets found to print, best first, '
+                             'with the three terminal errors of each '
+                             '(default 10)')
+    parser.add_argument('--range', action='append', default=[],
+                        metavar='AXIS=LOW:HIGH:NODES',
+                        help='narrow one axis of the grid, repeatable: '
+                             '`--range k2=0.04:0.08:9`. What a coarse search '
+                             'found is what the next one is narrowed on to, '
+                             'and the bounds hold for the refining passes too')
+    parser.add_argument('--max-demand', default=str(MAX_STEERING_DEMAND),
+                        metavar='SINE',
+                        help='the largest thrust deflection, as its sine, a '
+                             'set may ask of the guidance and still count as '
+                             'an answer (default 1, the whole of the thrust); '
+                             '`none` reports it without limiting it')
+    parser.add_argument('--csv', metavar='FILE',
+                        help='write the whole band to a CSV file - every set, '
+                             'the orbit it reaches, what it costs and what it '
+                             'demands - where the summary prints the first '
+                             'twenty')
     parser.add_argument('--tolerance', type=float, default=0.5, metavar='KM',
                         help='how close the perigee and the apogee have to come '
                              'to the target for the set to count (default 0.5)')
@@ -255,8 +383,8 @@ def search_main(argv: list[str] | None = None) -> int:
     parser.add_argument('--max-q', type=float, metavar='KPA',
                         help='put the airframe into the constraint: sets whose '
                              'dynamic pressure peaks above this are not answers, '
-                             'however quick. Without it the peak is reported and '
-                             'nothing more')
+                             'however close. Without it the peak is reported '
+                             'and nothing more')
     parser.add_argument('--coarse', type=float, default=1.0, metavar='FACTOR',
                         help='scale the nodes along every axis: below one for a '
                              'quicker and rougher search')
@@ -292,6 +420,11 @@ def search_main(argv: list[str] | None = None) -> int:
                      f'{arguments.refinements}')
     if arguments.max_q is not None and arguments.max_q <= 0.0:
         parser.error(f'--max-q has to be above zero, and is {arguments.max_q:g}')
+    if arguments.band < 0.0:
+        parser.error(f'--band cannot be negative, and is {arguments.band:g}')
+    if arguments.top < 0:
+        parser.error(f'--top cannot be negative, and is {arguments.top}')
+    demand = _demand_limit(parser, arguments.max_demand)
 
     mission_path = resolve(arguments.mission, Path(arguments.config_dir))
     spec = read_spec(mission_path)
@@ -303,13 +436,20 @@ def search_main(argv: list[str] | None = None) -> int:
     # a file the catalogue reader can read
     told = sys.stderr if arguments.yaml else sys.stdout
     progress = _Progress(sys.stderr)
+    programme = arguments.programme or spec['pitch_programme']['type']
     result = search(
         vehicle=load_vehicle(mission_path.parent / f'{vehicle_file}.yaml'),
         target_altitude=(arguments.altitude * 1000 if arguments.altitude is not None
                          else spec['target_altitude']),
-        programme=arguments.programme or spec['pitch_programme']['type'],
+        programme=programme,
         latitude_deg=site.get('latitude', 0.0),
         azimuth_deg=site.get('azimuth', 90.0),
+        free=_free_axes(parser, programme, arguments.free),
+        ranges=_ranges(parser, getattr(arguments, 'range')),
+        criterion=arguments.criterion,
+        top=arguments.top,
+        max_steering_demand=demand,
+        band_tolerance=arguments.band,
         tolerance=arguments.tolerance * 1000,
         refinements=arguments.refinements,
         max_dynamic_pressure=(arguments.max_q * 1000
@@ -328,10 +468,52 @@ def search_main(argv: list[str] | None = None) -> int:
         print(yaml.safe_dump({'missions': [result.specification(vehicle_file)]},
                              sort_keys=False, default_flow_style=None), end='')
 
+    if arguments.csv:
+        path = Path(arguments.csv)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        written = _write_band(path, result)
+        print(f'\nband: {written:,} sets to {path}', file=told)
+
     if arguments.report is not None:
         _report_the_search(result, arguments, spec, mission_path, told,
                            _command_line(parser.prog, argv))
     return 0 if result.reaches_orbit else 1
+
+
+def _write_band(path: Path, result) -> int:
+    """The whole band as a table, one set to a row. How many were written.
+
+    The summary prints the first twenty and says how wide the band is; a study
+    wants all of them, to be sorted and filtered by whatever it is looking for
+    at the time. The columns are the parameters of the programme, the orbit
+    each set reaches, what it misses the target by, what it costs and what it
+    asks of the airframe and the guidance.
+    """
+    band = result.band
+    if not band:
+        path.write_text('')
+        return 0
+    keys = [key for key in band[0].parameters if key != 'type']
+    with path.open('w', newline='') as stream:
+        writer = csv.writer(stream)
+        writer.writerow([*keys, 'cutoff_s', 'perigee_km', 'apogee_km',
+                         'miss_m', 'gravity_loss', 'aerodynamic_loss',
+                         'steering_loss', 'total_loss', 'max_q_kpa',
+                         'steering_demand'])
+        for found in band:
+            writer.writerow(
+                [f'{found.parameters[key]:.9g}' for key in keys]
+                + [f'{found.cutoff_time:.6f}',
+                   f'{found.orbit.perigee_altitude / 1000:.4f}',
+                   f'{found.orbit.apogee_altitude / 1000:.4f}',
+                   f'{found.miss:.1f}',
+                   f'{found.gravity_loss:.2f}',
+                   f'{found.aerodynamic_loss:.2f}',
+                   f'{found.steering_loss:.2f}',
+                   f'{found.total_loss:.2f}',
+                   f'{found.peak_dynamic_pressure / 1000:.2f}',
+                   f'{found.peak_steering_demand:.4f}'])
+    return len(band)
 
 
 def _report_the_search(result, arguments, spec: dict, mission_path: Path,
