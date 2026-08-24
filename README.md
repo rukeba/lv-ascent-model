@@ -1,5 +1,11 @@
 # lv-ascent-model
 
+![Falcon 9 into a 500 km circular orbit, drawn to scale over the curve of the Earth](docs/trajectory.png)
+
+*Falcon 9 from Cape Canaveral into a 500 km circular orbit on the five-phase
+turn: the ascent in the plane of the launch, drawn to scale over the curve of
+the Earth. One of the ten plots of `uv run ascent f9 --report`.*
+
 A two-dimensional model of the powered ascent of a launch vehicle, from
 lift-off to orbit insertion. The vehicle flies a prescribed pitch programme;
 the model integrates the trajectory that results, reports the orbit it reaches,
