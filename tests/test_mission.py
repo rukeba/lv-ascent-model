@@ -270,6 +270,26 @@ def test_configuration_files_load():
         assert mission.target_altitude > 0
 
 
+def test_the_solved_mission_files_still_reach_the_orbit_they_name():
+    """Ariane 62 and H3 are solved sets, and this is what they were solved to.
+
+    Their parameters are the answer to a terminal condition - perigee and
+    apogee both at `target_altitude` - and nothing else here checks that they
+    still meet it, so a set recomputed wrongly would pass the rest of the
+    suite. Half a kilometre is the tolerance the catalogue is solved to.
+
+    Falcon 9 is not in this list. Its file carries the set the dissertation
+    prints, flown as printed rather than solved again, and it arrives 0.6 km
+    under at the perigee - which `tests/test_reference.py` is what says so.
+    """
+    for name in ('a62', 'h3'):
+        mission = load_mission(f'config/mission.{name}.yaml')
+        mission.run()
+        target = mission.target_altitude
+        assert abs(mission.orbit.perigee_altitude - target) < 500.0, name
+        assert abs(mission.orbit.apogee_altitude - target) < 500.0, name
+
+
 class Vertical(PitchProgramme):
     """Points the velocity straight up for the whole flight."""
 

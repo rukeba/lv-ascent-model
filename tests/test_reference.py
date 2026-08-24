@@ -14,8 +14,10 @@ motion carry them.
 These three sets are the ones the dissertation prints, and they are flown as
 printed rather than solved again: they are on paper. So the orbits below are
 the ones those parameters reach against the gravitational parameter as it now
-stands, which is a little under a kilometre lower at the perigee than it was
-when they were chosen.
+stands, and each of the three answers to that in its own place. The five-phase
+and the bilinear tangent both drop 0.7 km at the perigee, to 499.4, and hold
+their apogees; the velocity share holds its perigee at 500.4 and comes down
+0.7 km at the apogee instead, to 506.9.
 """
 
 import pytest

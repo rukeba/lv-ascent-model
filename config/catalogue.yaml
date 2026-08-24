@@ -26,20 +26,25 @@
 # records the orbit it produces and what it costs, so any entry can be checked
 # without repeating the search. tests/test_catalogue.py checks all of them.
 #
-# Every set here has been solved twice over, and the same way both times: the
-# search behind it was not repeated, each set being the smallest move away from
-# the set it replaces that meets the terminal condition again, so it holds the
-# shape that search chose without being the smallest steering loss all over
-# again. The first time was for the Ariane 62 and H3 sets, once those two
-# vehicles stopped carrying their core stage twice over; the second was for all
-# 42, when the gravitational parameter stopped being the product of a tabulated
-# G and a tabulated mass of the Earth and became the measured value, which
-# moved it up by 2.8 parts in a hundred thousand and every orbit here with it.
+# The Ariane 62 and H3 sets were once solved again on their own, when those two
+# vehicles stopped carrying their core stage twice over; the Falcon 9 vehicle
+# file never had that fault, and of its sets only the two bilinear tangents at
+# 400 and 450 km were touched then, for the reason given below.
 #
-# Which two of a set's parameters carry the two conditions follows from the
-# family. The five-phase turn has one shape parameter left once k2 is held, so
-# k3 and the cut-off carry them. The velocity share has the end of its turn and
-# the cut-off - except the Ariane 62 set at 800 km, which cuts off on a dry
+# All 42 have since been solved again together, when the gravitational
+# parameter stopped being the product of a tabulated G and a tabulated mass of
+# the Earth and became the measured value. That moved it up by 2.8 parts in a
+# hundred thousand and every orbit here with it: a set flown unchanged arrives
+# a fraction under circular, its cut-off becoming the apogee while the perigee
+# falls half a kilometre to one.
+#
+# Neither pass repeated the search. Each set is the smallest move away from the
+# set it replaces that meets the terminal condition again, so it holds the
+# shape that search chose without being the smallest steering loss all over
+# again. Which two of a set's parameters carry the two conditions follows from
+# the family. The five-phase turn has one shape parameter left once k2 is held,
+# so k3 and the cut-off carry them. The velocity share has the end of its turn
+# and the cut-off - except the Ariane 62 set at 800 km, which cuts off on a dry
 # tank, where the cut-off has nothing left to buy and the fullness of the
 # quartic takes its place. The bilinear tangent keeps its cut-off exactly where
 # it was and moves the two angles its turn passes through instead: that family
