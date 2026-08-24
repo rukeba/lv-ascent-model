@@ -253,14 +253,7 @@ def summarise_search(result) -> str:
     best = result.best
     if best is None:
         lines.append('')
-        if result.over_pressure:
-            lines.append(f'{result.over_pressure:,} sets reached an orbit and '
-                         f'every one of them was put aside for asking more of '
-                         f'the airframe than '
-                         f'{result.max_dynamic_pressure / 1000:g} kPa: there is '
-                         f'no set here that meets both conditions')
-        else:
-            lines.append('no node of the grid came out on an orbit at all')
+        lines.append(_nothing_to_report(result))
         return '\n'.join(lines)
 
     orbit = best.orbit
@@ -312,6 +305,31 @@ def summarise_search(result) -> str:
                      f'{", ".join(result.on_edge)}: either the family gives out '
                      f'there, or a better set lies outside the range searched')
     return '\n'.join(lines)
+
+
+def _nothing_to_report(result) -> str:
+    """Why a search came back with no set at all, which is three things.
+
+    Either no node of the grid closed an orbit, or nodes did and every one of
+    them was put aside - for asking more of the airframe than the caller
+    allowed, or for asking the guidance for a deflection the thrust cannot
+    give. Told apart because they are different answers: the first says the
+    orbit is out of reach of this family, the second and third say it is not
+    out of reach and that the limits are where the sets went.
+    """
+    aside = []
+    if result.over_pressure:
+        aside.append(f'{result.over_pressure:,} for asking more of the '
+                     f'airframe than '
+                     f'{result.max_dynamic_pressure / 1000:g} kPa')
+    if result.over_demand:
+        aside.append(f'{result.over_demand:,} for asking the guidance for a '
+                     f'deflection the thrust cannot give')
+    if not aside:
+        return 'no node of the grid came out on an orbit at all'
+    return (f'{result.closed:,} nodes closed an orbit and every one of them was '
+            f'put aside: {"; ".join(aside)}. There is no set here that meets '
+            f'both the orbit and the limits it was searched under')
 
 
 def _criterion(result) -> str:
@@ -408,9 +426,17 @@ def _top(result) -> list[str]:
         return []
     target = result.target_altitude
     keys = [key for key in found[0].parameters if key != 'type']
+    # and the coordinates of the grid that are not among them. The bilinear
+    # tangent is searched through the angles it passes and specified through
+    # the coefficients they give, so without this its new axes would be
+    # searched and never shown
+    keys += [key for key in found[0].shape if key not in keys]
     columns = [('#', 3, lambda number, set_, errors: f'{number}')]
-    columns += [(key, 8, lambda number, set_, errors, key=key:
-                 f'{set_.parameters[key]:.5g}') for key in keys]
+    # ten wide because the bilinear coefficients run to `-0.0096468` and a
+    # column that overflows takes the row out of line with the header
+    columns += [(key, 10, lambda number, set_, errors, key=key:
+                 f'{(set_.parameters.get(key, set_.shape.get(key))):.5g}')
+                for key in keys]
     columns += [
         ('t5', 8, lambda number, set_, errors: f'{set_.cutoff_time:.2f}'),
         ('gamma', 7, lambda number, set_, errors:

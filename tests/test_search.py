@@ -169,7 +169,7 @@ def test_the_band_is_every_set_as_cheap_as_the_one_reported():
     of the criterion, so a hundred here is a hundred metres per second of
     velocity budget.
     """
-    result = quick('five-phase', free='all', refinements=0,
+    result = quick('five-phase', free='all', criterion='loss', refinements=0,
                    coarseness=0.4, tolerance=20_000.0, band_tolerance=200.0)
     assert result.reaches_orbit
     assert len(result.band) > 1, 'the band came out a single set'
@@ -198,7 +198,7 @@ def test_a_search_without_a_band_asked_for_reports_what_it_found():
     tell apart, so a set a shade cheaper than the one reported belongs to the
     band of it.
     """
-    result = quick('five-phase')
+    result = quick('five-phase', criterion='loss')
     assert result.band_tolerance == 0.0
     assert result.reaches_orbit
     assert result.band, 'the set found is a band of one, not of none'
@@ -213,8 +213,12 @@ def test_a_family_with_a_parameter_to_spare_reaches_the_orbit_sooner():
     smallest steering loss. Minimising the ascent instead has somewhere to go,
     so the set found here cuts off earlier - and, since an earlier cut-off on
     the same orbit is less propellant spent on the way, for less in total.
+
+    Asked for by name, because minimising the ascent is not what a search does
+    unless it is told to: the ranking it is left to is the orbit itself.
     """
-    result = quick('velocity-share', tolerance=2_000.0, refinements=5)
+    result = quick('velocity-share', criterion='time', tolerance=2_000.0,
+                   refinements=5)
     assert result.reaches_orbit, f'missed by {result.best.miss:.0f} m'
     assert result.best.cutoff_time < 502.19
     assert result.best.total_loss < 2996.4

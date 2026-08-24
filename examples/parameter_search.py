@@ -44,6 +44,12 @@ def main(steps_per_second: float = 10) -> None:
 
         result = search(vehicle, TARGET_ALTITUDE, programme,
                         latitude_deg=LATITUDE, azimuth_deg=AZIMUTH,
+                        # the search that solved the catalogue: the shape of
+                        # the turn alone, ranked by the ascent. Opening the
+                        # rest of the axes is a different question and some two
+                        # hundred times the trajectories, which is not what a
+                        # row-by-row comparison with the file wants
+                        free='none', criterion='time',
                         steps_per_second=steps_per_second,
                         report=_progress)
         found = result.best

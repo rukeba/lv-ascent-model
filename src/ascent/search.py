@@ -156,13 +156,19 @@ CRITERIA = {
     'time': lambda candidate, result: candidate.cutoff_time,
 }
 
-# The sine of the thrust deflection a set asks of the guidance, above which it
-# is not an answer. At one there is no deflection that holds the programme -
+# The sine of the thrust deflection a set may ask of the guidance and still
+# count as an answer. At one there is no deflection that holds the programme -
 # the thrust would have to be at right angles to the velocity - so a set past
-# it is arithmetic rather than a trajectory, however cheap its budget. It is a
-# limit and not a measurement, so it can be lifted with `max_steering_demand`
-# set to None, which is how the sets on file that pass it were solved
-MAX_STEERING_DEMAND = 1.0
+# it is arithmetic rather than a trajectory.
+#
+# It is nevertheless None by default, which imposes nothing and reports the
+# figure, because a limit here does not divide the good sets from the bad but
+# whole vehicles from each other. Fifteen of the forty-two sets on file pass
+# one, and every set of every kind that reaches 1100 km on H3 passes it: a
+# search of that vehicle with the limit on returns nothing at all and says the
+# orbit cannot be reached, which is not what the measurement means. Pass 1.0
+# to ask for a programme the thrust can actually hold
+MAX_STEERING_DEMAND = None
 
 # The vertical rise is a construction choice rather than a solved unknown, s
 VERTICAL_RISE = 20.0
@@ -498,7 +504,16 @@ class Family:
 
     def rise(self, t1: float, shape: dict[str, float]) -> float:
         """The vertical rise: off the grid where it is one of the axes."""
-        return shape.get('t1', t1)
+        return self.searched('t1', shape, t1)
+
+    def searched(self, name: str, shape: dict[str, float], held: float) -> float:
+        """What one number of the turn is: off the grid, or where it is held.
+
+        Asked of `free` rather than of the shape, so that a shape carrying more
+        than this family searches - one built by hand, or kept from a search
+        that opened more - cannot quietly override what the caller held.
+        """
+        return shape[name] if name in self.free else held
 
 
 class FivePhase(Family):
@@ -567,17 +582,17 @@ class FivePhase(Family):
     def build(self, t1, end, shape):
         return FivePhaseProgramme(t1=self.rise(t1, shape),
                                   t4=self._end_of_turn(end, shape),
-                                  k2=shape.get('k2', self.k2), k3=shape['k3'])
+                                  k2=self.searched('k2', shape, self.k2),
+                                  k3=shape['k3'])
 
     def parameters(self, t1, end, shape):
         return {'type': self.name, 't1': self.rise(t1, shape),
                 't4': self._end_of_turn(end, shape),
-                'k2': shape.get('k2', self.k2), 'k3': shape['k3']}
+                'k2': self.searched('k2', shape, self.k2), 'k3': shape['k3']}
 
-    @staticmethod
-    def _end_of_turn(end: float, shape: dict[str, float]) -> float:
+    def _end_of_turn(self, end: float, shape: dict[str, float]) -> float:
         """Where the turn ends: at the cut-off, or at the share of it searched."""
-        return shape.get('t4', 1.0) * end
+        return self.searched('t4', shape, 1.0) * end
 
 
 class VelocityShare(Family):
@@ -662,7 +677,7 @@ class BilinearTangent(Family):
 
     def _coefficients(self, t1, end, shape):
         rise = self.rise(t1, shape)
-        middle_at = rise + shape.get('middle_at', 0.5) * (end - rise)
+        middle_at = rise + self.searched('middle_at', shape, 0.5) * (end - rise)
         return bilinear_coefficients(rise, shape['start'], middle_at,
                                      shape['middle'], end, 0.0)
 
@@ -816,11 +831,15 @@ def search(vehicle: LaunchVehicle, target_altitude: float, programme: str,
             result.attempts = 2
             result.passes += refinements + 1
             result.planned_nodes += _planned_nodes(axes, refinements)
+            # and without the altitude integral this time: the band it
+            # rejects on is measured rather than derived, and whatever the
+            # first run failed to find, it will not have been for want of
+            # trying a shape the integral mistrusted
             settled = _passes(flight,
                               _narrow(_coarsen(family.axes(), coarseness),
                                       ranges),
                               bounds, refinements, result, report, pool,
-                              by_time=False) or settled
+                              by_time=False, screen=False) or settled
     finally:
         if pool is not None:
             pool.shutdown()
@@ -838,14 +857,25 @@ def search(vehicle: LaunchVehicle, target_altitude: float, programme: str,
                    abs(result.best.shape[name] - high)) <= _step(settled[name]))
     # the centre of a pass is a node of the pass that follows it, so a set
     # kept from one pass to the next was flown by both; it is one set
-    result.found = _distinct(result.found,
-                             lambda c: CRITERIA[criterion](c, result))
+    result.found = _distinct(result.found, lambda c: _order(c, result))
     result.band = _band(result)
     return result
 
 
+def _order(candidate: Candidate, result: SearchResult) -> tuple:
+    """Where a set comes in the table, and so which of them is the answer.
+
+    Whether it reached the orbit first, then the criterion. The reaching comes
+    first because the terminal condition is a condition and not a preference:
+    a set half a kilometre out is not a cheaper answer than one on the orbit,
+    it is not an answer. Where nothing reached, the order is the criterion
+    alone and the table is what there is to look at.
+    """
+    return (candidate.miss > result.tolerance, *_rank(candidate, result))
+
+
 def _distinct(candidates: list[Candidate], value) -> list[Candidate]:
-    """The same sets with each node of the grid counted once, cheapest first."""
+    """The same sets with each node of the grid counted once, best first."""
     seen, distinct = set(), []
     for candidate in sorted(candidates, key=value):
         key = tuple(round(value, 9) for value in candidate.shape.values())
@@ -897,16 +927,30 @@ def _band(result: SearchResult) -> tuple[Candidate, ...]:
     """
     if result.best is None or not result.reaches_orbit:
         return ()
-    value = CRITERIA[result.criterion]
-    dearest = value(result.best, result) + result.band_tolerance
+    dearest = _banded(result.best, result) + result.band_tolerance
     return tuple(candidate for candidate in result.reaching
-                 if value(candidate, result) <= dearest)
+                 if _banded(candidate, result) <= dearest)
+
+
+def _banded(candidate: Candidate, result: SearchResult) -> float:
+    """What a set scores for the band, rounded as the ranking rounds it.
+
+    Which matters only for the ascent time, where the ranking treats two
+    cut-offs inside one integration step as the same ascent: rounding here as
+    well is what keeps a band of nothing from dropping the sets the ranking had
+    already called ties.
+    """
+    value = CRITERIA[result.criterion](candidate, result)
+    if result.criterion != 'time':
+        return value
+    step = 1.0 / result.steps_per_second
+    return math.floor(value / step) * step
 
 
 def _passes(flight: "_Flight", axes: dict[str, Axis],
             bounds: dict[str, tuple[float, float]], refinements: int,
             result: SearchResult, report, pool,
-            by_time: bool) -> dict[str, Axis] | None:
+            by_time: bool, screen: bool = True) -> dict[str, Axis] | None:
     """Sweep the grid, refine about the best node, sweep again.
 
     `by_time` says what the next pass is centred on: the cheapest node within
@@ -919,7 +963,7 @@ def _passes(flight: "_Flight", axes: dict[str, Axis],
     bracket = flight.window
     for _ in range(refinements + 1):
         result.pass_number += 1
-        solved = _sweep(flight, axes, bracket, result, report, pool)
+        solved = _sweep(flight, axes, bracket, result, report, pool, screen)
         if not solved:
             return None
         result.best = _best_so_far(result, solved)
@@ -959,12 +1003,16 @@ class _Flight:
         self.screen = screen
         self._flights = 0
 
-    def at(self, shape: dict[str, float],
-           bracket: tuple[float, float]) -> Node:
+    def at(self, shape: dict[str, float], bracket: tuple[float, float],
+           screen: bool | None = None) -> Node:
         """Answer one node of the grid, flying as little as it takes.
 
         `bracket` is where the cut-off is looked for first - the neighbourhood
         of the one the last pass settled on - with the whole window behind it.
+        `screen` overrides what this flight was built with, which is how the
+        second run of the grid drops the altitude integral: the flight itself
+        was handed to the worker processes when they started and cannot be
+        changed under them, so the pass says what it wants with every node.
         """
         self._flights = 0
         early, late = self.window
@@ -973,9 +1021,11 @@ class _Flight:
                 self.vehicle, self.family.build(self.t1, early, shape))
             latest = analytic_altitude(
                 self.vehicle, self.family.build(self.t1, late, shape))
-        except ValueError:
+        except (ValueError, np.linalg.LinAlgError):
             # the family refuses this shape outright: phases out of order, a
-            # share the quartic is not a turn over, a tangent through its pole
+            # share the quartic is not a turn over, a tangent through its pole,
+            # or three angles the coefficients cannot be recovered from - which
+            # a range narrowed by hand can ask for
             return self._node(shape, 'refused', None)
 
         # the screen. The altitude the integral reports rises with the cut-off,
@@ -983,7 +1033,8 @@ class _Flight:
         # and the band the integral is known to read high by turns them into a
         # bound on the flight. A shape that cannot reach the target inside the
         # window is dropped without a trajectory
-        if self.screen and not (
+        screening = self.screen if screen is None else screen
+        if screening and not (
                 soonest / ALTITUDE_RATIO_HIGH <= self.target_altitude
                 <= latest / ALTITUDE_RATIO_LOW):
             return self._node(shape, 'screened', None)
@@ -1106,13 +1157,10 @@ class _Flight:
         budget = velocity_budget(telemetry, mission.omega)
         miss = max(abs(orbit.perigee_altitude - self.target_altitude),
                    abs(orbit.apogee_altitude - self.target_altitude))
-        row = telemetry.at(end)
         return (residual, Candidate(shape, parameters, end, orbit, miss,
                                     budget.gravity, budget.aerodynamic,
                                     budget.steering, residual,
-                                    float(telemetry.altitude[row]),
-                                    float(telemetry.inertial_speed[row]),
-                                    float(telemetry.flight_path_angle[row]),
+                                    *_terminal_state(telemetry, end),
                                     *_demands(telemetry, end)))
 
     def _duration(self, end: float) -> float:
@@ -1171,9 +1219,30 @@ def _begin(flight: _Flight) -> None:
     _WORKER = flight
 
 
-def _answer(work: tuple[dict[str, float], tuple[float, float]]) -> Node:
-    shape, bracket = work
-    return _WORKER.at(shape, bracket)
+def _answer(work: tuple[dict[str, float], tuple[float, float], bool]) -> Node:
+    shape, bracket, screen = work
+    return _WORKER.at(shape, bracket, screen)
+
+
+def _terminal_state(telemetry: Telemetry,
+                    end: float) -> tuple[float, float, float]:
+    """Altitude, inertial speed and flight-path angle at the cut-off.
+
+    Interpolated between the rows either side of it, because the cut-off falls
+    between two of them and the rows are what was recorded. At the forty-odd
+    metres per second squared a stage is pulling by then, the row before the
+    cut-off is several metres per second short of it - which is nothing to the
+    orbit, read off the state at cut-off itself, and is the whole of what these
+    three are: the state the terminal conditions are conditions on.
+    """
+    row = telemetry.at(end)
+    columns = (telemetry.altitude, telemetry.inertial_speed,
+               telemetry.flight_path_angle)
+    if row + 1 >= len(telemetry.t) or telemetry.t[row] >= end:
+        return tuple(float(column[row]) for column in columns)
+    weight = (end - telemetry.t[row]) / (telemetry.t[row + 1] - telemetry.t[row])
+    return tuple(float(column[row] + (column[row + 1] - column[row]) * weight)
+                 for column in columns)
 
 
 def _demands(telemetry: Telemetry, end: float) -> tuple[float, float]:
@@ -1214,7 +1283,8 @@ def _peak(series: np.ndarray) -> float:
 
 
 def _sweep(flight: _Flight, axes: dict[str, Axis], bracket: tuple[float, float],
-           result: SearchResult, report, pool) -> list[Candidate]:
+           result: SearchResult, report, pool,
+           screen: bool = True) -> list[Candidate]:
     """One pass over the grid: every node screened, the survivors solved.
 
     The nodes are independent, so they are answered over a pool of processes
@@ -1229,8 +1299,10 @@ def _sweep(flight: _Flight, axes: dict[str, Axis], bracket: tuple[float, float],
     limit = result.max_dynamic_pressure
     demand = result.max_steering_demand
 
-    answers = ((flight.at(shape, bracket) for shape in shapes) if pool is None
-               else pool.map(_answer, [(shape, bracket) for shape in shapes],
+    answers = ((flight.at(shape, bracket, screen) for shape in shapes)
+               if pool is None
+               else pool.map(_answer,
+                             [(shape, bracket, screen) for shape in shapes],
                              chunksize=1))
 
     solved = []
@@ -1320,8 +1392,10 @@ def _refine_about(solved: list[Candidate], axes: dict[str, Axis],
 
     if result.criterion == 'orbit':
         # nothing to project: the criterion is the distance to the target, and
-        # what a node would score at the target is nought for all of them
-        return min(solved, key=lambda candidate: candidate.miss)
+        # what a node would score at the target is nought for all of them. The
+        # closest node by the ranking, which is not quite the closest by the
+        # larger of its two errors
+        return min(solved, key=lambda candidate: _rank(candidate, result))
     value = CRITERIA[result.criterion]
     slope = _cost_per_metre([value(candidate, result) for candidate in solved],
                             reached)

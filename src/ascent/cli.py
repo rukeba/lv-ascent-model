@@ -20,6 +20,7 @@ A pitch programme can be named in full or by the short form beside it - `5f`,
 
 import argparse
 import csv
+import math
 import os
 import shlex
 import sys
@@ -32,8 +33,8 @@ import yaml
 from .config import (PITCH_PROGRAMMES, PROGRAMME_ALIASES, find_in_catalogue,
                      load_catalogue, load_vehicle, mission_from_spec,
                      programme_name, read_spec, resolve)
-from .search import (CRITERIA, FAMILIES, FLIGHTS_PER_NODE,
-                     MAX_STEERING_DEMAND, Axis, default_workers, search)
+from .search import (CRITERIA, FAMILIES, FLIGHTS_PER_NODE, Axis,
+                     default_workers, search)
 from .summary import summarise, summarise_search
 
 
@@ -240,9 +241,9 @@ def _clock(seconds: float) -> str:
 def _demand_limit(parser, given: str) -> float | None:
     """How hard a set may lean on the guidance and still be an answer.
 
-    `none` lifts the limit, which is how every set on file was solved: a third
-    of them ask a deflection the thrust cannot give, and they are on file
-    because the figure was reported rather than imposed.
+    `none` is the default and lifts the limit, which is how every set on file
+    was solved: a third of them ask a deflection the thrust cannot give, and
+    they are on file because the figure was reported rather than imposed.
     """
     if given.lower() == 'none':
         return None
@@ -250,8 +251,11 @@ def _demand_limit(parser, given: str) -> float | None:
         limit = float(given)
     except ValueError:
         parser.error(f'--max-demand takes a number or `none`, and not {given!r}')
-    if limit <= 0.0:
-        parser.error(f'--max-demand has to be above zero, and is {limit:g}')
+    # past one there is no deflection to ask for, so a limit past one is a
+    # limit on nothing: the model clamps the angle there and the loss saturates
+    if not 0.0 < limit <= 1.0:
+        parser.error(f'--max-demand is the sine of an angle and lies in (0, 1], '
+                     f'and not {limit:g}')
     return limit
 
 
@@ -276,6 +280,9 @@ def _ranges(parser, given: list[str], programme: str,
             low, high, nodes = float(parts[0]), float(parts[1]), int(parts[2])
         except ValueError:
             parser.error(f'--range takes numbers, and not {text!r}')
+        if not (math.isfinite(low) and math.isfinite(high)):
+            parser.error(f'--range takes bounds that are numbers, and not '
+                         f'{text!r}')
         if high < low or nodes < 1:
             parser.error(f'--range needs low to high and at least one node, '
                          f'and not {text!r}')
@@ -370,12 +377,14 @@ def search_main(argv: list[str] | None = None) -> int:
                              '`--range k2=0.04:0.08:9`. What a coarse search '
                              'found is what the next one is narrowed on to, '
                              'and the bounds hold for the refining passes too')
-    parser.add_argument('--max-demand', default=str(MAX_STEERING_DEMAND),
-                        metavar='SINE',
+    parser.add_argument('--max-demand', default='none', metavar='SINE',
                         help='the largest thrust deflection, as its sine, a '
                              'set may ask of the guidance and still count as '
-                             'an answer (default 1, the whole of the thrust); '
-                             '`none` reports it without limiting it')
+                             'an answer. `1` is the whole of what the thrust '
+                             'can give and asks for a programme that can be '
+                             'held; the default reports the figure and imposes '
+                             'nothing, because on some vehicles every set here '
+                             'passes one')
     parser.add_argument('--csv', metavar='FILE',
                         help='write the whole band to a CSV file - every set, '
                              'the orbit it reaches, what it costs and what it '
