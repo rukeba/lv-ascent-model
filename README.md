@@ -373,8 +373,8 @@ uv run ascent-search a62 --altitude 700 --yaml            # as a catalogue entry
 uv run ascent-search f9 --altitude 500 --report           # fly it and report it
 uv run ascent-search h3 --altitude 1100 --coarse 0.5      # a quicker, rougher look
 uv run ascent-search f9 --altitude 500 --workers 1        # in this process alone
-uv run ascent-search f9 -a 500 --free none               # the shape of the turn alone
-uv run ascent-search f9 -a 500 --top 25 --band 0.001     # a longer table, and the band
+uv run ascent-search f9 -a 500 --free none                # the shape of the turn alone
+uv run ascent-search f9 -a 500 --top 25 --band 0.001      # a longer table, and the band
 ```
 
 A coarse pass over the whole of every axis, then a narrower and finer one on
@@ -391,6 +391,13 @@ uv run ascent-search f9 -a 500 --refinements 5 \
     --range k3=0.45:0.65:9 --range t1=12:24:5 \
     --range k2=0.003:0.05:6 --range t4=0.9:1:3       # and now close in on it
 ```
+
+The map is worth drawing at a coarse integration step. That first pass takes
+79 seconds at `--steps 2` against 167 at the default ten, and the ten best sets
+come out in the same order with the same parameters — the orbit a set reaches
+moves by metres between the two, which is nothing against the kilometres a
+coarse grid is out by. Confirm what the map picked at ten steps a second, which
+is what the entry written out asks for anyway.
 
 The mission file supplies the vehicle and the launch site and nothing else;
 `--altitude` and `--programme` — or `-a` and `-p` — say what to search for. `--yaml` prints the set

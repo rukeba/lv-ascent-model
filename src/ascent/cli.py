@@ -255,13 +255,17 @@ def _demand_limit(parser, given: str) -> float | None:
     return limit
 
 
-def _ranges(parser, given: list[str]) -> dict[str, Axis]:
+def _ranges(parser, given: list[str], programme: str,
+            free: tuple[str, ...]) -> dict[str, Axis]:
     """The axes the command line narrowed, as the grid reads them.
 
-    `k2=0.04:0.08:9` is nine nodes from 0.04 to 0.08. Whether the name is an
-    axis of the search about to run is checked where the grid is built rather
-    than here: this only has to turn the text into numbers.
+    `k2=0.04:0.08:9` is nine nodes from 0.04 to 0.08. A name that is not an
+    axis of the search about to run is refused here, with the ones that are:
+    the search would refuse it too, and this says it in one line rather than a
+    traceback.
     """
+    family = FAMILIES.get(programme)
+    axes = tuple(family(free=free).axes()) if family is not None else ()
     ranges = {}
     for text in given:
         name, _, span = text.partition('=')
@@ -275,6 +279,9 @@ def _ranges(parser, given: list[str]) -> dict[str, Axis]:
         if high < low or nodes < 1:
             parser.error(f'--range needs low to high and at least one node, '
                          f'and not {text!r}')
+        if axes and name not in axes:
+            parser.error(f'--range {name}: this search runs over '
+                         f'{", ".join(axes)}')
         ranges[name] = Axis(low, high, nodes)
     return ranges
 
@@ -437,6 +444,7 @@ def search_main(argv: list[str] | None = None) -> int:
     told = sys.stderr if arguments.yaml else sys.stdout
     progress = _Progress(sys.stderr)
     programme = arguments.programme or spec['pitch_programme']['type']
+    free = _free_axes(parser, programme, arguments.free)
     result = search(
         vehicle=load_vehicle(mission_path.parent / f'{vehicle_file}.yaml'),
         target_altitude=(arguments.altitude * 1000 if arguments.altitude is not None
@@ -444,8 +452,8 @@ def search_main(argv: list[str] | None = None) -> int:
         programme=programme,
         latitude_deg=site.get('latitude', 0.0),
         azimuth_deg=site.get('azimuth', 90.0),
-        free=_free_axes(parser, programme, arguments.free),
-        ranges=_ranges(parser, getattr(arguments, 'range')),
+        free=free,
+        ranges=_ranges(parser, arguments.range, programme, free),
         criterion=arguments.criterion,
         top=arguments.top,
         max_steering_demand=demand,

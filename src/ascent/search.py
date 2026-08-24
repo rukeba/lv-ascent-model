@@ -716,6 +716,10 @@ def search(vehicle: LaunchVehicle, target_altitude: float, programme: str,
     it and searches the shape alone, which is the search that solved the
     catalogue and costs a fraction of this one.
 
+    `top` is how many of the sets found are worth printing, which is a
+    reporting choice rather than a search one: the whole of `result.found` is
+    there whatever it is set to.
+
     `band_tolerance` is how much dearer than the set reported another may be
     and still be reported beside it, in the unit of the criterion: `result.band`
     is every set visited that reached the orbit and came inside that. It is

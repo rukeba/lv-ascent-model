@@ -12,6 +12,7 @@ import pytest
 
 from ascent.config import load_catalogue, load_vehicle, mission_from_spec
 from ascent.estimates import equivalent_time
+from ascent.constants import EARTH_RADIUS
 from ascent.search import (FAMILIES, REFINED_NODES, VERTICAL_RISE, Axis,
                            BilinearTangent, FivePhase, VelocityShare, _count,
                            _Flight, _planned_nodes, _refine, search)
@@ -116,6 +117,47 @@ def test_an_axis_multiplies_the_pass_rather_than_adding_to_it():
     assert _count(everything) == _count(shape_alone) * 5 * 15 * 4
     assert _planned_nodes(everything, 10) == \
         _count(everything) + 10 * REFINED_NODES ** 4
+
+
+def test_the_three_errors_are_read_at_cut_off_against_the_orbit_asked_for():
+    """Altitude, speed and the shape of the orbit, each relative.
+
+    The first two are the state the flight ended in; the third is what that
+    state made of the orbit, and it is nought only when both apsides sit on the
+    circle. A set solved to a circular orbit at the target has all three at
+    nothing much, which is what makes them worth printing beside each other.
+    """
+    result = quick('five-phase')
+    assert result.reaches_orbit
+    found = result.best
+    altitude, speed, shape = found.errors(500_000)
+
+    assert altitude == pytest.approx(abs(found.altitude - 500_000) / 500_000)
+    assert altitude < 0.01
+    # the cut-off was solved for a circular orbit, so the speed at it is the
+    # speed that orbit needs and the shape error is what is left
+    assert speed < 0.01
+    assert shape == pytest.approx(
+        (abs(found.orbit.apogee_altitude - 500_000)
+         + abs(found.orbit.perigee_altitude - 500_000))
+        / (EARTH_RADIUS + 500_000))
+    assert found.orbit.eccentricity < 1e-4
+
+
+def test_the_sets_found_come_back_ranked_and_the_best_is_the_head():
+    """A search is a table before it is an answer, and this is the order of it.
+
+    Every node that closed an orbit is on it, whether or not it met the
+    tolerance: when nothing meets it the closest sets are the whole of what
+    there is to look at.
+    """
+    result = quick('five-phase', refinements=1, tolerance=1.0)
+    assert not result.reaches_orbit
+    assert len(result.found) > 1
+    errors = [found.errors(result.target_altitude)[2] for found in result.found]
+    assert errors == sorted(errors), 'the sets came back out of order'
+    assert result.best is result.found[0]
+    assert result.reaching == [], 'nothing meets a tolerance of one metre'
 
 
 def test_the_band_is_every_set_as_cheap_as_the_one_reported():
