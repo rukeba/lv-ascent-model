@@ -98,6 +98,9 @@ def summary_blocks(mission: Mission, telemetry: Telemetry) -> list[Block]:
         ('steering loss', f'{budget.steering:.1f} m/s'),
         ('total', f'{budget.total:.1f} m/s'),
         ('steering demand', _demand(telemetry, mission.pitch_programme.end_time)),
+        ('control effort',
+         f'{telemetry.control_effort[cut_off]:,.0f} m^2/s^3, integrated over the '
+         f'powered flight off the demand before it is clamped'),
     )))
     return blocks
 

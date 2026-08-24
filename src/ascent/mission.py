@@ -87,8 +87,8 @@ class Mission:
         self.cutoff.reset()
         self.telemetry = Telemetry()
         self._burned = [0.0] * len(self.vehicle.stages)
-        self._steering_loss = 0.0
-        self._steering_rate, self._was_powered = 0.0, True
+        self._steering_loss = self._control_effort = 0.0
+        self._steering_rate, self._effort_rate, self._was_powered = 0.0, 0.0, True
         self._throttle = 1.0
         self._attitude = None
         self._guided = True
@@ -401,6 +401,7 @@ class Mission:
         if self._guided:
             self._accumulate_steering(state)
         state.steering_loss = self._steering_loss
+        state.control_effort = self._control_effort
         return state
 
     def _accumulate_steering(self, state: FlightState) -> None:
@@ -411,6 +412,14 @@ class Mission:
         from the normal equation of motion. The share of the thrust that this
         deflection points away from the velocity is the steering loss - the
         figure of merit by which pitch programmes are compared.
+
+        The same normal acceleration, squared and integrated over the powered
+        flight, is the second measure: the control-effort functional, m^2/s^3.
+        It weighs how hard the guidance is worked rather than what that costs,
+        so the square charges an abrupt stretch more than an even one. Taken
+        before the clamp on purpose: unlike the loss it does not saturate where
+        the thrust cannot hold the programme, and goes on telling such
+        programmes apart.
         """
         radius, speed = state.radius, state.speed
         # the same projection the free-flight equations carry: gravity less the
@@ -422,20 +431,22 @@ class Mission:
         normal = effective_gravity * math.cos(state.flight_path_angle) \
             - 2.0 * self.omega * speed
 
+        control = speed * state.flight_path_rate + normal
         powered = state.thrust > 1.0
-        rate = 0.0
+        rate = effort = 0.0
         if powered:
-            demanded = (state.mass / state.thrust) \
-                * (speed * state.flight_path_rate + normal)
+            demanded = (state.mass / state.thrust) * control
             state.steering_demand = demanded
             state.steering_angle = math.asin(max(-1.0, min(1.0, demanded)))
             rate = (state.thrust / state.mass) * (1.0 - math.cos(state.steering_angle))
+            effort = control * control
         # over the interval, not off its end alone. An interval that begins
         # unpowered and ends alight spans an ignition and was flown before it,
         # so it carries nothing: averaging across that step change would charge
         # the new stage for time the old one flew. Asked of the thrust rather
         # than of the rate, which is legitimately zero wherever the programme
         # happens to be a gravity turn
-        span = 0.0 if not self._was_powered else 0.5 * (self._steering_rate + rate)
-        self._steering_loss += span * self.dt
-        self._steering_rate, self._was_powered = rate, powered
+        half = 0.0 if not self._was_powered else 0.5 * self.dt
+        self._steering_loss += half * (self._steering_rate + rate)
+        self._control_effort += half * (self._effort_rate + effort)
+        self._steering_rate, self._effort_rate, self._was_powered = rate, effort, powered

@@ -248,6 +248,63 @@ def test_the_velocity_budget_adds_back_up():
         assert abs(delivered - spent) < 5.0, name
 
 
+def test_the_control_effort_holds_under_refinement():
+    """The second measure has to be as free of the step as the first.
+
+    Both integrals are accumulated over the flight rather than computed from
+    it afterwards, so both answer to the same trapezoid and to the same rule
+    about the interval that spans an ignition. Refining eightfold, from 10 to
+    80 steps per second, leaves each of them inside a twentieth of a percent.
+    The effort moves the more of the two because it is a square: a relative
+    error in the acceleration comes back doubled in its square.
+
+    Falcon 9 and H3: the first is the reference vehicle, the second is the one
+    whose demand saturates, where the effort is the measure that still says
+    something.
+    """
+    for name in ('f9', 'h3'):
+        figures = {}
+        for rate in (10, 80):
+            mission = load_mission(f'config/mission.{name}.yaml')
+            mission.steps_per_second = rate
+            telemetry = mission.run()
+            # a squared integrand can only add: a fall in the running total
+            # would mean an interval was counted with the wrong sign
+            assert np.all(np.diff(telemetry.control_effort) >= 0.0), name
+            figures[rate] = (float(telemetry.control_effort[-1]),
+                             velocity_budget(telemetry, mission.omega).steering)
+
+        (effort, steering), (fine_effort, fine_steering) = figures[10], figures[80]
+        assert abs(fine_effort - effort) / effort < 5e-4, name
+        assert abs(fine_steering - steering) / steering < 5e-4, name
+
+
+def test_the_control_effort_is_taken_before_the_clamp():
+    """It prices the acceleration the programme asks for, not the one it gets.
+
+    Where the demand passes one the thrust cannot hold the programme at all,
+    the deflection is clamped at 90 degrees and the steering loss saturates at
+    the whole of the thrust. The effort is built on the unclamped demand on
+    purpose, so that it goes on separating two programmes that both saturate.
+
+    On H3 that is the difference between 53 and 18 thousand: rebuilt from the
+    clamped angle it would report a third of what the programme asks for.
+    """
+    mission = load_mission('config/mission.h3.yaml')
+    telemetry = mission.run()
+
+    end = int(np.flatnonzero(telemetry.thrust > 0.0)[-1]) + 1
+    t = telemetry.t[:end]
+    acceleration = telemetry.thrust[:end] / telemetry.mass[:end]
+    demanded = telemetry.steering_demand[:end] * acceleration
+    delivered = np.sin(np.radians(telemetry.steering_angle[:end])) * acceleration
+
+    effort = float(telemetry.control_effort[-1])
+    assert np.abs(telemetry.steering_demand).max() > 1.0
+    assert float(np.trapezoid(demanded**2, t)) == pytest.approx(effort, rel=1e-3)
+    assert float(np.trapezoid(delivered**2, t)) < 0.5 * effort
+
+
 def test_launching_east_gains_the_rotation_of_the_earth():
     east = load_mission('config/mission.f9.yaml')
     east.azimuth_deg = 90.0
