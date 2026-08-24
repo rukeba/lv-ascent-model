@@ -45,9 +45,9 @@ def test_the_five_phase_search_recovers_the_set_on_file():
     """
     result = quick('five-phase')
     assert result.reaches_orbit, f'missed by {result.best.miss:.0f} m'
-    assert result.best.cutoff_time == pytest.approx(502.707, abs=0.05)
+    assert result.best.cutoff_time == pytest.approx(502.712, abs=0.05)
     assert result.best.parameters['k3'] == pytest.approx(0.5296, abs=0.002)
-    assert result.best.steering_loss == pytest.approx(516.9, abs=1.0)
+    assert result.best.steering_loss == pytest.approx(516.8, abs=1.0)
 
 
 def test_a_family_with_a_parameter_to_spare_reaches_the_orbit_sooner():
@@ -70,7 +70,7 @@ def test_a_family_with_a_parameter_to_spare_reaches_the_orbit_sooner():
 SHAPES = (
     (FivePhase(), {'k3': 0.5296}),
     (VelocityShare(), {'turn': 0.9732, 's': 1.1194}),
-    (BilinearTangent(), {'start': 88.0, 'middle': 29.5}),
+    (BilinearTangent(), {'start': 87.934, 'middle': 29.506}),
 )
 
 
