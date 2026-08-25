@@ -74,7 +74,7 @@ def test_listing_the_catalogue(capsys):
 # the entry written out and the exit status - and not how well the grid was
 # swept, which is `tests/test_search.py`.
 NARROW = ['--range', 't1=20', '--range', 'k2=0.05',
-          '--range', 'k3=0.50:0.56:0.02', '--range', 't4=502:503.5:0.5',
+          '--range', 'k3=0.50:0.56:4', '--range', 't4=502:503.5:4',
           '--refinements', '7', '--steps', '1', '--workers', '1']
 
 
@@ -102,8 +102,8 @@ def test_a_search_that_reaches_nothing_writes_nothing_out(capsys):
     """A set that misses the orbit is shown, and is not filed as an entry."""
     assert search_main(['f9', '--altitude', '500', '--programme', 'five-phase',
                         '--range', 't1=20', '--range', 'k2=0.05',
-                        '--range', 'k3=0.50:0.56:0.02',
-                        '--range', 't4=502:503.5:0.5',
+                        '--range', 'k3=0.50:0.56:4',
+                        '--range', 't4=502:503.5:4',
                         '--tolerance', '0.001', '--refinements', '0',
                         '--steps', '1', '--workers', '1', '--yaml']) == 1
     written = capsys.readouterr()
@@ -176,10 +176,10 @@ def test_an_interrupted_command_ends_without_a_stack(capsys):
 def test_the_grid_can_be_looked_at_before_it_is_walked(capsys):
     """`--dry-run` prints every axis and what the passes come to, and stops."""
     assert search_main(['f9', '--altitude', '500', '--programme', '5f',
-                        '--range', 't1=10:30:2', '--dry-run']) == 0
+                        '--range', 't1=10:25:10', '--dry-run']) == 0
 
     written = capsys.readouterr().out
-    assert '10 to 30 step 2 (11 nodes)' in written
+    assert '10 to 25, 10 values, step 1.66667' in written
     assert 'nodes planned' in written
     # nothing was flown, so there is nothing found to report
     assert 'TOP' not in written and 'FOUND' not in written
@@ -253,8 +253,8 @@ def test_a_search_that_reaches_nothing_writes_no_report(tmp_path, capsys):
 
     assert search_main(['f9', '--altitude', '500', '--programme', '5f',
                         '--range', 't1=20', '--range', 'k2=0.05',
-                        '--range', 'k3=0.50:0.56:0.02',
-                        '--range', 't4=502:503.5:0.5',
+                        '--range', 'k3=0.50:0.56:4',
+                        '--range', 't4=502:503.5:4',
                         '--tolerance', '0.001', '--refinements', '0',
                         '--steps', '1', '--workers', '1',
                         '--report', str(directory)]) == 1

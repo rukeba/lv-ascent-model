@@ -10,7 +10,7 @@
     ascent f9 --list                       # what the catalogue holds
 
     ascent-search f9 --altitude 500        # search for a set instead of flying one
-    ascent-search f9 -a 500 -p 5f --range t1=10:30:2   # one axis of the grid, my way
+    ascent-search f9 -a 500 -p 5f --range t1=10:25:10  # one axis of the grid, my way
     ascent-search f9 -a 500 -p 5f --dry-run            # the grid, before it is flown
 
 A pitch programme can be named in full or by the short form beside it - `5f`,
@@ -263,7 +263,7 @@ def _search(argv: list[str] | None) -> int:
     """Search a grid over every parameter of a pitch programme.
 
         ascent-search f9 --altitude 500
-        ascent-search f9 -a 500 -p 5f --range t1=10:30:2   # one axis, my way
+        ascent-search f9 -a 500 -p 5f --range t1=10:25:10  # one axis, my way
         ascent-search f9 -a 500 -p 5f --dry-run            # the grid, unflown
         ascent-search f9 -a 650 -p bt --yaml
         ascent-search f9 --altitude 500 --report           # fly the set found
@@ -290,14 +290,15 @@ def _search(argv: list[str] | None) -> int:
                         choices=sorted(FAMILIES) + sorted(PROGRAMME_ALIASES),
                         help=f'pitch programme to search: {_programmes(FAMILIES)}')
     parser.add_argument('--range', action='append', default=[], dest='ranges',
-                        metavar='NAME=LOW:HIGH:STEP',
+                        metavar='NAME=LOW:HIGH:VALUES',
                         help='what one parameter is searched over, repeatable. '
-                             '`--range t1=10:30:2` walks the vertical rise from '
-                             '10 to 30 s in steps of 2, and `--range k2=0.05` '
-                             'holds a parameter at the one value. Every '
-                             'parameter of the family is an axis and every one '
-                             'of them takes a range; `--dry-run` lists them '
-                             'with the ranges they are searched over by default')
+                             '`--range t1=10:25:10` tries ten values of the '
+                             'vertical rise from 10 to 25 s, and `--range '
+                             'k2=0.05` holds a parameter at the one value. '
+                             'Every parameter of the family is an axis and '
+                             'every one of them takes a range; `--dry-run` '
+                             'lists them with what they are searched over by '
+                             'default')
     parser.add_argument('--top', type=int, default=TOP, metavar='N',
                         help=f'how many of the sets found to print, best first, '
                              f'with the errors each is judged by (default {TOP})')

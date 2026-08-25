@@ -265,16 +265,17 @@ def summarise_found(result) -> str:
 
 
 def _preamble(result) -> list[str]:
-    """What the search was asked for, and what was estimated before it ran."""
+    """What was estimated before the search ran, under what it is searching.
+
+    The launch site, the ranking and the tolerances used to be printed here as
+    well. They said nothing a reader did not already know - the site comes from
+    the mission file they named, and the other two are the same two sentences
+    on every search there has ever been - so the opening is now the two things
+    that do change: the vehicle and orbit asked for, and what the estimates
+    said about them.
+    """
     lines = [f'{result.vehicle.name} to {result.target_altitude / 1000:g} km, '
              f'{result.programme}']
-    _block(lines, 'search', [
-        ('launch site', f'{result.latitude_deg:g} deg latitude, '
-                        f'azimuth {result.azimuth_deg:g} deg'),
-        ('ranked by', 'how far the apogee and the perigee ended up from the '
-                      'circle asked for, added'),
-        ('reaches the orbit when', _conditions(result)),
-    ])
 
     early, late = result.window
     _block(lines, 'estimated in advance', [
@@ -285,14 +286,6 @@ def _preamble(result) -> list[str]:
         ('cut-off searched in', f'{early:.1f} to {late:.1f} s'),
     ])
     return lines
-
-
-def _conditions(result) -> str:
-    """The three tolerances a set has to meet, in one line."""
-    return (f'the perigee, the apogee and the altitude at cut-off are all '
-            f'within {result.tolerance / 1000:g} km of the target and the '
-            f'speed at cut-off is within {result.speed_tolerance:g} m/s of the '
-            f'speed of the orbit asked for')
 
 
 def _axes(result) -> list[tuple[str, str]]:
@@ -308,15 +301,17 @@ def _axes(result) -> list[tuple[str, str]]:
 def _grid_cost(result) -> list[tuple[str, str]]:
     """What the shape of the grid comes to: the passes and what they resolve."""
     refinements = max(result.passes - 1, 0)
-    passes = (f'{result.passes}, the sweep and {refinements} closing in on it, '
-              f'each one step wide about the best node and halving the step'
-              if refinements else f'{result.passes}, the sweep alone')
+    passes = (f'{result.passes}: one over the whole grid above, then '
+              f'{refinements} more, each looking only around the best set found '
+              f'so far and at half the spacing of the one before it'
+              if refinements else
+              f'{result.passes}: one over the whole grid above, and no more')
     rows = [('passes', passes)]
 
     finest = ', '.join(f'{name} {span.step / 2 ** refinements:g}'
                        for name, span in result.searched.items())
     if finest:
-        rows.append(('finest step', finest))
+        rows.append(('spacing at the end', finest))
     return rows
 
 

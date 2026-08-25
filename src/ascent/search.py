@@ -7,8 +7,9 @@ that come closest to the orbit, best first.
 **Every parameter of the turn is an axis.** Nothing is held behind the
 caller's back: the vertical rise, the shape of the turn, the instant the
 programme ends and the instant the engines do are all coordinates of the same
-grid, and each of them can be given its own range and its own step. What is
-held is held because a range said so - a range of one node - and the summary
+grid, and each of them can be given its own range and its own number of
+values. What is held is held because a range said so - a range of one - and the
+summary
 prints every axis with the range it was searched over, so a figure that did not
 move is a figure the caller can see was not asked to.
 
@@ -164,85 +165,82 @@ def default_workers() -> int:
 
 @dataclass(frozen=True)
 class Range:
-    """One axis of the grid: from `low`, in steps of `step`, up to `high`.
+    """One axis of the grid: `nodes` values evenly spaced from `low` to `high`.
 
-    A step rather than a count of nodes, because a step is what the parameter
-    is read in - two seconds of vertical rise, a hundredth of a share - and
-    because it is what says how finely the answer is resolved. `high` is a
-    ceiling and not necessarily a node: an axis from 10 to 30 in steps of 7
-    stops at 24, and the summary prints where it actually stopped.
+    A count rather than a step, because a count is what says what a pass will
+    cost - the grid is the product of the counts of its axes - and because both
+    ends of the range are then values the search actually tries. `nodes` of 1
+    is a single value at `low`, which is how a parameter is held.
 
-    A step of zero is an axis of one node, which is how a parameter is held.
+    The step follows from the three and is reported beside them, since it is
+    the step and not the count that says how finely the answer is resolved.
     """
     low: float
     high: float
-    step: float = 0.0
+    nodes: int = 1
 
     def __post_init__(self) -> None:
-        if not math.isfinite(self.low) or not math.isfinite(self.high) \
-                or not math.isfinite(self.step):
-            raise ValueError(f'a range has to be made of numbers, and not '
-                             f'{self.low}:{self.high}:{self.step}')
+        if not math.isfinite(self.low) or not math.isfinite(self.high):
+            raise ValueError(f'a range runs between two numbers, and not '
+                             f'between {self.low} and {self.high}')
+        if self.nodes != int(self.nodes) or self.nodes < 1:
+            raise ValueError(f'a range is walked in a whole number of values, '
+                             f'at least one, and not {self.nodes}')
+        # written as an int whatever it arrived as, so that two ranges of the
+        # same grid compare equal however each of them was built
+        object.__setattr__(self, 'nodes', int(self.nodes))
+
         if self.high < self.low:
             raise ValueError(f'a range runs from low to high, and not from '
                              f'{self.low:g} to {self.high:g}')
-        if self.step < 0.0:
-            raise ValueError(f'a range steps forwards, and not by {self.step:g}')
-        if self.step == 0.0 and self.high != self.low:
+        if self.nodes == 1 and self.high != self.low:
             raise ValueError(
-                f'a range of {self.low:g} to {self.high:g} needs a step to say '
-                f'how it is walked; a step of zero is a single value, and then '
-                f'the two ends have to be the same')
-        # a step small enough against the span that the count of nodes is no
-        # longer a number. Answered here, where the range is written, rather
-        # than met further down as an arithmetic error out of `nodes`
-        if self.step > 0.0 and not math.isfinite((self.high - self.low) / self.step):
+                f'one value between {self.low:g} and {self.high:g} does not say '
+                f'which of them it is; write it as the value on its own')
+        if self.nodes > 1 and self.high == self.low:
             raise ValueError(
-                f'a step of {self.step:g} over {self.low:g} to {self.high:g} is '
-                f'more nodes than there are numbers')
+                f'{self.nodes} values of {self.low:g} are one value; write it '
+                f'as the value on its own')
 
     @property
-    def nodes(self) -> int:
-        if self.step <= 0.0:
-            return 1
-        # the tolerance is what puts the top of the range on the grid when the
-        # span is a whole number of steps and the arithmetic says otherwise -
-        # 0 to 0.9 in steps of 0.05 is nineteen nodes, not eighteen
-        return int(math.floor((self.high - self.low) / self.step + 1e-9)) + 1
-
-    @property
-    def last(self) -> float:
-        """The top node, which is the ceiling only when the step divides it."""
-        return self.low + (self.nodes - 1) * self.step
+    def step(self) -> float:
+        """The distance between two neighbouring values, and 0 for one value."""
+        return 0.0 if self.nodes == 1 else (self.high - self.low) / (self.nodes - 1)
 
     def values(self) -> tuple[float, ...]:
+        if self.nodes == 1:
+            return (float(self.low),)
         # built from the low end and a multiple rather than accumulated, so
-        # that a node is where it says it is however many steps along it lies
-        return tuple(self.low + index * self.step for index in range(self.nodes))
+        # that a value is where it says it is however far along it lies - and
+        # the top end taken as itself, which the arithmetic would otherwise
+        # miss by a bit in the last place
+        step = self.step
+        return tuple(self.low + index * step
+                     for index in range(self.nodes - 1)) + (float(self.high),)
 
     def describe(self) -> str:
         if self.nodes == 1:
             return f'{self.low:g}, held'
-        return (f'{self.low:g} to {self.last:g} step {self.step:g} '
-                f'({self.nodes} nodes)')
+        return (f'{self.low:g} to {self.high:g}, {self.nodes} values, '
+                f'step {self.step:g}')
 
     # what a range looks like on the command line, quoted back at whoever gets
-    # it wrong. One place, so that the two ways of getting it wrong - the wrong
-    # punctuation and the wrong count of numbers - are answered the same way
-    SYNTAX = ('NAME=LOW:HIGH:STEP for a parameter to search, as in t1=10:30:2 '
-              '- from 10 to 30 in steps of 2 - or NAME=VALUE to hold one, as '
-              'in k2=0.05')
+    # it wrong. One place, so that the several ways of getting it wrong are all
+    # answered with the same thing
+    SYNTAX = ('NAME=LOW:HIGH:VALUES for a parameter to search, as in '
+              't1=10:25:10 - ten values from 10 to 25, one every 1.667 - or '
+              'NAME=VALUE to hold one, as in k2=0.05')
 
     @staticmethod
     def parse(text: str) -> tuple[str, "Range"]:
         """One axis as it is written on the command line.
 
-            t1=10:30:2      from 10 to 30 in steps of 2
+            t1=10:25:10     ten values from 10 to 25
             k2=0.05         held at 0.05
 
         The equals sign separates the parameter from its numbers and the colons
-        separate the numbers from each other, in the order a Python slice reads
-        in: low, high, step.
+        separate the numbers from each other: where it stops, where it ends, and
+        how many values to try between the two.
 
         The name comes back beside the range rather than being looked up here:
         what names a parameter is the family, and this does not know which
@@ -259,7 +257,7 @@ class Range:
                 f'{Range.SYNTAX}') from None
 
         if len(numbers) == 1:
-            return name, Range(numbers[0], numbers[0], 0.0)
+            return name, Range(numbers[0], numbers[0], 1)
         if len(numbers) == 3:
             return name, Range(*numbers)
         raise ValueError(
@@ -280,25 +278,20 @@ def parse_ranges(texts) -> dict[str, Range]:
 
 
 def _coarsen(ranges: dict[str, Range], factor: float) -> dict[str, Range]:
-    """The same axes with the nodes along each scaled, for a quicker look.
+    """The same axes with the values along each scaled, for a quicker look.
 
-    A factor below one lengthens the stride and thins the grid, which is the
-    quicker and rougher sweep; above one it shortens it. Applied to the step
-    rather than to a count of nodes, because a step is what an axis is made of
-    here - and it is what the summary prints back.
+    A factor below one thins the grid and lengthens the stride, which is the
+    quicker and rougher sweep; above one fills it in. Two values is as thin as
+    an axis gets: fewer would be an axis that had stopped covering the range it
+    was given, and a parameter is held by being given one value rather than by
+    being coarsened into one.
     """
     if factor == 1.0:
         return ranges
-    coarsened = {}
-    for name, span in ranges.items():
-        if span.nodes == 1:
-            coarsened[name] = span
-            continue
-        # never past the whole axis in one stride: an axis has to keep both of
-        # its ends, or a coarse pass would stop being a pass over the family
-        step = min(span.step / factor, span.high - span.low)
-        coarsened[name] = Range(span.low, span.high, step)
-    return coarsened
+    return {name: (span if span.nodes == 1 else
+                   Range(span.low, span.high,
+                         max(2, round(span.nodes * factor))))
+            for name, span in ranges.items()}
 
 
 # --- what a node comes to -------------------------------------------------
@@ -508,7 +501,7 @@ class SearchResult:
 # The vertical rise, in seconds. Every family has one and every family searches
 # it over the same range: it is the first thing a vehicle does and it is not a
 # property of the shape that follows.
-RISE = Range(12.0, 30.0, 6.0)
+RISE = Range(12.0, 30.0, 4)
 
 # Nodes along the cut-off axis of a first pass, spread over the window the
 # ascent-time estimate gives. A step of that window is worth tens of kilometres
@@ -519,7 +512,7 @@ CUT_OFF_NODES = 25
 
 def _window_axis(window: tuple[float, float]) -> Range:
     low, high = window
-    return Range(low, high, (high - low) / (CUT_OFF_NODES - 1))
+    return Range(low, high, CUT_OFF_NODES)
 
 
 class Family:
@@ -578,14 +571,14 @@ class FivePhase(Family):
     def ranges(self, window):
         return {
             't1': RISE,
-            'k2': Range(0.03, 0.09, 0.02),
+            'k2': Range(0.03, 0.09, 4),
             # up to 0.9 rather than to 1: k2 + k3 = 1 leaves the fourth phase
             # no time to arrest the pitch rate in, and the rate it would need
             # to is divided by that nothing
-            'k3': Range(0.0, 0.9, 0.05),
+            'k3': Range(0.0, 0.9, 19),
             't4': _window_axis(window),
-            'angle': Range(0.0, 0.0),
-            'coast': Range(0.0, 0.0),
+            'angle': Range(0.0, 0.0, 1),
+            'coast': Range(0.0, 0.0, 1),
         }
 
     def build(self, values):
@@ -619,12 +612,12 @@ class VelocityShare(Family):
     def ranges(self, window):
         return {
             't1': RISE,
-            'turn': Range(0.5, 1.0, 0.1),
+            'turn': Range(0.5, 1.0, 6),
             # the quartic has an interior stationary point outside this, where
             # the share leaves [0, 1] and the turn kinks
-            's': Range(-3.0, 3.0, 0.75),
+            's': Range(-3.0, 3.0, 9),
             'te': _window_axis(window),
-            'coast': Range(0.0, 0.0),
+            'coast': Range(0.0, 0.0, 1),
         }
 
     def build(self, values):
@@ -666,12 +659,12 @@ class BilinearTangent(Family):
     def ranges(self, window):
         return {
             't1': RISE,
-            'start': Range(80.0, 89.6, 2.4),
-            'mid': Range(0.5, 0.5),
-            'middle': Range(5.0, 60.0, 5.0),
+            'start': Range(80.0, 89.6, 5),
+            'mid': Range(0.5, 0.5, 1),
+            'middle': Range(5.0, 60.0, 12),
             'te': _window_axis(window),
-            'angle': Range(0.0, 0.0),
-            'coast': Range(0.0, 0.0),
+            'angle': Range(0.0, 0.0, 1),
+            'coast': Range(0.0, 0.0, 1),
         }
 
     def build(self, values):
@@ -813,7 +806,7 @@ def search(vehicle: LaunchVehicle, target_altitude: float, programme: str,
     """Sweep a grid over the parameters of `programme` for a circular orbit.
 
     Every parameter of the family is an axis. `ranges` replaces the range of
-    any of them - `{'t1': Range(10, 30, 2)}` - and a name the family does not
+    any of them - `{'t1': Range(10, 30, 11)}` - and a name the family does not
     have is refused rather than ignored. `Family.ranges` is what each family
     offers and what it is searched over when nothing is said; `plan` returns
     that grid without walking it.
@@ -998,8 +991,8 @@ def _closer(grid: dict[str, Range], centre: dict[str, float],
         low, high = bounds[name]
         near, far = (max(low, centre[name] - reach[name]),
                      min(high, centre[name] + reach[name]))
-        closer[name] = Range(near, far, (far - near) / (REFINED_NODES - 1)
-                             if far > near else 0.0)
+        closer[name] = (Range(near, far, REFINED_NODES) if far > near
+                        else Range(near, near, 1))
     return closer
 
 

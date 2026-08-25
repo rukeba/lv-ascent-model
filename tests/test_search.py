@@ -38,7 +38,7 @@ SITE = {'latitude_deg': 28.5, 'azimuth_deg': 90.0}
 # the vertical rise and k2 held where the catalogue holds them, k3 and the end
 # of the turn swept over four nodes each. Some 130 trajectories, three seconds.
 NARROW = {'t1': Range(20.0, 20.0), 'k2': Range(0.05, 0.05),
-          'k3': Range(0.50, 0.56, 0.02), 't4': Range(502.0, 503.5, 0.5),
+          'k3': Range(0.50, 0.56, 4), 't4': Range(502.0, 503.5, 4),
           'angle': Range(0.0, 0.0), 'coast': Range(0.0, 0.0)}
 
 
@@ -155,43 +155,43 @@ def test_a_family_that_is_not_one_is_refused():
 # --- ranges ---------------------------------------------------------------
 
 
-def test_a_range_walks_from_the_low_end_in_steps():
-    span = Range(10.0, 30.0, 5.0)
-    assert span.nodes == 5
+def test_a_range_is_a_count_of_values_between_two_ends():
+    span = Range(10.0, 30.0, 5)
     assert span.values() == (10.0, 15.0, 20.0, 25.0, 30.0)
-    assert span.last == 30.0
+    assert span.step == pytest.approx(5.0)
+    assert span.describe() == '10 to 30, 5 values, step 5'
 
 
-def test_a_range_stops_at_the_last_whole_step_and_says_so():
-    """The top of a range is a ceiling, not necessarily a node."""
-    span = Range(10.0, 30.0, 7.0)
-    assert span.values() == (10.0, 17.0, 24.0)
-    assert span.last == 24.0
-    assert '10 to 24 step 7 (3 nodes)' == span.describe()
+def test_both_ends_of_a_range_are_values_the_search_tries():
+    """A count divides the range; it does not walk off the end of it.
 
-
-def test_a_span_that_divides_by_its_step_keeps_its_top_node():
-    """0 to 0.9 in steps of 0.05 is nineteen nodes, not eighteen.
-
-    The arithmetic says otherwise - a twentieth is not a binary fraction - so
-    the count carries a tolerance, and this is what it is for.
+    Ten values from 10 to 25 is one every 1.667, and the last of them is 25
+    itself rather than whatever the arithmetic left behind.
     """
-    assert Range(0.0, 0.9, 0.05).nodes == 19
-    assert Range(0.0, 0.9, 0.05).values()[-1] == pytest.approx(0.9)
+    span = Range(10.0, 25.0, 10)
+    assert span.values()[0] == 10.0
+    assert span.values()[-1] == 25.0
+    assert span.step == pytest.approx(15.0 / 9.0)
 
 
-def test_a_parameter_is_held_by_a_range_of_one_node():
+def test_a_parameter_is_held_by_a_range_of_one_value():
     span = Range(0.05, 0.05)
     assert span.nodes == 1
     assert span.values() == (0.05,)
+    assert span.step == 0.0
     assert span.describe() == '0.05, held'
 
 
+def test_a_count_written_as_a_whole_number_of_any_kind_is_the_same_range():
+    """The command line reads its numbers as floats and this is where they land."""
+    assert Range(0.0, 1.0, 5.0) == Range(0.0, 1.0, 5)
+
+
 @pytest.mark.parametrize('text, expected', [
-    ('t1=10:30:2', ('t1', Range(10.0, 30.0, 2.0))),
-    ('k2=0.05', ('k2', Range(0.05, 0.05, 0.0))),
-    ('s=-3:3:0.5', ('s', Range(-3.0, 3.0, 0.5))),
-    (' t1 = 12:30:6 ', ('t1', Range(12.0, 30.0, 6.0))),
+    ('t1=10:25:10', ('t1', Range(10.0, 25.0, 10))),
+    ('k2=0.05', ('k2', Range(0.05, 0.05, 1))),
+    ('s=-3:3:9', ('s', Range(-3.0, 3.0, 9))),
+    (' t1 = 12:30:4 ', ('t1', Range(12.0, 30.0, 4))),
 ])
 def test_a_range_is_read_off_the_command_line(text, expected):
     assert Range.parse(text) == expected
@@ -204,9 +204,11 @@ def test_a_range_is_read_off_the_command_line(text, expected):
     ('t1=ten:30:2', 'made of numbers'),
     ('t1=10:30', 'takes one or three'),
     ('t1=10:20:30:40', 'takes one or three'),
-    ('t1=10:30:0', 'needs a step'),
+    ('t1=10:30:2.5', 'whole number of values'),
+    ('t1=10:30:0', 'whole number of values'),
+    ('t1=10:30:1', 'does not say which of them'),
+    ('t1=20:20:4', 'are one value'),
     ('t1=30:10:2', 'runs from low to high'),
-    ('t1=10:30:-2', 'steps forwards'),
 ])
 def test_a_range_that_is_not_one_says_what_one_looks_like(text, complaint):
     with pytest.raises(ValueError, match=complaint):
@@ -216,7 +218,7 @@ def test_a_range_that_is_not_one_says_what_one_looks_like(text, complaint):
 def test_a_parameter_given_two_ranges_is_refused():
     """The second would silently replace the first, which is not an answer."""
     with pytest.raises(ValueError, match='given a range twice'):
-        parse_ranges(['t1=10:30:2', 't1=12:20:4'])
+        parse_ranges(['t1=10:30:6', 't1=12:20:4'])
 
 
 # --- the grid, before it is walked ----------------------------------------
@@ -229,15 +231,15 @@ def outline(**overrides):
 
 
 def test_the_grid_takes_the_ranges_it_is_given():
-    grid = outline(ranges={'t1': Range(10.0, 30.0, 2.0)}).ranges
-    assert grid['t1'] == Range(10.0, 30.0, 2.0)
+    grid = outline(ranges={'t1': Range(10.0, 30.0, 11)}).ranges
+    assert grid['t1'] == Range(10.0, 30.0, 11)
     # and every other axis keeps the range the family gave it
     assert grid['k3'] == FivePhase().ranges((0.0, 1.0))['k3']
 
 
 def test_a_parameter_the_family_does_not_have_is_refused():
     with pytest.raises(ValueError, match='not a parameter of the five-phase'):
-        outline(ranges={'kick': Range(1.0, 2.0, 0.5)})
+        outline(ranges={'kick': Range(1.0, 2.0, 3)})
 
 
 def test_the_cut_off_is_searched_over_the_window_the_estimate_gives():
@@ -268,7 +270,7 @@ def test_a_coarser_grid_is_a_thinner_one():
 
     An axis the caller wrote out is left alone: that step was asked for.
     """
-    given = {'k3': Range(0.0, 0.9, 0.05)}
+    given = {'k3': Range(0.0, 0.9, 19)}
     fine = outline(ranges=given, coarseness=1.0)
     rough = outline(ranges=given, coarseness=0.5)
 
@@ -310,7 +312,7 @@ def test_a_grid_too_large_to_walk_is_refused_before_it_is_walked():
     a grid past the limit is refused rather than started on - and `plan` is not
     held to it, because looking at such a grid is how it gets found.
     """
-    enormous = {'k3': Range(0.0, 0.9, 0.9 / 6_000_000)}
+    enormous = {'k3': Range(0.0, 0.9, 6_000_001)}
     assert outline(ranges=enormous).ranges['k3'].nodes > NODE_LIMIT
 
     with pytest.raises(ValueError, match='past the'):
@@ -321,7 +323,7 @@ def test_a_grid_too_large_to_walk_is_refused_before_it_is_walked():
 
 
 def test_closing_in_halves_the_step_and_keeps_the_centre():
-    grid = {'k3': Range(0.0, 1.0, 0.25)}
+    grid = {'k3': Range(0.0, 1.0, 5)}
     closer = _closer(grid, {'k3': 0.5}, {'k3': 0.25}, {'k3': (0.0, 1.0)})
 
     assert (closer['k3'].low, closer['k3'].high) == (0.25, 0.75)
@@ -332,7 +334,7 @@ def test_closing_in_halves_the_step_and_keeps_the_centre():
 
 
 def test_closing_in_stays_inside_the_range_it_was_given():
-    grid = {'s': Range(-3.0, 3.0, 1.5)}
+    grid = {'s': Range(-3.0, 3.0, 5)}
     closer = _closer(grid, {'s': 3.0}, {'s': 1.5}, {'s': (-3.0, 3.0)})
     assert (closer['s'].low, closer['s'].high) == (1.5, 3.0)
 
@@ -358,7 +360,7 @@ def test_a_column_has_the_decimals_to_tell_its_nodes_apart(low, step):
     """
     from ascent.summary import _decimals
 
-    nodes = Range(low, low + 4 * step, step).values()
+    nodes = Range(low, low + 4 * step, 5).values()
     printed = [f'{value:.{_decimals(step)}f}' for value in nodes]
     assert len(set(printed)) == len(printed), printed
 
@@ -384,20 +386,20 @@ def test_the_search_recovers_the_set_on_file(found):
 # velocity share's turn ends at 0.9732 of the cut-off; the bilinear tangent
 # starts at 87.934 degrees and has reached 29.506 half way along its turn.
 #
-# The step on the bilinear tangent's cut-off is a fortieth of a second where
-# the velocity share gets three quarters of one, and that is the family rather
-# than the test. It reaches the horizon linearly, so how far the cut-off falls
+# The bilinear tangent's cut-off is split to a fortieth of a second where the
+# velocity share gets three quarters of one, and that is the family rather than
+# the test. It reaches the horizon linearly, so how far the cut-off falls
 # past the end of its turn is the eccentricity of the orbit: the floor of the
 # valley it is being searched down is some hundredths of a second wide, and a
 # grid whose step steps over it finds the wall instead.
 NARROW_BY_FAMILY = {
-    'velocity-share': ({'t1': Range(20.0, 20.0), 'turn': Range(0.96, 0.99, 0.015),
+    'velocity-share': ({'t1': Range(20.0, 20.0), 'turn': Range(0.96, 0.99, 3),
                         's': Range(1.1194, 1.1194),
-                        'te': Range(501.5, 503.0, 0.75),
+                        'te': Range(501.5, 503.0, 3),
                         'coast': Range(0.0, 0.0)}, 502.193),
     'bilinear-tangent': ({'t1': Range(20.0, 20.0), 'start': Range(87.934, 87.934),
-                          'mid': Range(0.5, 0.5), 'middle': Range(29.3, 29.7, 0.2),
-                          'te': Range(500.85, 500.97, 0.04),
+                          'mid': Range(0.5, 0.5), 'middle': Range(29.3, 29.7, 3),
+                          'te': Range(500.85, 500.97, 4),
                           'angle': Range(0.0, 0.0),
                           'coast': Range(0.0, 0.0)}, 500.910),
 }
@@ -532,7 +534,7 @@ def test_the_screen_drops_nodes_without_flying_them():
     dropped without a trajectory, and `screen=False` is how that is checked:
     the same grid flown whole finds everything the screened one did.
     """
-    wide = {**NARROW, 't4': Range(470.0, 524.0, 6.0)}
+    wide = {**NARROW, 't4': Range(470.0, 524.0, 10)}
     screened = quick(ranges=wide, refinements=0)
     whole = quick(ranges=wide, refinements=0, screen=False)
 

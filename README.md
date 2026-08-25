@@ -35,7 +35,7 @@ uv run ascent f9 -a 650 -p bt               # the same, in short
 
 uv run ascent-search f9 --altitude 500      # search for a set instead of flying one
 uv run ascent-search f9 -a 500 -p 5f --dry-run          # the grid, before it is flown
-uv run ascent-search f9 -a 500 -p 5f --range t1=10:30:2 # one parameter, my way
+uv run ascent-search f9 -a 500 -p 5f --range t1=10:25:10 # one parameter, my way
 uv run ascent-search f9 -a 650 -p bt --yaml
 ```
 
@@ -374,7 +374,7 @@ reach the orbit, ranked by how close each came.
 uv run ascent-search f9 --altitude 500
 uv run ascent-search f9 --altitude 650 --programme bilinear-tangent
 uv run ascent-search f9 -a 500 -p 5f --dry-run             # the grid, before it is flown
-uv run ascent-search f9 -a 500 -p 5f --range t1=10:30:2    # one parameter, my way
+uv run ascent-search f9 -a 500 -p 5f --range t1=10:25:10   # one parameter, my way
 uv run ascent-search f9 -a 500 -p 5f --range k2=0.05       # or held at one value
 uv run ascent-search a62 --altitude 700 --yaml             # as a catalogue entry
 uv run ascent-search f9 --altitude 500 --report            # fly it and report it
@@ -410,7 +410,7 @@ once for the process that was asked and once again for every worker it had.
 **Every parameter of the turn is an axis.** Nothing is held behind your back.
 The vertical rise, the shape of the turn, the instant the programme ends and
 the instant the engines do are all coordinates of the same grid, and `--dry-run`
-prints every one of them with the range and the step it will be searched over:
+prints every one of them with the range and the number of values it will be searched over:
 
 | family | parameters on the grid, and what each is |
 |---|---|
@@ -442,15 +442,17 @@ mission file does.
 **How a grid is written.** One `--range` per parameter, repeatable:
 
 ```sh
---range t1=10:30:2      # from 10 to 30 in steps of 2 — eleven nodes
---range k2=0.05         # held at 0.05 — one node
+--range t1=10:25:10     # ten values from 10 to 25, one every 1.667
+--range k2=0.05         # held at 0.05 — one value
 ```
 
 The equals sign separates the parameter from its numbers and the colons
-separate the numbers from each other, in the order a Python slice reads in:
-low, high, step. The top of a range is a ceiling rather than necessarily a
-node — `t1=10:30:7` stops at 24 — and the summary prints where it actually
-stopped. A parameter the family does not have is refused at the command line,
+separate the numbers from each other: where it starts, where it ends, and how
+many values to try between the two. A count rather than a step, because a count
+is what says what the search will cost — the grid is the product of the counts
+of its axes — and because both ends of a range are then values the search
+actually tries. The step follows from the three and the summary prints it
+alongside. A parameter the family does not have is refused at the command line,
 with the parameters it does have, rather than several minutes into a search
 that has already started.
 
@@ -574,8 +576,8 @@ its valley is a few hundredths of a second wide where the other two are a good
 deal wider.
 Where that matters, the answer is the staged recipe below rather than more
 passes. The same orbit searched again on a grid narrowed to what the first
-search found, with a step of a fiftieth of a second on `te`, comes back 4 m out
-like the other two.
+search found, its `te` split fine enough to step a fiftieth of a second at a
+time, comes back 4 m out like the other two.
 
 **What it costs.**
 
@@ -620,8 +622,8 @@ uv run ascent-search f9 -a 500 -p bt --refinements 0 --csv out/map.csv
 
 # and the set: narrowed on to what the map showed, with a fine step on te
 uv run ascent-search f9 -a 500 -p bt \
-    --range t1=20 --range start=87:89:0.5 \
-    --range middle=29:31:0.25 --range te=500.5:501.5:0.02
+    --range t1=20 --range start=87:89:5 \
+    --range middle=29:31:9 --range te=500.5:501.5:51
 ```
 
 `--dry-run` on the second of those says what it will cost before it costs it.
