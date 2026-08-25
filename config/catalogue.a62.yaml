@@ -15,8 +15,8 @@
 # A set counts as reaching the orbit when the perigee, the apogee and the
 # altitude at cut-off are all within 500 m of the target and the inertial speed
 # at cut-off is within 10 m/s of the speed of that circular orbit. So `reached`
-# does not read 400.00 and 400.00 the way a root find would leave it: it reads
-# what the search actually landed on, inside that half-kilometre.
+# does not read the target back twice over the way a root find would leave it:
+# it reads what the search actually landed on, inside that half-kilometre.
 #
 # Every instant is a whole tenth of a second - the vertical rise, the end of
 # the programme and the cut-off - because that is the finest a timeline is ever

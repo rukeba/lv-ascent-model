@@ -33,20 +33,52 @@ def test_entry_flies_as_recorded(spec):
     assert abs(recorded['apogee_km'] - target) <= 1.0
 
 
-def test_catalogue_covers_every_vehicle_and_programme():
-    """A guard against the catalogue being silently truncated.
+# Every combination the catalogue holds, written out. Which of them are present
+# is not a rule - it is what searching thirty of them returned, and the nine
+# that are absent are absent for three different reasons, each named in the
+# header of the file it belongs to. That is exactly why this is a list and not
+# a count: a rule could be restated, but a set that stopped being found, or one
+# that started being found, is a change in what the search does and has to be
+# read and agreed to rather than absorbed.
+COVERED = {
+    'lv.f9': {
+        400_000: {'five-phase', 'velocity-share'},
+        500_000: {'five-phase', 'velocity-share', 'bilinear-tangent'},
+        600_000: {'five-phase', 'velocity-share', 'bilinear-tangent'},
+        700_000: {'five-phase', 'bilinear-tangent'},
+    },
+    'lv.a62': {
+        400_000: {'velocity-share'},
+        500_000: {'velocity-share'},
+        600_000: {'velocity-share'},
+    },
+    'lv.h3': {
+        1_000_000: {'five-phase', 'velocity-share', 'bilinear-tangent'},
+        1_100_000: {'five-phase', 'velocity-share'},
+        1_200_000: {'five-phase', 'velocity-share', 'bilinear-tangent'},
+    },
+}
 
-    Which combinations are present is a property of the programmes - not every
-    family reaches every orbit - so this checks breadth rather than a full grid.
+
+def test_catalogue_holds_exactly_the_sets_that_were_found():
+    """A guard against the catalogue being silently truncated, or grown.
+
+    Counting entries would not do it. The test that flies them is parametrised
+    over the file, so an entry that vanished would take its own check with it
+    and the suite would pass on what was left; and a breadth check loose enough
+    to allow the gaps that are there is loose enough to allow most of a vehicle
+    to go missing. So the whole matrix is pinned, both ways.
     """
-    assert {spec['vehicle'] for spec in CATALOGUE} == {'lv.f9', 'lv.a62', 'lv.h3'}
-    assert {spec['pitch_programme']['type'] for spec in CATALOGUE} == {
-        'five-phase', 'velocity-share', 'bilinear-tangent'}
+    held: dict[str, dict[int, set[str]]] = {}
+    for spec in CATALOGUE:
+        held.setdefault(spec['vehicle'], {}).setdefault(
+            spec['target_altitude'], set()).add(spec['pitch_programme']['type'])
 
-    for vehicle in ('lv.f9', 'lv.a62', 'lv.h3'):
-        altitudes = {spec['target_altitude'] for spec in CATALOGUE
-                     if spec['vehicle'] == vehicle}
-        assert len(altitudes) >= 3, f'{vehicle} covers only {sorted(altitudes)}'
+    assert held == COVERED
+
+    # and no combination is filed twice, which the sets above would hide
+    assert len(CATALOGUE) == sum(len(programmes) for vehicle in COVERED.values()
+                                 for programmes in vehicle.values())
 
 
 def test_every_vehicle_is_kept_in_its_own_file():
