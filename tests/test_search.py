@@ -22,6 +22,7 @@ import pytest
 
 from ascent.config import (PITCH_PROGRAMMES, load_catalogue, load_vehicle,
                            mission_from_spec)
+from ascent.constants import circular_velocity
 from ascent.estimates import equivalent_time
 from ascent.search import (FAMILIES, NODE_LIMIT, REFINED_NODES,
                            BilinearTangent, FivePhase, Range, VelocityShare,
@@ -439,6 +440,27 @@ def test_the_terminal_state_is_read_where_the_orbit_is(found):
     mean = 0.5 * (best.orbit.perigee_altitude + best.orbit.apogee_altitude)
     assert best.altitude == pytest.approx(mean, abs=200.0)
     assert best.speed_miss < 2.0
+
+
+def test_the_speed_is_judged_against_the_orbit_asked_for(found):
+    """Not against a circle through wherever the vehicle happened to be.
+
+    A set that levels off twenty kilometres low and goes exactly the speed a
+    circle at that altitude wants is on a perfect orbit, and not the one asked
+    for. Measured against the target it shows that miss; measured against its
+    own altitude it would show nothing at all - which is why the summary says
+    the speed is against the orbit asked for and this says the same in figures.
+    """
+    target = circular_velocity(500_000)
+    for candidate in found.found:
+        assert candidate.speed_miss == pytest.approx(abs(candidate.speed - target))
+
+    # and the two readings are not the same reading, so the choice is a choice:
+    # the grid reaches from some ten kilometres under the target to ten over
+    lowest = min(found.found, key=lambda candidate: candidate.altitude)
+    assert lowest.altitude < 495_000
+    assert abs(lowest.speed - circular_velocity(lowest.altitude)) > 4.0
+    assert lowest.speed_miss < 2.0
 
 
 def test_a_set_is_judged_by_all_three_errors(found):

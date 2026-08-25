@@ -443,8 +443,11 @@ that has already started.
 a circular orbit at a given altitude:
 
 - the **altitude** at cut-off, against the target;
-- the **speed** there, against the speed of that circular orbit. The inertial
-  speed, because that is what the orbit is built from;
+- the **speed** there, against the speed of the circular orbit that was asked
+  for — not against a circle through wherever the vehicle happened to be, which
+  a set that levelled off twenty kilometres low would satisfy exactly while
+  missing the orbit entirely. The inertial speed, because that is what the
+  orbit is built from;
 - the **orbit** itself: how far the apogee and the perigee each ended up from
   the circle asked for. Their sum is the ranking.
 

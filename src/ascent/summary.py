@@ -267,7 +267,8 @@ def _conditions(result) -> str:
     """The three tolerances a set has to meet, in one line."""
     return (f'the perigee, the apogee and the altitude at cut-off are all '
             f'within {result.tolerance / 1000:g} km of the target and the '
-            f'speed there is within {result.speed_tolerance:g} m/s of circular')
+            f'speed at cut-off is within {result.speed_tolerance:g} m/s of the '
+            f'speed of the orbit asked for')
 
 
 def _axes(result) -> list[tuple[str, str]]:
@@ -422,7 +423,7 @@ def _found(result) -> list[str]:
         ('altitude at cut-off', f'{best.altitude / 1000:.3f} km, '
                                 f'{best.altitude_miss:.0f} m out'),
         ('speed at cut-off', f'{best.speed:.1f} m/s, {best.speed_miss:.1f} m/s '
-                             f'from the circular speed there'),
+                             f'from the speed of the orbit asked for'),
         ('perigee', f'{orbit.perigee_altitude / 1000:.3f} km'),
         ('apogee', f'{orbit.apogee_altitude / 1000:.3f} km'),
         ('eccentricity', f'{orbit.eccentricity:.6f}'),

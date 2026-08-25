@@ -22,8 +22,11 @@ search narrowed on to what it found is how the set itself is reached.
 a circular orbit at a given altitude:
 
   - the altitude at cut-off, against the target;
-  - the speed at cut-off, against the speed of the circular orbit there. The
-    inertial speed, because that is what the orbit is built from;
+  - the speed at cut-off, against the speed of the circular orbit that was
+    asked for - not against a circle through wherever the vehicle happened to
+    be, which a set that levelled off twenty kilometres low would satisfy
+    exactly while missing the orbit entirely. The inertial speed, because that
+    is what the orbit is built from;
   - the orbit itself: how far the apogee and the perigee each ended up from the
     circle asked for. Their sum is the ranking. It is zero only when apogee =
     perigee = target, which is the altitude and the circularity at once, in the
@@ -310,7 +313,9 @@ class Candidate:
     cutoff_time: float
     orbit: Orbit
     # the state at cut-off: altitude (m), inertial speed (m/s), flight-path
-    # angle (deg). These are what the first two errors are read off
+    # angle (deg). These are what the first two errors are read off, and the
+    # speed is the inertial one - the orbit is built from that and not from the
+    # speed relative to a turning Earth
     altitude: float
     speed: float
     flight_path_angle: float
@@ -1164,6 +1169,12 @@ class _Flight:
         budget = velocity_budget(telemetry, mission.omega)
 
         altitude_miss = abs(altitude - self.target_altitude)
+        # against the speed of the orbit asked for, and deliberately not
+        # against the circular speed at the altitude this set happens to have
+        # reached. A set that levels off twenty kilometres low at exactly the
+        # speed a circle there wants is on a perfect orbit and not the one
+        # asked for: measured against the target it shows that miss, and
+        # measured against its own altitude it would show nothing at all
         speed_miss = abs(speed - self.target_speed)
         apogee_miss = abs(orbit.apogee_altitude - self.target_altitude)
         perigee_miss = abs(orbit.perigee_altitude - self.target_altitude)
