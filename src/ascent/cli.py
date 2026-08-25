@@ -109,7 +109,7 @@ def _fly(argv: list[str] | None) -> int:
 
     if arguments.altitude is not None or arguments.programme is not None:
         entry = find_in_catalogue(
-            load_catalogue(directory / 'catalogue.yaml'),
+            load_catalogue(directory),
             vehicle=spec['vehicle'],
             target_altitude=(arguments.altitude * 1000 if arguments.altitude is not None
                              else spec['target_altitude']),
@@ -179,7 +179,7 @@ def _report_directory(given: str, vehicle: str) -> Path:
 
 
 def _list(directory: Path, vehicle: str) -> None:
-    catalogue = [spec for spec in load_catalogue(directory / 'catalogue.yaml')
+    catalogue = [spec for spec in load_catalogue(directory)
                  if spec['vehicle'] == vehicle]
     print(f'{"altitude":>10}{"programme":>18}{"cut-off":>10}'
           f'{"steering":>10}{"total loss":>12}')

@@ -30,18 +30,18 @@ def test_mission_given_by_path_brings_its_own_vehicle(tmp_path):
 
 
 def test_catalogue_entry_is_flown_when_asked_for():
-    assert main(['f9', '--altitude', '650', '--programme', 'bilinear-tangent']) == 0
+    assert main(['f9', '--altitude', '600', '--programme', 'bilinear-tangent']) == 0
 
 
 def test_a_catalogue_entry_is_flown_from_the_pad_the_mission_file_names(capsys):
     """The catalogue holds a site as two numbers; the file gives it a name."""
-    assert main(['f9', '--altitude', '650']) == 0
+    assert main(['f9', '--altitude', '600']) == 0
     assert 'Cape Canaveral SLC-40, Florida' in capsys.readouterr().out
 
 
 def test_a_catalogue_entry_can_be_asked_for_in_short():
     """`-a` is the altitude and `-p` the programme, by its short name."""
-    assert main(['f9', '-a', '650', '-p', 'bt']) == 0
+    assert main(['f9', '-a', '600', '-p', 'bt']) == 0
 
 
 def test_every_short_name_stands_for_a_family_that_can_be_searched():

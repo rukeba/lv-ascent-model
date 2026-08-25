@@ -32,7 +32,7 @@ from ascent.search import (FAMILIES, NODE_LIMIT, REFINED_NODES,
                            search)
 
 FALCON = load_vehicle('config/lv.f9.yaml')
-CATALOGUE = load_catalogue('config/catalogue.yaml')
+CATALOGUE = load_catalogue('config')
 SITE = {'latitude_deg': 28.5, 'azimuth_deg': 90.0}
 
 # A five-phase grid narrowed on to the catalogue's own set for 500 km: the
