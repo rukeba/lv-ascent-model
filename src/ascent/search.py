@@ -63,6 +63,7 @@ answered it.
 
 import math
 import os
+import signal
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass, field
 from itertools import product
@@ -875,6 +876,14 @@ def search(vehicle: LaunchVehicle, target_altitude: float, programme: str,
             # five nodes over the two widths either side, so the next pass
             # resolves every axis it is searching twice as finely as this one
             reach = {name: 0.5 * width for name, width in reach.items()}
+    except KeyboardInterrupt:
+        # the queue holds most of a pass, and a plain shutdown would wait for
+        # every node of it before letting the interrupt through - which is the
+        # whole pass, and the whole point of stopping was not to walk it
+        if pool is not None:
+            pool.shutdown(wait=False, cancel_futures=True)
+            pool = None
+        raise
     finally:
         if pool is not None:
             pool.shutdown()
@@ -1212,8 +1221,18 @@ _WORKER: _Flight | None = None
 
 
 def _begin(flight: _Flight) -> None:
+    """Set a worker up: the flight it answers with, and deafness to Ctrl+C.
+
+    An interrupt reaches every process of a console at once, so without this
+    each worker raises out of the middle of a trajectory and prints its own
+    stack, which is a dozen of them for one press of two keys. The process that
+    was asked keeps its own handler and is the one that stops the search - it
+    shuts the pool down and cancels what has not started - so nothing is left
+    running by their ignoring it.
+    """
     global _WORKER
     _WORKER = flight
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
 
 
 def _answer(values: dict[str, float]) -> Node:

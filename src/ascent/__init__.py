@@ -15,7 +15,8 @@ from .orbit import Orbit, orbit_from_state
 from .pitch import (BilinearTangentProgramme, FivePhaseProgramme,
                     VelocityShareProgramme, bilinear_coefficients)
 from .search import Candidate, Range, SearchResult, plan, search
-from .summary import summarise, summarise_plan, summarise_search
+from .summary import (summarise, summarise_found, summarise_plan,
+                      summarise_search)
 from .telemetry import Telemetry
 from .vehicle import LaunchVehicle, Stage
 
@@ -26,6 +27,6 @@ __all__ = [
     'Telemetry', 'VelocityBudget', 'VelocityShareProgramme',
     'analytic_altitude', 'bilinear_coefficients', 'equivalent_time',
     'load_mission', 'load_vehicle', 'orbit_from_state', 'plan',
-    'required_velocity', 'search', 'summarise', 'summarise_plan',
-    'summarise_search', 'vacuum_time', 'velocity_budget',
+    'required_velocity', 'search', 'summarise', 'summarise_found',
+    'summarise_plan', 'summarise_search', 'vacuum_time', 'velocity_budget',
 ]

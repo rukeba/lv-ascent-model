@@ -33,7 +33,7 @@ from .config import (PITCH_PROGRAMMES, PROGRAMME_ALIASES, find_in_catalogue,
                      programme_name, read_spec, resolve)
 from .search import (FAMILIES, REFINEMENTS, SPEED_TOLERANCE, TOP, axis_names,
                      default_workers, parse_ranges, plan, search)
-from .summary import summarise, summarise_plan, summarise_search
+from .summary import summarise, summarise_found, summarise_plan
 
 
 def _programmes(names) -> str:
@@ -43,7 +43,33 @@ def _programmes(names) -> str:
                      for name in sorted(names))
 
 
+def quietly(run, argv) -> int:
+    """Run an entry point, and let Ctrl+C end it without a traceback.
+
+    A search is minutes long and stopping one part way through is an ordinary
+    thing to do, not an error: what the interpreter would otherwise print is a
+    stack from the middle of a process pool, once for the process that was
+    asked and once again for every one of its workers. None of it says anything
+    the person who pressed the keys did not already know.
+
+    The newline goes first because a search writes its progress in place, and
+    what is being closed off is that line: without it the word below would land
+    in the middle of it and the shell prompt after that.
+    """
+    try:
+        return run(argv)
+    except KeyboardInterrupt:
+        print('\nstopped', file=sys.stderr)
+        # what a shell reports for a program stopped by an interrupt
+        return 130
+
+
 def main(argv: list[str] | None = None) -> int:
+    """Entry point of `ascent`: fly one mission and report it."""
+    return quietly(_fly, argv)
+
+
+def _fly(argv: list[str] | None) -> int:
     parser = argparse.ArgumentParser(
         prog='ascent', description='Simulate the powered ascent of a launch vehicle.')
     parser.add_argument('mission', help='mission name (f9) or path to a mission YAML file')
@@ -225,7 +251,16 @@ def _clock(seconds: float) -> str:
 
 
 def search_main(argv: list[str] | None = None) -> int:
-    """Entry point of `ascent-search`: solve for a programme instead of flying one.
+    """Entry point of `ascent-search`: search for a programme instead of flying one.
+
+    See `_search` below for what it does; this is the wrapper that lets Ctrl+C
+    end it without a stack trace.
+    """
+    return quietly(_search, argv)
+
+
+def _search(argv: list[str] | None) -> int:
+    """Search a grid over every parameter of a pitch programme.
 
         ascent-search f9 --altitude 500
         ascent-search f9 -a 500 -p 5f --range t1=10:30:2   # one axis, my way
@@ -364,19 +399,26 @@ def search_main(argv: list[str] | None = None) -> int:
     )
     vehicle = load_vehicle(mission_path.parent / f'{vehicle_file}.yaml')
 
-    if arguments.dry_run:
-        print(summarise_plan(plan(vehicle, **settings)))
-        return 0
-
     # with `--yaml` the entry is the whole of what this command is for, so
     # everything else goes to the error stream and a redirect of the output is
     # a file the catalogue reader can read
     told = sys.stderr if arguments.yaml else sys.stdout
+
+    # what is about to be searched, printed before it is searched. A grid is
+    # minutes of integration and the thing most worth knowing about one is
+    # whether it is the grid that was meant, which is a question with a short
+    # answer and a long wait behind it
+    print(summarise_plan(plan(vehicle, **settings)), file=told, flush=True)
+    if arguments.dry_run:
+        return 0
+
+    # a line of its own between the grid and the progress that walks it
+    print(file=told, flush=True)
     progress = _Progress(sys.stderr)
     result = search(vehicle, workers=arguments.workers,
                     screen=not arguments.no_screen, report=progress, **settings)
     progress.finish()
-    print(summarise_search(result), file=told)
+    print(summarise_found(result), file=told)
 
     if arguments.csv:
         print(f'\nsets found: {_write_search_csv(result, Path(arguments.csv))}',

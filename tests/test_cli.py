@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from ascent.cli import main, search_main
+from ascent.cli import main, quietly, search_main
 from ascent.config import PROGRAMME_ALIASES, programme_name
 from ascent.search import FAMILIES
 
@@ -138,6 +138,39 @@ def test_the_search_prints_the_sets_it_found_as_a_table(capsys):
     assert 'k3' in header and 't4' in header
     assert 'k2' not in header
     assert '  k2                      0.05, held' in written
+
+
+def test_the_grid_is_printed_before_it_is_walked(capsys):
+    """What is about to be searched, while there is still time to stop it.
+
+    A search is minutes of integration, so the grid comes first and the results
+    come after it - and `nodes planned` belongs to the first half only, because
+    the second half has `nodes visited` and does not want the two side by side.
+    """
+    assert search_main(['f9', '--altitude', '500', '--programme', '5f',
+                        *NARROW, '--top', '3']) == 0
+
+    written = capsys.readouterr().out
+    assert written.index('GRID') < written.index('COST')
+    assert written.index('nodes planned') < written.index('nodes visited')
+    assert written.count('nodes planned') == 1
+
+
+def test_an_interrupted_command_ends_without_a_stack(capsys):
+    """Ctrl+C is an ordinary way to stop a search, and not an error.
+
+    What the interpreter would print instead is a stack from the middle of a
+    process pool, once for the process that was asked and once for every worker
+    it had. The newline is what closes off the progress line the search was
+    writing in place.
+    """
+    def interrupted(argv):
+        raise KeyboardInterrupt
+
+    assert quietly(interrupted, []) == 130
+    written = capsys.readouterr()
+    assert written.err == '\nstopped\n'
+    assert 'Traceback' not in written.err and 'Traceback' not in written.out
 
 
 def test_the_grid_can_be_looked_at_before_it_is_walked(capsys):

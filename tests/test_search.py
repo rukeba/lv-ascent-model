@@ -17,6 +17,8 @@ figures.
 import copy
 import dataclasses
 import inspect
+import subprocess
+import sys
 
 import pytest
 
@@ -533,6 +535,51 @@ def test_a_set_that_overstresses_the_airframe_is_not_an_answer():
     assert constrained.found == []
     assert constrained.best is None
     assert not constrained.reaches_orbit
+
+
+def test_a_search_can_be_interrupted_part_way_through_a_pass():
+    """And the pool lets go of the rest of the pass rather than walking it.
+
+    The interrupt is raised where one really arrives - in the process that was
+    asked, between one node and the next - and what is under test is that it
+    comes back out as itself. That it comes back promptly is under test too,
+    though not as an assertion: the queue holds most of a pass, and a search
+    that waited for all of it would hang this suite rather than fail it.
+    """
+    def interrupt(result):
+        if result.pass_node >= 3:
+            raise KeyboardInterrupt
+
+    with pytest.raises(KeyboardInterrupt):
+        quick(refinements=0, workers=2, report=interrupt)
+
+
+def test_a_worker_does_not_answer_the_interrupt():
+    """One press of Ctrl+C, one stack at most - and this is why there is none.
+
+    An interrupt reaches every process of a console at once, so a worker that
+    kept the default handler would raise out of the middle of a trajectory and
+    print its own stack, a dozen of them for one press of two keys. Checked in
+    a process of its own, because what it checks is a process being made deaf
+    to Ctrl+C and this suite would like to keep hearing it.
+    """
+    asked = subprocess.run(
+        [sys.executable, '-c', 'import signal; from ascent.search import _begin;'
+                               '_begin(None);'
+                               'print(signal.getsignal(signal.SIGINT) is signal.SIG_IGN)'],
+        capture_output=True, text=True)
+    assert asked.stdout.strip() == 'True', asked.stderr
+
+
+def test_the_two_halves_of_the_summary_are_the_whole_of_it(found):
+    """`ascent-search` prints them apart; a script asking for both gets both."""
+    from ascent.summary import summarise_found, summarise_plan, summarise_search
+
+    whole = summarise_search(found)
+    assert whole.startswith(summarise_plan(found, planned=False))
+    assert whole.endswith(summarise_found(found))
+    # and the figure about a search that has not run yet is not in either
+    assert 'nodes planned' not in whole
 
 
 def test_dividing_the_grid_over_processes_finds_the_same_set():

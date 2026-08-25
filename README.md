@@ -389,8 +389,23 @@ The mission file supplies the vehicle and the launch site and nothing else;
 turns it into that same entry, flies it and writes the page `ascent --report`
 writes, so a set that was searched for and one that was filed give the same
 report. A set that misses the orbit is not an entry: it is printed, and it is
-not flown. A search prints its progress as it runs — which pass it is on, how
-many trajectories it has integrated and roughly how much longer it will take.
+not flown.
+
+**What a search prints, and when.** The grid comes first, before anything is
+flown: the orbit asked for, what a set has to meet to count as reaching it,
+what the two estimates said, and every parameter of the family with the range
+and the step it is searched over. That is minutes of integration described in
+twenty lines, and it is worth reading while there is still time to stop and
+narrow it — `--dry-run` prints exactly that and stops there of its own accord.
+Then the progress line, rewritten in place: which pass it is on, how many
+trajectories it has integrated and roughly how much longer it will take. Then
+what became of every node, the table, and the set found.
+
+Ctrl+C ends a search where it stands, without a stack trace. Stopping one part
+way through is an ordinary thing to do — the grid was wider than it needed to
+be, or the progress line has already said what you wanted to know — and what
+the interpreter would otherwise print is a stack from inside a process pool,
+once for the process that was asked and once again for every worker it had.
 
 **Every parameter of the turn is an axis.** Nothing is held behind your back.
 The vertical rise, the shape of the turn, the instant the programme ends and

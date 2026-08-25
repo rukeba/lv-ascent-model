@@ -198,12 +198,52 @@ def _propellant_left(vehicle: LaunchVehicle, telemetry: Telemetry, index: int) -
 def summarise_search(result) -> str:
     """The console summary of a parameter search: what it swept, what it found.
 
+    The two halves of it, back to back. `ascent-search` prints them apart - the
+    first before the search starts and the second when it has finished -
+    because what is about to be searched is worth reading while there is still
+    time to stop and narrow it. Anything calling this from a script has both
+    halves at once and neither problem.
+
     `result` is a `search.SearchResult`, left untyped so that this module says
     nothing about the search: a flight summary has no business importing the
     machinery that goes looking for one.
     """
+    return summarise_plan(result, planned=False) + '\n' + summarise_found(result)
+
+
+def summarise_plan(result, planned: bool = True) -> str:
+    """What is being searched for and over what grid: the opening half.
+
+    Where a search is going to look, before it looks - the orbit asked for,
+    what a set has to meet to count as reaching it, what the two estimates said
+    in advance, and every parameter of the family with the range and the step
+    it is searched over. `ascent-search` prints this as it starts, so that a
+    grid worth narrowing can be seen while there is still time to narrow it;
+    `--dry-run` prints it and stops there.
+
+    `planned` adds the nodes the passes come to, which is a figure about a
+    search that has not run yet. A finished one has `nodes visited` in the half
+    below and does not want the two side by side.
+
+    `result` is a `search.SearchResult` - as `search.plan` returns one before
+    anything is flown, or as `search` returns one after.
+    """
     lines = _preamble(result)
-    _block(lines, 'grid', [*_axes(result), *_grid_cost(result)])
+    _block(lines, 'grid', [*_axes(result), *_grid_cost(result),
+                           *([('nodes planned', f'{result.planned_nodes:,}')]
+                             if planned else [])])
+    return '\n'.join(lines)
+
+
+def summarise_found(result) -> str:
+    """What the search cost and what it found: the closing half.
+
+    What became of every node of the grid, the best of the sets that reached an
+    orbit as a table, and the one set the search answers with. Nothing in it
+    needs the grid printed above it, so a command that has already shown the
+    grid prints this on its own when the search is done.
+    """
+    lines: list[str] = []
     _block(lines, 'cost', _cost(result))
 
     if not result.found:
@@ -221,22 +261,6 @@ def summarise_search(result) -> str:
     lines.append('')
     lines.extend(search_table(result))
     lines.extend(_found(result))
-    return '\n'.join(lines)
-
-
-def summarise_plan(result) -> str:
-    """The grid a search would walk, and what it would cost, before it walks it.
-
-    The two blocks the summary of a finished search opens with, and then the
-    axes and the nodes the passes come to. A grid is cheap to get wrong and
-    expensive to walk, so `ascent-search --dry-run` prints this and stops.
-
-    `result` is a `search.SearchResult` as `search.plan` returns one: everything
-    settled before the first trajectory, and nothing found yet.
-    """
-    lines = _preamble(result)
-    _block(lines, 'grid', [*_axes(result), *_grid_cost(result),
-                           ('nodes planned', f'{result.planned_nodes:,}')])
     return '\n'.join(lines)
 
 
