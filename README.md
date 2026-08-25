@@ -29,14 +29,14 @@ uv run ascent f9 --report out/run-12        # or wherever it is wanted
 uv run ascent config/mission.a62.yaml       # a mission file by path
 
 uv run ascent f9 --list                     # solved parameter sets on file
-uv run ascent f9 --altitude 650             # fly one of them
-uv run ascent f9 --altitude 650 --programme bilinear-tangent
-uv run ascent f9 -a 650 -p bt               # the same, in short
+uv run ascent f9 --altitude 600             # fly one of them
+uv run ascent f9 --altitude 600 --programme bilinear-tangent
+uv run ascent f9 -a 600 -p bt               # the same, in short
 
 uv run ascent-search f9 --altitude 500      # search for a set instead of flying one
 uv run ascent-search f9 -a 500 -p 5f --dry-run          # the grid, before it is flown
 uv run ascent-search f9 -a 500 -p 5f --range t1=10:25:10 # one parameter, my way
-uv run ascent-search f9 -a 650 -p bt --yaml
+uv run ascent-search f9 -a 600 -p bt --yaml
 ```
 
 `f9`, `a62` and `h3` are short names for `config/mission.<name>.yaml`, and the
@@ -322,46 +322,72 @@ under [The three pitch programmes](#the-three-pitch-programmes):
 
 ## Catalogue of solved parameter sets
 
-`config/catalogue.yaml` holds parameters that place each vehicle on a circular
-orbit of a given altitude - one set per vehicle, pitch programme and altitude,
-42 in all. Falcon 9 is covered from 400 to 700 km, Ariane 62 from 400 to
-900 km and H3 from 1000 to 1200 km.
+The catalogue holds parameters that place each vehicle on a circular orbit of a
+given altitude - one set per vehicle, pitch programme and altitude, 21 in all.
+It is kept as **one file a vehicle**: `config/catalogue.f9.yaml`,
+`config/catalogue.a62.yaml`, `config/catalogue.h3.yaml`. A search is run over
+one vehicle at a time and a vehicle is recomputed on its own, so a file that
+holds one vehicle is a file that changes when that vehicle's sets change and
+not otherwise. `load_catalogue` on the directory reads all of them; on a single
+file, that vehicle's sets alone. Falcon 9 is covered at 400, 500, 600 and
+700 km, Ariane 62 at 400, 500 and 600 km, and H3 at 1000, 1100 and 1200 km.
 
-Each set is defined by its terminal condition: perigee and apogee both at the
-target. The vertical rise `t1` is held at 20 s and the programme ends at
-cut-off. The five-phase turn holds `k2` at 0.05 as well: minimising the loss
-drives that share of the turn to zero, which is a step in pitch rate and
-defeats the point of the phase, so it is a design choice rather than something
-the terminal condition can settle - which leaves `k3` and the cut-off time,
-two unknowns for two conditions. The other two programmes keep a third
-parameter, and among the sets meeting the condition the search that solved
-them preferred the smaller steering loss. Every entry records the orbit it
-produces and what it costs, and `tests/test_catalogue.py` flies all of them to
-check that it still does.
+**Every set was searched for, not solved for.** `ascent-search` sweeps a grid
+over the whole of a family, closes in on the best node ten times over, and
+ranks what it finds by how far the orbit reached is from the circle asked for;
+an entry is the head of that ranking. Nothing is held behind the search's back
+- not the vertical rise, not the five-phase `k2`, not the instant the bilinear
+tangent's middle angle is prescribed at - so the sets differ from what a root
+find with four of those numbers pinned would return. A set counts as reaching
+the orbit when the perigee, the apogee and the altitude at cut-off are all
+within 500 m of the target and the inertial speed at cut-off is within 10 m/s
+of the speed of that orbit, which is why `reached` does not read 400.00 and
+400.00: it reads what the search landed on, inside that half-kilometre.
 
-`ascent-search` no longer works that way. It searches every parameter of a
-family, `t1` and `k2` included, and ranks by the orbit reached rather than by
-what the ascent cost, so it does not reproduce these sets unless it is told to
-hold what they hold - which is the last part of the section below.
+Every instant of an entry - the vertical rise, the end of the programme, the
+cut-off - is a whole tenth of a second, because that is the finest a timeline
+is ever issued to. The coefficients of the guidance law are not instants and
+are written to full precision, because near a circular orbit the apogee answers
+to the cut-off at some 80 km per second and the bilinear tangent is more
+delicate still: its numerator cancels to almost nothing at the end of the turn,
+which is what makes the vehicle level out, so the last digits of `a` and `b`
+carry the terminal angle. With the cut-off held to a tenth, it is the shape of
+the turn that places the orbit.
+
+Every entry records the orbit it produces and what it costs, and
+`tests/test_catalogue.py` flies all of them to check that it still does.
+`examples/parameter_search.py` searches Falcon 9 to 500 km from nothing and
+prints what it finds beside the file, which is the same set: the file can be
+reproduced from the vehicle and the orbit alone.
 
 ```sh
 uv run python examples/programme_catalogue.py    # the whole table
+uv run ascent f9 --list                          # one vehicle's file
 ```
 
-Two things about the file are worth knowing. The numbers are written to full
-precision because near a circular orbit the apogee answers to the cut-off time
-at some 80 km per second, and the bilinear tangent is more delicate still - its
-numerator cancels to almost nothing at the end of the turn, which is what makes
-the vehicle level out, so the last digits of `a` and `b` carry the terminal
-angle. And the table has gaps, which are properties of the programmes and of
-the vehicles rather than unfinished work: Ariane 62 gives out a little above
-900 km, having all but emptied its upper stage by cut-off; the velocity-share
-quartic gives out a hundred kilometres earlier still, as it does at 600 km on
-Falcon 9; and the five-phase turn covers only the middle of each range, having
-no freedom left to stretch to the ends once `k2` is fixed. It places no orbit
-at all for Ariane 62, whose turn would have to be one continuous manoeuvre
-while the vehicle spends its last several hundred seconds on a low-thrust upper
-stage.
+**The gaps, and the two different things they mean.** Each file's header names
+its own; they are results rather than unfinished work, but not all of one kind.
+Four are the family and the vehicle: the five-phase turn places no orbit at all
+for Ariane 62 at any of the three altitudes - flown again with the altitude
+screen off, so every node was integrated rather than dropped on an estimate,
+and not one came out on an orbit - because its turn would have to be one
+continuous manoeuvre while the vehicle spends its last several hundred seconds
+on a low-thrust upper stage; and the velocity-share quartic gives out on Falcon
+9 above 600 km, where the handful of nodes that survive the screen come out on
+an ellipse with both apsides wrong.
+
+The other five are a limit of the search rather than of the vehicle, and are
+worth stating plainly: the bilinear tangent at 400 km on Falcon 9, at all three
+altitudes on Ariane 62 and at 1100 km on H3. An orbit is there - the sets found
+have one apsis exact to ten metres and the other kilometres away - and this
+search does not land on it. A tenth of a second of burn is some five kilometres
+of apogee on the long-burn vehicles, so the ranking along the cut-off axis is a
+row of narrow valleys rather than one, and the refinement is a coordinate-wise
+descent that halves its reach each pass: it travels about two sweep steps and
+stays in whichever valley the sweep pointed it at. Pinning the cut-off and
+solving the turn at it closes most of the distance - 0.2 km against 28 - but
+not reliably inside the tolerance, and a set that misses the orbit is not a
+catalogue entry.
 
 ## Searching for a parameter set
 
@@ -372,7 +398,7 @@ reach the orbit, ranked by how close each came.
 
 ```sh
 uv run ascent-search f9 --altitude 500
-uv run ascent-search f9 --altitude 650 --programme bilinear-tangent
+uv run ascent-search f9 --altitude 600 --programme bilinear-tangent
 uv run ascent-search f9 -a 500 -p 5f --dry-run             # the grid, before it is flown
 uv run ascent-search f9 -a 500 -p 5f --range t1=10:25:10   # one parameter, my way
 uv run ascent-search f9 -a 500 -p 5f --range k2=0.05       # or held at one value
@@ -676,31 +702,46 @@ nothing more, which is how the rest of the model treats them.
 uv run python examples/parameter_search.py       # all three families, side by side
 ```
 
-**It does not reproduce the catalogue, and should not.** The catalogue holds
-four numbers of every set where the dissertation holds them — the vertical rise
-at 20 s, the five-phase `k2` at 0.05, the instant the bilinear tangent's middle
-angle is prescribed at half way along the turn, and every turn aimed at the
-horizon — and solves the rest with the cut-off free to whatever precision it
-liked. Its five-phase set for Falcon 9 to 500 km cuts off at 502.71245 s.
+**It is what the catalogue is made of.** Every set on file was found by this
+command, so the two columns that example prints are the same set twice, and
+running it is a check that the file can be reproduced from the vehicle and the
+orbit alone. Searching every parameter of the five-phase turn for Falcon 9 to
+500 km returns `t1` = 25.7 s, `k2` = 0.0760, `k3` = 0.4686 and a cut-off at
+503.0 s, which is the circle to 59 m, and that is the entry.
 
-This search cannot answer that, and should not: it asks for the cut-off in
-tenths of a second, and the nearest it will offer is 502.7. Two of the four the
-catalogue holds are therefore not held here at all — `k2` has to be searched,
-because with the cut-off in tenths it is `k2` and `k3` that carry the two
+That is worth reading against how such a set used to be arrived at, because the
+difference is not in the answer's quality but in what is being asked. A root
+find holds four numbers where the dissertation holds them — the vertical rise
+at 20 s, the five-phase `k2` at 0.05, the bilinear tangent's middle angle
+prescribed half way along the turn, and every turn aimed at the horizon — and
+solves the rest with the cut-off free to whatever precision it likes; the
+five-phase set it returns for that orbit cuts off at 502.71245 s. This search
+cannot answer that and should not: it asks for the cut-off in tenths of a
+second, and the nearest it will offer is 502.7. So `k2` has to be searched,
+because with the cut-off on a tenth it is `k2` and `k3` that carry the two
 terminal conditions between them. What comes back is a different route to the
-same circle, and it is the one of the two that could be put on a timeline.
+same circle — and it is the one of the two that could be put on a timeline.
 
-What the two do have to agree on is the orbit, and they do. Searching every
-parameter of the five-phase turn returns `t1` = 25.7 s, `k2` = 0.0760,
-`k3` = 0.4686 and a cut-off at 503.0 s, which is the circle to 59 m. The
-velocity budget beside each set is what that particular route to it cost, and
-the routes differ: the catalogue's set spends 516.8 m/s on steering and 3110.1
-in total, and this one spends 608.1 and 3213.7. The searched set is the dearer
-of the two by 104 m/s, and nothing here is wrong — the ranking asks how close
-the orbit came and nothing at all about what the route to it cost. `--csv`
-writes the velocity budget of every set found beside its errors, which is where
-to look when the cheapest route to the circle is wanted rather than the closest
-one to it.
+The routes differ in what they cost. The root-found set spends 516.8 m/s on
+steering and 3110.1 in total; this one spends 608.1 and 3213.7, dearer by
+104 m/s. Nothing there is wrong: the ranking asks how close the orbit came and
+nothing at all about what the route to it cost. `--csv` writes the velocity
+budget of every set found beside its errors, which is where to look when the
+cheapest route to the circle is wanted rather than the closest one to it.
+
+**Where it does not land.** The refinement is a coordinate-wise descent — each
+pass looks one step either side of the best node on every axis and halves the
+step — so it travels about two sweep steps and stays in whichever valley the
+sweep pointed it at. Where the ranking has one broad valley that is enough, and
+21 of the catalogue's 30 combinations came back inside half a kilometre of the
+circle. Where it has many narrow ones it is not: a tenth of a second of burn is
+some five kilometres of apogee on a vehicle that burns for a thousand seconds,
+and the bilinear tangent's coefficients are nearly degenerate besides, so the
+valleys along the cut-off axis are narrow and diagonal. The five sets that
+family is missing from the catalogue are all of that shape — one apsis exact to
+ten metres, the other kilometres away — and pinning the cut-off and solving the
+turn at it closes most but not all of the distance. It is a limit of the
+descent, not of the vehicle or of the law.
 
 ## Reproducing a published result
 
