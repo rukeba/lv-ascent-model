@@ -70,7 +70,7 @@ must barely move the answer.
   differs from the standard 3.986004418e14 in the fourth digit. Every recorded
   result depends on it. If you think it should change, say so once as a
   modelling question, not as a defect.
-- **Full-precision literals in `config/catalogue.yaml`.** Near a circular orbit
+- **Full-precision literals in the `config/catalogue.*.yaml` files.** Near a circular orbit
   the apogee answers to the cut-off time at some 80 km per second, and the
   bilinear tangent's numerator `a*tau + b` cancels to almost nothing at the end
   of the turn - which is what levels the vehicle out. Rounding those numbers

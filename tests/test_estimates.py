@@ -8,7 +8,7 @@ from ascent.config import load_catalogue, load_vehicle, mission_from_spec
 from ascent.estimates import (analytic_altitude, burns, equivalent_time,
                               required_velocity, vacuum_time)
 
-CATALOGUE = load_catalogue('config/catalogue.yaml')
+CATALOGUE = load_catalogue('config')
 VEHICLES = {name: load_vehicle(f'config/{name}.yaml')
             for name in ('lv.f9', 'lv.a62', 'lv.h3')}
 

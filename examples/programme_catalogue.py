@@ -17,7 +17,7 @@ def parameters(programme: dict) -> str:
 
 
 def main() -> None:
-    catalogue = load_catalogue('config/catalogue.yaml')
+    catalogue = load_catalogue('config')
 
     for vehicle in dict.fromkeys(spec['vehicle'] for spec in catalogue):
         entries = [spec for spec in catalogue if spec['vehicle'] == vehicle]

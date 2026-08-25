@@ -1,0 +1,89 @@
+# Pitch-programme parameters that place Ariane 62 on a circular orbit of
+# the given altitude - one set per programme and altitude, 3 in all,
+# at 400, 500, 600 km. This file is Ariane 62 and nothing else:
+# the catalogue is kept as one file a vehicle, and a command that wants the
+# whole of it reads the directory.
+#
+# Every set here was searched for rather than solved for, and searched with
+# every parameter of its family free: `ascent-search` sweeps a grid over the
+# whole family, closes in on the best node ten times over, and ranks what it
+# finds by how far the orbit reached is from the circle asked for. Nothing is
+# held behind the search's back - not the vertical rise, not the five-phase
+# k2, not the instant the bilinear tangent's middle angle is prescribed at.
+# An entry is the head of that ranking.
+#
+# A set counts as reaching the orbit when the perigee, the apogee and the
+# altitude at cut-off are all within 500 m of the target and the inertial speed
+# at cut-off is within 10 m/s of the speed of that circular orbit. So `reached`
+# does not read 400.00 and 400.00 the way a root find would leave it: it reads
+# what the search actually landed on, inside that half-kilometre.
+#
+# Every instant is a whole tenth of a second - the vertical rise, the end of
+# the programme and the cut-off - because that is the finest a timeline is ever
+# issued to, and an answer written finer is the same answer with digits after
+# it that nothing can act on. The coefficients of the guidance law are not
+# instants and nothing rounds them: they are written to full precision because
+# they have to be. Near a circular orbit the apogee answers to the cut-off at
+# some 80 km per second, and the bilinear tangent is more delicate still - its
+# numerator a*tau + b cancels to almost nothing at the end of the turn, which
+# is what levels the vehicle out, so the last digits of a and b carry the
+# terminal angle and rounding them moves the perigee by a kilometre. With the
+# cut-off held to a tenth, it is the shape of the turn that places the orbit.
+#
+# An entry is an ordinary mission specification with one block added: `reached`
+# records the orbit it produces and what it costs, so any entry can be checked
+# without repeating the search. tests/test_catalogue.py flies all of them.
+#
+# WHAT IS NOT HERE, and it is of two kinds.
+#
+# Not one node of the grid came out on an orbit at all - not an open
+# trajectory that nearly closed, but no orbit anywhere in the family. Flown
+# again with the altitude screen off, so that every node was integrated rather
+# than dropped on the estimate, and the answer was the same. This is the family
+# and the vehicle, not the search:
+#   five-phase at 400 km
+#   five-phase at 500 km
+#   five-phase at 600 km
+#
+# An orbit is there and this search does not land on it. The sets it found have
+# one apsis exact to ten metres and the other kilometres away, which is what a
+# coordinate-wise descent looks like when it has walked into the wrong valley:
+# a tenth of a second of burn is some five kilometres of apogee on these
+# vehicles, so the ranking along the cut-off axis is a row of narrow valleys
+# rather than one, and the passes reach about two sweep steps and no further.
+# Pinning the cut-off and solving the turn at it gets much closer - 0.2 km
+# against 28 - but not reliably inside the tolerance, and a set that misses is
+# not an entry. Recorded here as what it is, a limit of the search rather than
+# of the vehicle:
+#   bilinear-tangent at 400 km - closest 28.0 km out
+#   bilinear-tangent at 500 km - closest 114.5 km out
+#   bilinear-tangent at 600 km - closest 15.4 km out
+#
+#     ascent a62 --list
+#     ascent a62 --altitude 400 --programme velocity-share
+#     ascent-search a62 --altitude 400 --programme vs --yaml   # what wrote one
+
+missions:
+  - vehicle: lv.a62
+    target_altitude: 400_000
+    launch_site: {latitude: 5.2, azimuth: 90}
+    pitch_programme: {type: velocity-share, t1: 22.0, tf: 681.2455627441407, te: 1098.9, s: -2.12841796875}
+    cutoff: {type: time, time: 1098.9}
+    simulation: {duration: 1159, steps_per_second: 10}
+    reached: {perigee_km: 399.98, apogee_km: 399.98, gravity_loss: 2878.9, aerodynamic_loss: 164.9, steering_loss: 932.5, total_loss: 3976.2}
+
+  - vehicle: lv.a62
+    target_altitude: 500_000
+    launch_site: {latitude: 5.2, azimuth: 90}
+    pitch_programme: {type: velocity-share, t1: 14.0, tf: 647.6484375, te: 1152.0, s: 1.80029296875}
+    cutoff: {type: time, time: 1152.0}
+    simulation: {duration: 1212, steps_per_second: 10}
+    reached: {perigee_km: 499.87, apogee_km: 499.96, gravity_loss: 3441.8, aerodynamic_loss: 159.3, steering_loss: 1127.7, total_loss: 4728.8}
+
+  - vehicle: lv.a62
+    target_altitude: 600_000
+    launch_site: {latitude: 5.2, azimuth: 90}
+    pitch_programme: {type: velocity-share, t1: 25.0, tf: 913.0582031250001, te: 1162.9, s: -2.671875}
+    cutoff: {type: time, time: 1162.9}
+    simulation: {duration: 1223, steps_per_second: 10}
+    reached: {perigee_km: 599.83, apogee_km: 599.99, gravity_loss: 3610.9, aerodynamic_loss: 160.6, steering_loss: 491.9, total_loss: 4263.4}

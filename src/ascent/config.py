@@ -7,7 +7,8 @@ a model rather than an import path.
 
 The catalogue holds the same kind of specification many times over - one per
 vehicle, programme and target altitude - so a solved parameter set can be
-flown without writing a mission file for it.
+flown without writing a mission file for it. It is kept as one file a vehicle,
+and `load_catalogue` on the directory reads the lot of them.
 """
 
 from pathlib import Path
@@ -79,9 +80,29 @@ def mission_from_spec(spec: dict[str, Any], directory: str | Path) -> Mission:
     )
 
 
-def load_catalogue(path: str | Path = 'config/catalogue.yaml') -> list[dict[str, Any]]:
-    """The solved parameter sets, as a list of mission specifications."""
-    return read_spec(Path(path))['missions']
+# What a catalogue file is called: the word, the vehicle it holds and nothing
+# else. One file a vehicle rather than one file, because a search is run over
+# one vehicle at a time and a recomputed vehicle should touch its own file only
+CATALOGUE_FILES = 'catalogue.*.yaml'
+
+
+def load_catalogue(path: str | Path = 'config') -> list[dict[str, Any]]:
+    """The solved parameter sets, as a list of mission specifications.
+
+    A directory is every catalogue file in it - `catalogue.f9.yaml` and its
+    neighbours, one a vehicle - concatenated in the order their names sort in.
+    A file is that file alone, which is the sets of the one vehicle.
+    """
+    path = Path(path)
+    if not path.is_dir():
+        return read_spec(path)['missions']
+
+    files = sorted(path.glob(CATALOGUE_FILES))
+    if not files:
+        raise FileNotFoundError(
+            f'no catalogue in {path}: it is kept as one file a vehicle, named '
+            f'{CATALOGUE_FILES}, and there is none there')
+    return [spec for file in files for spec in read_spec(file)['missions']]
 
 
 def find_in_catalogue(catalogue: list[dict[str, Any]], vehicle: str,
