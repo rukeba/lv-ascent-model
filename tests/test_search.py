@@ -79,6 +79,26 @@ PROGRAMME_ENDS = {'five-phase': 't4', 'velocity-share': 'te',
                   'bilinear-tangent': 'te'}
 
 
+# Every axis of every family, in the order a grid walks them. Written out
+# rather than derived, so that an axis appearing or disappearing has to be
+# said here as well - which is what keeps the prose about them honest.
+#
+# The velocity share is the one without an `angle`: its quartic drives the
+# vertical share of the speed to exactly zero at the end of the turn, so it
+# arrives at the horizon by construction and has no parameter to aim.
+AXES = {
+    'five-phase': ('t1', 'k2', 'k3', 't4', 'angle', 'coast'),
+    'velocity-share': ('t1', 'turn', 's', 'te', 'coast'),
+    'bilinear-tangent': ('t1', 'start', 'mid', 'middle', 'te', 'angle', 'coast'),
+}
+
+
+@pytest.mark.parametrize('programme', sorted(FAMILIES))
+def test_a_family_has_the_axes_it_says_it_has(programme):
+    """And every family the search knows has its axes written down here."""
+    assert axis_names(programme) == AXES[programme]
+
+
 @pytest.mark.parametrize('programme', sorted(FAMILIES))
 def test_every_parameter_of_a_programme_is_on_the_grid(programme):
     """The point of the search: nothing is held where the caller cannot see it.

@@ -531,13 +531,24 @@ class Family:
     programme and the instant the engines stop; `parameters` turns it into the
     specification that would fly it again.
 
-    Two axes every family has. `coast` is how long the vehicle flies on after
-    its programme has ended, holding the attitude it reached, before the
-    engines stop - zero by default, which is where every set on file has it and
-    what makes the programme end at cut-off. `angle` is the flight-path angle
-    the turn is aimed at, in degrees, and it is zero for the same reason: a
-    circular orbit is entered along the horizon. Neither is fixed by the model,
-    and both are ranges like the rest.
+    Two axes worth naming here, because they are the two whose default range is
+    a single node.
+
+    `coast` is on every family: how long the vehicle flies on after its
+    programme has ended, holding the attitude it reached, before the engines
+    stop. Zero by default, which is where every set on file has it and what
+    makes the programme end at cut-off.
+
+    `angle` is the flight-path angle the turn is aimed at, in degrees, and it
+    is zero by default because a circular orbit is entered along the horizon.
+    It is on the two families that can be aimed - the five-phase turn, which
+    arrests its pitch rate on to a stated angle, and the bilinear tangent,
+    whose third angle is the one it ends at. The velocity share has no such
+    parameter and is not given an axis for one: its quartic drives the vertical
+    share of the speed to exactly zero at the end of the turn, so the horizon
+    is where it arrives by construction rather than by being asked to.
+
+    Neither is fixed by the model, and both are ranges like the rest.
     """
     name: str
 
