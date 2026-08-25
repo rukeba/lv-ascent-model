@@ -4,20 +4,22 @@ Falcon 9 into a 500 km circular orbit from Cape Canaveral, once per programme
 family. Nothing is taken from the catalogue but the row to compare against: the
 search is given the vehicle, the orbit and the family, and works from there.
 
-The two need not agree, and mostly they do not. The catalogue holds four
-numbers of every set where the dissertation holds them - the vertical rise at
-20 s, the five-phase k2 at 0.05, the bilinear tangent's middle angle at half
-way, and every turn aimed at the horizon - and solves for what is left. This
-searches all of them, so it has freedom the catalogue never spent and lands
-somewhere else in the family. What the two do have to agree on is the orbit:
+The two need not agree, and they do not. The catalogue holds four numbers of
+every set where the dissertation holds them - the vertical rise at 20 s, the
+five-phase k2 at 0.05, the bilinear tangent's middle angle at half way, and
+every turn aimed at the horizon - and solves the rest with the cut-off free to
+any precision it liked. This searches all four, and asks for its cut-off in
+tenths of a second, which is the finest a timeline is ever issued to; the
+nearest it will offer to the catalogue's 502.71245 s is 502.7. So it lands
+somewhere else in the family, and what the two have to agree on is the orbit:
 both columns are sets that put Falcon 9 on the circle asked for, and the
 velocity budget beside each is what that particular route to it cost.
 
     uv run python examples/parameter_search.py
 
-About a quarter of an hour: some thirty thousand trajectories, divided over two
-thirds of the cores. Pass a coarser integration step to see it sooner - the
-orbit a set reaches is the same to within a few metres either way.
+About a quarter of an hour: some twenty-four thousand trajectories, divided
+over two thirds of the cores. Pass a coarser integration step to see it sooner
+- the orbit a set reaches is the same to within a few metres either way.
 
     uv run python examples/parameter_search.py 2
 """

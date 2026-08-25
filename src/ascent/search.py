@@ -7,11 +7,10 @@ that come closest to the orbit, best first.
 **Every parameter of the turn is an axis.** Nothing is held behind the
 caller's back: the vertical rise, the shape of the turn, the instant the
 programme ends and the instant the engines do are all coordinates of the same
-grid, and each of them can be given its own range and its own number of
-values. What is held is held because a range said so - a range of one - and the
-summary
-prints every axis with the range it was searched over, so a figure that did not
-move is a figure the caller can see was not asked to.
+grid, and each can be given its own range and its own number of values. What is
+held is held because a range said so - a range of one - and the summary prints
+every axis with the range it was searched over, so a figure that did not move
+is a figure the caller can see was not asked to.
 
 The grid is a map before it is an answer. A pass over it returns every set that
 closed an orbit, ranked, and the best of them are printed as a table with the
@@ -50,11 +49,24 @@ integration - see `estimates.py`:
     would reach, and a set that cannot reach the target - inside the band the
     integral is known to read high by - is dropped without a trajectory.
 
-**Then the grid closes in.** The best node becomes the centre of a grid one
-step wide along every axis that was searched, and the sweep runs again, halving
-the step each pass. A step of the first pass is worth tens of kilometres of
-apogee; the passes after it are what turn the region the sweep found into a set
-that meets the tolerance.
+**Then the grid closes in.** The best value found becomes the centre of the
+next grid with one neighbour either side of it, five values across that, which
+is the same two steps at half the spacing; and again, ten times over. A step of
+the sweep is worth a hundred kilometres of apogee on the cut-off axis, so the
+sweep says where in the family the orbit lies and the passes are what land on
+it. They can travel about two sweep steps and no further, which is why the
+count on an axis decides which part of the family is searched rather than how
+finely - see `CUT_OFF_NODES`.
+
+**Instants are asked for in tenths of a second.** The vertical rise, the end of
+the programme and the cut-off are rounded there, because that is the finest a
+timeline is ever issued to, and two values that come to the same tenth are one
+node of the grid rather than two answers differing where nothing can act on the
+difference - see `TIME_DECIMALS`. A tenth of a second of burn is some eight
+kilometres of apogee, so the cut-off cannot place the orbit and the shape of
+the turn does: the coefficients of the guidance law are not instants, nothing
+rounds them, and every family keeps exactly two, which is what the two terminal
+conditions of a circular orbit need.
 
 The nodes of a pass do not depend on one another, so they are answered over a
 pool of processes, two thirds of the cores by default, and collected in the

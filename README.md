@@ -392,11 +392,11 @@ report. A set that misses the orbit is not an entry: it is printed, and it is
 not flown.
 
 **What a search prints, and when.** The grid comes first, before anything is
-flown: the orbit asked for, what a set has to meet to count as reaching it,
-what the two estimates said, and every parameter of the family with the range
-and the step it is searched over. That is minutes of integration described in
-twenty lines, and it is worth reading while there is still time to stop and
-narrow it — `--dry-run` prints exactly that and stops there of its own accord.
+flown: the orbit asked for, what the two estimates said, and every parameter
+of the family with the range and the number of values it is searched over.
+That is minutes of integration described in fifteen lines, and it is worth
+reading while there is still time to stop and narrow it — `--dry-run` prints
+exactly that and stops there of its own accord.
 Then the progress line, rewritten in place: which pass it is on, how many
 trajectories it has integrated and roughly how much longer it will take. Then
 what became of every node, the table, and the set found.
@@ -409,8 +409,9 @@ once for the process that was asked and once again for every worker it had.
 
 **Every parameter of the turn is an axis.** Nothing is held behind your back.
 The vertical rise, the shape of the turn, the instant the programme ends and
-the instant the engines do are all coordinates of the same grid, and `--dry-run`
-prints every one of them with the range and the number of values it will be searched over:
+the instant the engines do are all coordinates of the same grid, and
+`--dry-run` prints every one of them with the range and the number of values it
+will be searched over:
 
 | family | parameters on the grid, and what each is |
 |---|---|
@@ -653,7 +654,7 @@ a second search narrowed on to what it found is how the set itself is reached.
 # the map: one sweep, no passes, every set it found written out
 uv run ascent-search f9 -a 500 -p bt --refinements 0 --csv out/map.csv
 
-# and the set: narrowed on to what the map showed, with a fine step on te
+# and the set: narrowed on to what the map showed, every tenth of a second of te
 uv run ascent-search f9 -a 500 -p bt \
     --range t1=20 --range start=87:89:5 \
     --range middle=29:31:9 --range te=500.5:501.5:11
