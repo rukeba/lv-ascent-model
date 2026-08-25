@@ -389,7 +389,19 @@ def _axis_columns(result) -> list[tuple]:
 
 
 def _decimals(step: float) -> int:
-    """How many decimals it takes to tell two neighbouring nodes apart."""
+    """Decimals enough to tell two neighbouring nodes apart, and one over.
+
+    One over on purpose. The decimals a step needs are the decimals the step
+    itself has - but only where the nodes sit on the same lattice the decimals
+    do, and a range is under no obligation to. An axis of step 1 starting at
+    0.5 is 0.5, 1.5, 2.5, which to no decimals at all is 0, 2, 2; one of step
+    0.5 starting at 0.25 is worse.
+
+    The spare digit is a true digit of a coordinate rather than an invented
+    one - every node is an exact multiple of the step from the low end of its
+    range - and it is what keeps two nodes half a step off the lattice from
+    printing as the same number.
+    """
     if step <= 0.0:
         return 3
     return min(6, max(0, math.ceil(-math.log10(step)) + 1))

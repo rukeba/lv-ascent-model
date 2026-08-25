@@ -320,6 +320,26 @@ def test_a_held_parameter_is_not_closed_in_on():
     assert _closer(grid, {'k2': 0.05}, {}, {'k2': (0.05, 0.05)}) == grid
 
 
+# --- the table -------------------------------------------------------------
+
+
+@pytest.mark.parametrize('low, step', [(0.5, 1.0), (0.25, 0.5), (12.0, 6.0),
+                                       (0.0, 0.05), (500.85, 0.04)])
+def test_a_column_has_the_decimals_to_tell_its_nodes_apart(low, step):
+    """A column of the table is as precise as the grid behind it, and no less.
+
+    Half a step off the decimal lattice is where this bites. An axis of step 1
+    starting at 0.5 is 0.5, 1.5, 2.5, and to no decimals at all that is 0, 2,
+    2 - two of its nodes printed as one number. `_decimals` carries a spare
+    digit for exactly that, and this is the check that it is not spare.
+    """
+    from ascent.summary import _decimals
+
+    nodes = Range(low, low + 4 * step, step).values()
+    printed = [f'{value:.{_decimals(step)}f}' for value in nodes]
+    assert len(set(printed)) == len(printed), printed
+
+
 # --- what a search finds --------------------------------------------------
 
 
