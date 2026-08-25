@@ -9,14 +9,16 @@
     ascent f9 -a 650 -p bt                 # the same, in short
     ascent f9 --list                       # what the catalogue holds
 
-    ascent-search f9 --altitude 500        # solve for a set instead of flying one
-    ascent-search f9 --altitude 500 -r     # and a report of the set it found
+    ascent-search f9 --altitude 500        # search for a set instead of flying one
+    ascent-search f9 -a 500 -p 5f --range t1=10:25:10  # one axis of the grid, my way
+    ascent-search f9 -a 500 -p 5f --dry-run            # the grid, before it is flown
 
 A pitch programme can be named in full or by the short form beside it - `5f`,
 `vs`, `bt`.
 """
 
 import argparse
+import csv
 import os
 import shlex
 import sys
@@ -29,8 +31,9 @@ import yaml
 from .config import (PITCH_PROGRAMMES, PROGRAMME_ALIASES, find_in_catalogue,
                      load_catalogue, load_vehicle, mission_from_spec,
                      programme_name, read_spec, resolve)
-from .search import FAMILIES, default_workers, search
-from .summary import summarise, summarise_search
+from .search import (FAMILIES, REFINEMENTS, SPEED_TOLERANCE, TOP, axis_names,
+                     default_workers, parse_ranges, plan, search)
+from .summary import summarise, summarise_found, summarise_plan
 
 
 def _programmes(names) -> str:
@@ -40,7 +43,33 @@ def _programmes(names) -> str:
                      for name in sorted(names))
 
 
+def quietly(run, argv) -> int:
+    """Run an entry point, and let Ctrl+C end it without a traceback.
+
+    A search is minutes long and stopping one part way through is an ordinary
+    thing to do, not an error: what the interpreter would otherwise print is a
+    stack from the middle of a process pool, once for the process that was
+    asked and once again for every one of its workers. None of it says anything
+    the person who pressed the keys did not already know.
+
+    The newline goes first because a search writes its progress in place, and
+    what is being closed off is that line: without it the word below would land
+    in the middle of it and the shell prompt after that.
+    """
+    try:
+        return run(argv)
+    except KeyboardInterrupt:
+        print('\nstopped', file=sys.stderr)
+        # what a shell reports for a program stopped by an interrupt
+        return 130
+
+
 def main(argv: list[str] | None = None) -> int:
+    """Entry point of `ascent`: fly one mission and report it."""
+    return quietly(_fly, argv)
+
+
+def _fly(argv: list[str] | None) -> int:
     parser = argparse.ArgumentParser(
         prog='ascent', description='Simulate the powered ascent of a launch vehicle.')
     parser.add_argument('mission', help='mission name (f9) or path to a mission YAML file')
@@ -222,22 +251,36 @@ def _clock(seconds: float) -> str:
 
 
 def search_main(argv: list[str] | None = None) -> int:
-    """Entry point of `ascent-search`: solve for a programme instead of flying one.
+    """Entry point of `ascent-search`: search for a programme instead of flying one.
+
+    See `_search` below for what it does; this is the wrapper that lets Ctrl+C
+    end it without a stack trace.
+    """
+    return quietly(_search, argv)
+
+
+def _search(argv: list[str] | None) -> int:
+    """Search a grid over every parameter of a pitch programme.
 
         ascent-search f9 --altitude 500
+        ascent-search f9 -a 500 -p 5f --range t1=10:25:10  # one axis, my way
+        ascent-search f9 -a 500 -p 5f --dry-run            # the grid, unflown
         ascent-search f9 -a 650 -p bt --yaml
-        ascent-search f9 --altitude 500 --report        # fly the set found, too
-        ascent-search a62 --altitude 700 --coarse 0.5   # a quicker, rougher look
+        ascent-search f9 --altitude 500 --report           # fly the set found
 
     The mission file supplies the vehicle and the launch site, and its own
     target altitude and programme type stand in for `--altitude` and
     `--programme` when those are not given. The pitch-programme parameters in
     it are ignored: they are what the search is for.
+
+    Every parameter of the family is an axis of the grid, and `--range` says
+    what any of them is searched over. `--dry-run` prints the grid, every axis
+    with its range and its step, and stops before the first trajectory.
     """
     parser = argparse.ArgumentParser(
         prog='ascent-search',
-        description='Search for the pitch-programme parameters that reach a '
-                    'circular orbit in the shortest time.')
+        description='Search a grid over every parameter of a pitch programme '
+                    'for the sets that reach a circular orbit.')
     parser.add_argument('mission', help='mission name (f9) or path to a mission '
                                         'YAML file: the vehicle and the launch '
                                         'site are taken from it')
@@ -246,20 +289,51 @@ def search_main(argv: list[str] | None = None) -> int:
     parser.add_argument('--programme', '-p', metavar='NAME',
                         choices=sorted(FAMILIES) + sorted(PROGRAMME_ALIASES),
                         help=f'pitch programme to search: {_programmes(FAMILIES)}')
+    parser.add_argument('--range', action='append', default=[], dest='ranges',
+                        metavar='NAME=LOW:HIGH:VALUES',
+                        help='what one parameter is searched over, repeatable. '
+                             '`--range t1=10:25:10` tries ten values of the '
+                             'vertical rise from 10 to 25 s, and `--range '
+                             'k2=0.05` holds a parameter at the one value. '
+                             'Every parameter of the family is an axis and '
+                             'every one of them takes a range; `--dry-run` '
+                             'lists them with what they are searched over by '
+                             'default')
+    parser.add_argument('--top', type=int, default=TOP, metavar='N',
+                        help=f'how many of the sets found to print, best first, '
+                             f'with the errors each is judged by (default {TOP})')
     parser.add_argument('--tolerance', type=float, default=0.5, metavar='KM',
-                        help='how close the perigee and the apogee have to come '
-                             'to the target for the set to count (default 0.5)')
-    parser.add_argument('--refinements', type=int, default=10, metavar='N',
-                        help='passes of the grid after the first, each one grid '
-                             'step wide about the best node (default 10)')
+                        help='how close the perigee, the apogee and the altitude '
+                             'at cut-off have to come to the target for the set '
+                             'to count (default 0.5)')
+    parser.add_argument('--speed-tolerance', type=float, default=SPEED_TOLERANCE,
+                        metavar='M_S',
+                        help=f'and how close the speed at cut-off has to come to '
+                             f'the speed of that circular orbit (default '
+                             f'{SPEED_TOLERANCE:g})')
+    parser.add_argument('--refinements', type=int, default=REFINEMENTS,
+                        metavar='N',
+                        help=f'passes after the sweep, each one grid step wide '
+                             f'about the best node and halving the step along '
+                             f'every axis searched (default {REFINEMENTS}). A '
+                             f'step of the sweep is worth tens of kilometres of '
+                             f'apogee, and these are what close that down')
     parser.add_argument('--max-q', type=float, metavar='KPA',
                         help='put the airframe into the constraint: sets whose '
                              'dynamic pressure peaks above this are not answers, '
-                             'however quick. Without it the peak is reported and '
+                             'however close. Without it the peak is reported and '
                              'nothing more')
     parser.add_argument('--coarse', type=float, default=1.0, metavar='FACTOR',
-                        help='scale the nodes along every axis: below one for a '
-                             'quicker and rougher search')
+                        help='scale the nodes along every axis the family gave, '
+                             'below one for a quicker and rougher sweep. An axis '
+                             'given a `--range` is left alone: that step was '
+                             'asked for')
+    parser.add_argument('--no-screen', action='store_true',
+                        help='fly every node, rather than dropping the ones the '
+                             'altitude integral says cannot reach the target. '
+                             'Slower by as much as the screen was saving, and '
+                             'the way to check that the screen is not hiding '
+                             'anything')
     parser.add_argument('--steps', type=float, default=10, metavar='PER_SECOND',
                         help='integration steps per second of every trajectory '
                              'flown (default 10). A coarser step is for a quick '
@@ -269,6 +343,13 @@ def search_main(argv: list[str] | None = None) -> int:
                         help=f'processes the nodes of a pass are divided over '
                              f'(default {default_workers()}, two thirds of the '
                              f'cores on this machine); 1 to search in this one')
+    parser.add_argument('--dry-run', action='store_true',
+                        help='print the grid - every axis with its range, its '
+                             'step and its nodes - and what the passes come to, '
+                             'then stop without flying anything')
+    parser.add_argument('--csv', metavar='FILE',
+                        help='write every set found to a CSV file, best first, '
+                             'where the summary prints the best few')
     parser.add_argument('--yaml', action='store_true',
                         help='print the set found as a catalogue entry')
     parser.add_argument('--report', '-r', metavar='DIR', nargs='?', const='',
@@ -283,8 +364,10 @@ def search_main(argv: list[str] | None = None) -> int:
     if arguments.programme:
         arguments.programme = programme_name(arguments.programme)
     for name, value in (('--tolerance', arguments.tolerance),
+                        ('--speed-tolerance', arguments.speed_tolerance),
                         ('--steps', arguments.steps),
-                        ('--coarse', arguments.coarse)):
+                        ('--coarse', arguments.coarse),
+                        ('--top', arguments.top)):
         if value <= 0.0:
             parser.error(f'{name} has to be above zero, and is {value:g}')
     if arguments.refinements < 0:
@@ -297,29 +380,50 @@ def search_main(argv: list[str] | None = None) -> int:
     spec = read_spec(mission_path)
     site = spec.get('launch_site', {})
     vehicle_file = spec['vehicle']
+    programme = arguments.programme or spec['pitch_programme']['type']
+
+    settings = dict(
+        target_altitude=(arguments.altitude * 1000 if arguments.altitude is not None
+                         else spec['target_altitude']),
+        programme=programme,
+        latitude_deg=site.get('latitude', 0.0),
+        azimuth_deg=site.get('azimuth', 90.0),
+        ranges=_ranges(parser, arguments.ranges, programme),
+        tolerance=arguments.tolerance * 1000,
+        speed_tolerance=arguments.speed_tolerance,
+        refinements=arguments.refinements,
+        top=arguments.top,
+        max_dynamic_pressure=(arguments.max_q * 1000
+                              if arguments.max_q is not None else None),
+        coarseness=arguments.coarse,
+        steps_per_second=arguments.steps,
+    )
+    vehicle = load_vehicle(mission_path.parent / f'{vehicle_file}.yaml')
 
     # with `--yaml` the entry is the whole of what this command is for, so
     # everything else goes to the error stream and a redirect of the output is
     # a file the catalogue reader can read
     told = sys.stderr if arguments.yaml else sys.stdout
+
+    # what is about to be searched, printed before it is searched. A grid is
+    # minutes of integration and the thing most worth knowing about one is
+    # whether it is the grid that was meant, which is a question with a short
+    # answer and a long wait behind it
+    print(summarise_plan(plan(vehicle, **settings)), file=told, flush=True)
+    if arguments.dry_run:
+        return 0
+
+    # a line of its own between the grid and the progress that walks it
+    print(file=told, flush=True)
     progress = _Progress(sys.stderr)
-    result = search(
-        vehicle=load_vehicle(mission_path.parent / f'{vehicle_file}.yaml'),
-        target_altitude=(arguments.altitude * 1000 if arguments.altitude is not None
-                         else spec['target_altitude']),
-        programme=arguments.programme or spec['pitch_programme']['type'],
-        latitude_deg=site.get('latitude', 0.0),
-        azimuth_deg=site.get('azimuth', 90.0),
-        tolerance=arguments.tolerance * 1000,
-        refinements=arguments.refinements,
-        max_dynamic_pressure=(arguments.max_q * 1000
-                              if arguments.max_q is not None else None),
-        coarseness=arguments.coarse,
-        steps_per_second=arguments.steps,
-        workers=arguments.workers,
-        report=progress)
+    result = search(vehicle, workers=arguments.workers,
+                    screen=not arguments.no_screen, report=progress, **settings)
     progress.finish()
-    print(summarise_search(result), file=told)
+    print(summarise_found(result), file=told)
+
+    if arguments.csv:
+        print(f'\nsets found: {_write_search_csv(result, Path(arguments.csv))}',
+              file=told)
 
     # only a set that reaches the orbit is written out as an entry: one that
     # misses is worth showing and is not worth filing
@@ -332,6 +436,74 @@ def search_main(argv: list[str] | None = None) -> int:
         _report_the_search(result, arguments, spec, mission_path, told,
                            _command_line(parser.prog, argv))
     return 0 if result.reaches_orbit else 1
+
+
+def _ranges(parser, given: list[str], programme: str) -> dict:
+    """The `--range` arguments, checked against the family before anything runs.
+
+    A parameter the family does not have is a mistake in the command and is
+    answered there, with the parameters it does have - not several minutes
+    later, out of the middle of a search that has already started.
+    """
+    try:
+        ranges = parse_ranges(given)
+    except ValueError as complaint:
+        parser.error(str(complaint))
+
+    names = axis_names(programme)
+    unknown = [name for name in ranges if name not in names]
+    if unknown:
+        parser.error(
+            f'{", ".join(unknown)} '
+            f'{"is not a parameter" if len(unknown) == 1 else "are not parameters"} '
+            f'of the {programme} turn; it is made of {", ".join(names)}')
+    return ranges
+
+
+# name, and how to read it off one set found. The parameters of the family come
+# before these, one column each, so a row of this file is a set and everything
+# that was measured of it.
+SEARCH_CSV_COLUMNS = (
+    ('cutoff_time_s', lambda c: c.cutoff_time),
+    ('flight_path_angle_deg', lambda c: c.flight_path_angle),
+    ('altitude_km', lambda c: c.altitude / 1000),
+    ('altitude_error', lambda c: c.altitude_error),
+    ('speed_ms', lambda c: c.speed),
+    ('speed_error', lambda c: c.speed_error),
+    ('perigee_km', lambda c: c.orbit.perigee_altitude / 1000),
+    ('apogee_km', lambda c: c.orbit.apogee_altitude / 1000),
+    ('eccentricity', lambda c: c.orbit.eccentricity),
+    ('orbit_error', lambda c: c.orbit_error),
+    ('gravity_loss_ms', lambda c: c.gravity_loss),
+    ('aerodynamic_loss_ms', lambda c: c.aerodynamic_loss),
+    ('steering_loss_ms', lambda c: c.steering_loss),
+    ('total_loss_ms', lambda c: c.total_loss),
+    ('max_dynamic_pressure_kpa', lambda c: c.peak_dynamic_pressure / 1000),
+    ('peak_steering_demand', lambda c: c.peak_steering_demand),
+)
+
+
+def _write_search_csv(result, path: Path) -> Path:
+    """Every set the search found, best first, one row each.
+
+    The summary prints the best few because a console is not the place for
+    several thousand rows; this is where the rest of them go, so that a coarse
+    sweep can be looked at as the map it is - sorted, plotted, narrowed on -
+    rather than only as the one set at the head of it.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    axes = list(result.ranges)
+    with open(path, 'w', newline='', encoding='utf-8') as handle:
+        writer = csv.writer(handle)
+        writer.writerow([*axes, *(name for name, _ in SEARCH_CSV_COLUMNS),
+                         'reaches_orbit'])
+        for candidate in result.found:
+            writer.writerow([
+                *(f'{candidate.values[axis]:.10g}' for axis in axes),
+                *(f'{read(candidate):.10g}' for _, read in SEARCH_CSV_COLUMNS),
+                'yes' if candidate.reaches(result.tolerance,
+                                           result.speed_tolerance) else 'no'])
+    return path
 
 
 def _report_the_search(result, arguments, spec: dict, mission_path: Path,

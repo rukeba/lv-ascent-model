@@ -6,6 +6,7 @@ rows are built once, as blocks, and then either printed as lines or laid out
 as cards by the report: the two cannot disagree about a figure.
 """
 
+import math
 from dataclasses import dataclass
 
 import numpy as np
@@ -195,56 +196,57 @@ def _propellant_left(vehicle: LaunchVehicle, telemetry: Telemetry, index: int) -
 
 
 def summarise_search(result) -> str:
-    """The console summary of a parameter search: what bounded it, what it cost.
+    """The console summary of a parameter search: what it swept, what it found.
+
+    The two halves of it, back to back. `ascent-search` prints them apart - the
+    first before the search starts and the second when it has finished -
+    because what is about to be searched is worth reading while there is still
+    time to stop and narrow it. Anything calling this from a script has both
+    halves at once and neither problem.
 
     `result` is a `search.SearchResult`, left untyped so that this module says
     nothing about the search: a flight summary has no business importing the
     machinery that goes looking for one.
     """
-    lines = [f'{result.vehicle.name} to {result.target_altitude / 1000:g} km, '
-             f'{result.programme}']
+    return summarise_plan(result, planned=False) + '\n' + summarise_found(result)
 
-    _block(lines, 'search', [
-        ('launch site', f'{result.latitude_deg:g} deg latitude, '
-                        f'azimuth {result.azimuth_deg:g} deg'),
-        ('criterion', 'the earliest cut-off that closes the orbit, to the '
-                      'step the flight was integrated at'),
-        ('orbit reached when', f'perigee and apogee are both within '
-                               f'{result.tolerance / 1000:g} km of the target'),
-    ])
 
-    early, late = result.window
-    _block(lines, 'estimated in advance', [
-        ('energy of the orbit', f'{result.required_velocity:.1f} m/s of '
-                                f'characteristic velocity'),
-        ('ideal vacuum time', f'{result.vacuum_time:.1f} s'),
-        ('equivalent time', f'{result.equivalent_time:.1f} s'),
-        ('cut-off looked for in', f'{early:.1f} to {late:.1f} s'),
-    ])
+def summarise_plan(result, planned: bool = True) -> str:
+    """What is being searched for and over what grid: the opening half.
 
-    nodes = max(result.nodes, 1)
-    _block(lines, 'grid', [
-        ('passes', f'{result.passes}, the first over the whole range of the '
-                   f'family and the rest closing in'
-                   + (' - run twice, the second time for the orbit alone'
-                      if result.attempts > 1 else '')),
-        ('nodes visited', f'{result.nodes:,}'),
-        ('screened out', f'{result.screened:,} '
-                        f'({100 * result.screened / nodes:.0f} %), unflown, '
-                        f'by the altitude integral'),
-        ('refused by the family', f'{result.refused:,}'),
-        ('no cut-off closes it', f'{result.no_cut_off:,}'),
-        ('closed on no orbit', f'{result.no_orbit:,}'),
-        ('cut-offs solved', f'{result.solved:,}'),
-        ('trajectories flown', f'{result.flown:,}, '
-                              f'{result.flown / max(result.solved, 1):.1f} '
-                              f'per cut-off solved'),
-        ('divided over', f'{result.workers} '
-                         f'{"process" if result.workers == 1 else "processes"}'),
-    ])
+    Where a search is going to look, before it looks - the orbit asked for,
+    what a set has to meet to count as reaching it, what the two estimates said
+    in advance, and every parameter of the family with the range and the step
+    it is searched over. `ascent-search` prints this as it starts, so that a
+    grid worth narrowing can be seen while there is still time to narrow it;
+    `--dry-run` prints it and stops there.
 
-    best = result.best
-    if best is None:
+    `planned` adds the nodes the passes come to, which is a figure about a
+    search that has not run yet. A finished one has `nodes visited` in the half
+    below and does not want the two side by side.
+
+    `result` is a `search.SearchResult` - as `search.plan` returns one before
+    anything is flown, or as `search` returns one after.
+    """
+    lines = _preamble(result)
+    _block(lines, 'grid', [*_axes(result), *_grid_cost(result),
+                           *([('nodes planned', f'{result.planned_nodes:,}')]
+                             if planned else [])])
+    return '\n'.join(lines)
+
+
+def summarise_found(result) -> str:
+    """What the search cost and what it found: the closing half.
+
+    What became of every node of the grid, the best of the sets that reached an
+    orbit as a table, and the one set the search answers with. Nothing in it
+    needs the grid printed above it, so a command that has already shown the
+    grid prints this on its own when the search is done.
+    """
+    lines: list[str] = []
+    _block(lines, 'cost', _cost(result))
+
+    if not result.found:
         lines.append('')
         if result.over_pressure:
             lines.append(f'{result.over_pressure:,} sets reached an orbit and '
@@ -256,21 +258,207 @@ def summarise_search(result) -> str:
             lines.append('no node of the grid came out on an orbit at all')
         return '\n'.join(lines)
 
+    lines.append('')
+    lines.extend(search_table(result))
+    lines.extend(_found(result))
+    return '\n'.join(lines)
+
+
+def _preamble(result) -> list[str]:
+    """What was estimated before the search ran, under what it is searching.
+
+    The launch site, the ranking and the tolerances used to be printed here as
+    well. They said nothing a reader did not already know - the site comes from
+    the mission file they named, and the other two are the same two sentences
+    on every search there has ever been - so the opening is now the two things
+    that do change: the vehicle and orbit asked for, and what the estimates
+    said about them.
+    """
+    lines = [f'{result.vehicle.name} to {result.target_altitude / 1000:g} km, '
+             f'{result.programme}']
+
+    early, late = result.window
+    _block(lines, 'estimated in advance', [
+        ('energy of the orbit', f'{result.required_velocity:.1f} m/s of '
+                                f'characteristic velocity'),
+        ('ideal vacuum time', f'{result.vacuum_time:.1f} s'),
+        ('equivalent time', f'{result.equivalent_time:.1f} s'),
+        ('cut-off searched in', f'{early:.1f} to {late:.1f} s'),
+    ])
+    return lines
+
+
+def _axes(result) -> list[tuple[str, str]]:
+    """Every parameter of the family with the range it was searched over.
+
+    All of them, held ones included. A parameter that did not move is the thing
+    a reader of this summary most needs to be told about, because it is the one
+    the search did not answer.
+    """
+    return [(name, span.describe()) for name, span in result.ranges.items()]
+
+
+def _grid_cost(result) -> list[tuple[str, str]]:
+    """What the shape of the grid comes to: the passes and what they resolve."""
+    refinements = max(result.passes - 1, 0)
+    passes = (f'{result.passes}: one over the whole grid above, then '
+              f'{refinements} more, each looking only around the best set found '
+              f'so far and at half the spacing of the one before it'
+              if refinements else
+              f'{result.passes}: one over the whole grid above, and no more')
+    rows = [('passes', passes)]
+
+    finest = ', '.join(f'{name} {spacing:g}'
+                       for name, spacing in result.spacing.items())
+    if finest:
+        rows.append(('spacing at the end', finest))
+    return rows
+
+
+def _cost(result) -> list[tuple[str, str]]:
+    """What the search cost: nodes visited, and what became of each."""
+    nodes = max(result.nodes, 1)
+    return [
+        ('nodes visited', f'{result.nodes:,}'),
+        ('walked already', f'{result.revisited:,}, skipped: a pass that closes '
+                           f'in shares nodes with the pass before it'),
+        ('screened out', f'{result.screened:,} '
+                         f'({100 * result.screened / nodes:.0f} %), unflown, '
+                         f'by the altitude integral'),
+        ('refused by the family', f'{result.refused:,}'),
+        ('could not be flown', f'{result.failed:,}'),
+        ('closed on no orbit', f'{result.no_orbit:,}'),
+        ('reached an orbit', f'{result.closed:,}'),
+        ('distinct sets found', f'{len(result.found):,}'),
+        ('trajectories flown', f'{result.flown:,}'),
+        ('divided over', f'{result.workers} '
+                         f'{"process" if result.workers == 1 else "processes"}'),
+    ]
+
+
+# name, width, decimal places, how to read it off a candidate. The parameters
+# of the family come before these and are built per search, since which of them
+# were searched and how finely is part of what the search was asked for.
+TERMINAL_COLUMNS = (
+    ('cut-off', 10, 1, lambda c: c.cutoff_time),
+    ('gamma', 8, 3, lambda c: c.flight_path_angle),
+    ('h km', 9, 2, lambda c: c.altitude / 1000),
+    ('h err', 8, 5, lambda c: c.altitude_error),
+    ('v m/s', 9, 1, lambda c: c.speed),
+    ('v err', 8, 5, lambda c: c.speed_error),
+    ('per km', 9, 2, lambda c: c.orbit.perigee_altitude / 1000),
+    ('apo km', 9, 2, lambda c: c.orbit.apogee_altitude / 1000),
+    ('ecc', 9, 6, lambda c: c.orbit.eccentricity),
+    ('orbit err', 10, 6, lambda c: c.orbit_error),
+)
+
+
+def search_table(result) -> list[str]:
+    """The sets found, best first, with the errors each is judged by.
+
+    A search is a map of a family before it is one answer out of it, and the
+    map is what says where to look next: rows that crowd together along one
+    parameter have found the orbit in that direction, and a best row sitting at
+    the edge of the table has been asked to look in the wrong place.
+
+    Only the parameters that were actually searched get a column. A held one is
+    the same in every row, and it is printed above where it belongs.
+    """
+    rows = result.found[:max(result.top, 0)]
+    if not rows:
+        return []
+
+    columns = [*_axis_columns(result), *TERMINAL_COLUMNS]
+    reaching = sum(1 for candidate in result.found
+                   if candidate.reaches(result.tolerance, result.speed_tolerance))
+    lines = [f'TOP {len(rows):,} OF THE {len(result.found):,} SETS THAT '
+             f'REACHED AN ORBIT, BEST FIRST',
+             f'{reaching:,} of them meet all three tolerances, marked *'
+             if reaching else 'none of them meets all three tolerances',
+             '']
+
+    header = f'{"#":>4}' + ''.join(f'{name:>{width}}'
+                                   for name, width, _, _ in columns)
+    lines.append(header)
+    lines.append('-' * len(header))
+    for index, candidate in enumerate(rows, start=1):
+        marker = '*' if candidate.reaches(result.tolerance,
+                                          result.speed_tolerance) else ''
+        line = f'{f"{index}{marker}":>4}'
+        for _, width, decimals, read in columns:
+            line += f'{read(candidate):>{width}.{decimals}f}'
+        lines.append(line)
+    return lines
+
+
+def _axis_columns(result) -> list[tuple]:
+    """One column per parameter the search actually swept.
+
+    The decimals are read off what the search resolves that parameter to, which
+    the search itself worked out - the sweep step halved once per pass, except
+    on an axis of instants, which stops at the tenth of a second the flight is
+    asked in. So a column says exactly as much as the search knows about that
+    parameter and no more.
+    """
+    columns = []
+    for name, span in result.searched.items():
+        decimals = _decimals(result.spacing[name],
+                             [candidate.values[name] for candidate in result.found])
+        width = max(len(name) + 2, decimals + 6)
+        columns.append((name, width, decimals,
+                        lambda candidate, name=name: candidate.values[name]))
+    return columns
+
+
+def _decimals(step: float, values=()) -> int:
+    """Decimals enough to tell two neighbouring values apart, and one over.
+
+    One over unless the values prove it unnecessary. The decimals a step needs
+    are the decimals the step itself has - but only where the values sit on the
+    same lattice the decimals do, and a range is under no obligation to. An
+    axis of step 1 starting at 0.5 is 0.5, 1.5, 2.5, which to no decimals at
+    all is 0, 2, 2; one of step 0.5 starting at 0.25 is worse. The spare digit
+    is a true digit of a value rather than an invented one - every value is an
+    exact multiple of the step from the low end of its range - and it is what
+    keeps two of them half a step off the lattice from printing alike.
+
+    Given the values themselves, the question can be asked rather than
+    answered from the worst case, and where they all land on the lattice the
+    spare digit is dropped. An axis of instants is that case: it is rounded to
+    a tenth of a second, so 25.7 is the whole of what there is to print and
+    25.70 would only invite the reader to wonder what the nought was hiding.
+    """
+    if step <= 0.0:
+        return 3
+    plain = max(0, math.ceil(-math.log10(step)))
+    if values and all(abs(value - round(value, plain))
+                      <= 1e-9 * max(1.0, abs(value)) for value in values):
+        return min(6, plain)
+    return min(6, plain + 1)
+
+
+def _found(result) -> list[str]:
+    """The set the search answers with, in full."""
+    best = result.best
     orbit = best.orbit
+    lines: list[str] = []
     _block(lines, 'found', [
         ('pitch programme', ', '.join(
             f'{key}={value:g}' if isinstance(value, float) else f'{value}'
             for key, value in best.parameters.items() if key != 'type')),
-        ('cut-off', f'{best.cutoff_time:.4f} s'),
-        ('perigee', f'{orbit.perigee_altitude / 1000:.3f} km'
-                    if orbit.is_closed else 'not a closed orbit'),
-        ('apogee', f'{orbit.apogee_altitude / 1000:.3f} km'
-                   if orbit.is_closed else '-'),
-        ('eccentricity', f'{orbit.eccentricity:.5f}'),
-        ('worst terminal error', f'{best.miss:.0f} m'
-                                 if best.miss < float('inf') else 'no orbit'),
+        ('cut-off', f'{best.cutoff_time:.1f} s'
+                    + (f', {best.values["coast"]:g} s of it after the programme'
+                       if best.values.get('coast') else '')),
+        ('altitude at cut-off', f'{best.altitude / 1000:.3f} km, '
+                                f'{best.altitude_miss:.0f} m out'),
+        ('speed at cut-off', f'{best.speed:.1f} m/s, {best.speed_miss:.1f} m/s '
+                             f'from the speed of the orbit asked for'),
+        ('perigee', f'{orbit.perigee_altitude / 1000:.3f} km'),
+        ('apogee', f'{orbit.apogee_altitude / 1000:.3f} km'),
+        ('eccentricity', f'{orbit.eccentricity:.6f}'),
+        ('worst apsidal error', f'{best.miss:.0f} m'),
         ('reaches the orbit', 'yes' if result.reaches_orbit
-                              else 'no: nothing on the grid met the tolerance'),
+                              else 'no: nothing on the grid met all three'),
         ('velocity budget', f'gravity {best.gravity_loss:.1f}, aerodynamic '
                             f'{best.aerodynamic_loss:.1f}, steering '
                             f'{best.steering_loss:.1f}, total '
@@ -284,7 +472,7 @@ def summarise_search(result) -> str:
 
     if result.over_pressure:
         lines.append('')
-        lines.append(f'{result.over_pressure:,} sets reached the orbit and were '
+        lines.append(f'{result.over_pressure:,} sets reached an orbit and were '
                      f'put aside for asking more of the airframe than '
                      f'{result.max_dynamic_pressure / 1000:g} kPa')
 
@@ -293,4 +481,4 @@ def summarise_search(result) -> str:
         lines.append(f'the set found sits on a bound of the grid in '
                      f'{", ".join(result.on_edge)}: either the family gives out '
                      f'there, or a better set lies outside the range searched')
-    return '\n'.join(lines)
+    return lines
