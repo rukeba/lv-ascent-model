@@ -308,8 +308,8 @@ def _grid_cost(result) -> list[tuple[str, str]]:
               f'{result.passes}: one over the whole grid above, and no more')
     rows = [('passes', passes)]
 
-    finest = ', '.join(f'{name} {span.step / 2 ** refinements:g}'
-                       for name, span in result.searched.items())
+    finest = ', '.join(f'{name} {spacing:g}'
+                       for name, spacing in result.spacing.items())
     if finest:
         rows.append(('spacing at the end', finest))
     return rows
@@ -340,7 +340,7 @@ def _cost(result) -> list[tuple[str, str]]:
 # of the family come before these and are built per search, since which of them
 # were searched and how finely is part of what the search was asked for.
 TERMINAL_COLUMNS = (
-    ('cut-off', 10, 3, lambda c: c.cutoff_time),
+    ('cut-off', 10, 1, lambda c: c.cutoff_time),
     ('gamma', 8, 3, lambda c: c.flight_path_angle),
     ('h km', 9, 2, lambda c: c.altitude / 1000),
     ('h err', 8, 5, lambda c: c.altitude_error),
@@ -394,37 +394,47 @@ def search_table(result) -> list[str]:
 def _axis_columns(result) -> list[tuple]:
     """One column per parameter the search actually swept.
 
-    The decimals are read off the step the search resolves that parameter to -
-    the step of the sweep, halved once per refining pass - so a column says
-    exactly as much as the search knows about that parameter and no more.
+    The decimals are read off what the search resolves that parameter to, which
+    the search itself worked out - the sweep step halved once per pass, except
+    on an axis of instants, which stops at the tenth of a second the flight is
+    asked in. So a column says exactly as much as the search knows about that
+    parameter and no more.
     """
-    refinements = max(result.passes - 1, 0)
     columns = []
     for name, span in result.searched.items():
-        decimals = _decimals(span.step / 2 ** refinements)
+        decimals = _decimals(result.spacing[name],
+                             [candidate.values[name] for candidate in result.found])
         width = max(len(name) + 2, decimals + 6)
         columns.append((name, width, decimals,
                         lambda candidate, name=name: candidate.values[name]))
     return columns
 
 
-def _decimals(step: float) -> int:
-    """Decimals enough to tell two neighbouring nodes apart, and one over.
+def _decimals(step: float, values=()) -> int:
+    """Decimals enough to tell two neighbouring values apart, and one over.
 
-    One over on purpose. The decimals a step needs are the decimals the step
-    itself has - but only where the nodes sit on the same lattice the decimals
-    do, and a range is under no obligation to. An axis of step 1 starting at
-    0.5 is 0.5, 1.5, 2.5, which to no decimals at all is 0, 2, 2; one of step
-    0.5 starting at 0.25 is worse.
+    One over unless the values prove it unnecessary. The decimals a step needs
+    are the decimals the step itself has - but only where the values sit on the
+    same lattice the decimals do, and a range is under no obligation to. An
+    axis of step 1 starting at 0.5 is 0.5, 1.5, 2.5, which to no decimals at
+    all is 0, 2, 2; one of step 0.5 starting at 0.25 is worse. The spare digit
+    is a true digit of a value rather than an invented one - every value is an
+    exact multiple of the step from the low end of its range - and it is what
+    keeps two of them half a step off the lattice from printing alike.
 
-    The spare digit is a true digit of a coordinate rather than an invented
-    one - every node is an exact multiple of the step from the low end of its
-    range - and it is what keeps two nodes half a step off the lattice from
-    printing as the same number.
+    Given the values themselves, the question can be asked rather than
+    answered from the worst case, and where they all land on the lattice the
+    spare digit is dropped. An axis of instants is that case: it is rounded to
+    a tenth of a second, so 25.7 is the whole of what there is to print and
+    25.70 would only invite the reader to wonder what the nought was hiding.
     """
     if step <= 0.0:
         return 3
-    return min(6, max(0, math.ceil(-math.log10(step)) + 1))
+    plain = max(0, math.ceil(-math.log10(step)))
+    if values and all(abs(value - round(value, plain))
+                      <= 1e-9 * max(1.0, abs(value)) for value in values):
+        return min(6, plain)
+    return min(6, plain + 1)
 
 
 def _found(result) -> list[str]:
@@ -436,7 +446,7 @@ def _found(result) -> list[str]:
         ('pitch programme', ', '.join(
             f'{key}={value:g}' if isinstance(value, float) else f'{value}'
             for key, value in best.parameters.items() if key != 'type')),
-        ('cut-off', f'{best.cutoff_time:.4f} s'
+        ('cut-off', f'{best.cutoff_time:.1f} s'
                     + (f', {best.values["coast"]:g} s of it after the programme'
                        if best.values.get('coast') else '')),
         ('altitude at cut-off', f'{best.altitude / 1000:.3f} km, '

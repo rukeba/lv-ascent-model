@@ -73,9 +73,10 @@ def test_listing_the_catalogue(capsys):
 # units the arguments are read in, the vehicle found beside the mission file,
 # the entry written out and the exit status - and not how well the grid was
 # swept, which is `tests/test_search.py`.
-NARROW = ['--range', 't1=20', '--range', 'k2=0.05',
-          '--range', 'k3=0.50:0.56:4', '--range', 't4=502:503.5:4',
-          '--refinements', '7', '--steps', '1', '--workers', '1']
+NARROW = ['--range', 't1=20', '--range', 'k2=0.03:0.07:3',
+          '--range', 'k3=0.50:0.56:3', '--range', 't4=502:503:3',
+          '--refinements', '4', '--steps', '1', '--workers', '1',
+          '--tolerance', '2']
 
 
 def test_the_search_writes_out_the_set_it_found(capsys):
@@ -95,15 +96,17 @@ def test_the_search_writes_out_the_set_it_found(capsys):
     assert entry['launch_site'] == {'latitude': 28.5, 'azimuth': 90}
     assert entry['pitch_programme']['type'] == 'five-phase'
     assert entry['pitch_programme']['t1'] == 20.0
+    # an instant a vehicle could be given, and not a hundredth past it
     assert entry['cutoff']['time'] == pytest.approx(502.7, abs=0.5)
+    assert entry['cutoff']['time'] == round(entry['cutoff']['time'], 1)
 
 
 def test_a_search_that_reaches_nothing_writes_nothing_out(capsys):
     """A set that misses the orbit is shown, and is not filed as an entry."""
     assert search_main(['f9', '--altitude', '500', '--programme', 'five-phase',
-                        '--range', 't1=20', '--range', 'k2=0.05',
-                        '--range', 'k3=0.50:0.56:4',
-                        '--range', 't4=502:503.5:4',
+                        '--range', 't1=20', '--range', 'k2=0.03:0.07:3',
+                        '--range', 'k3=0.50:0.56:3',
+                        '--range', 't4=502:503:3',
                         '--tolerance', '0.001', '--refinements', '0',
                         '--steps', '1', '--workers', '1', '--yaml']) == 1
     written = capsys.readouterr()
@@ -133,11 +136,11 @@ def test_the_search_prints_the_sets_it_found_as_a_table(capsys):
     written = capsys.readouterr().out
     assert 'TOP 4 OF THE' in written
     assert 'orbit err' in written
-    # the two axes swept have columns; the two held do not
+    # the three axes swept have columns; the ones held do not
     header = next(line for line in written.splitlines() if 'orbit err' in line)
-    assert 'k3' in header and 't4' in header
-    assert 'k2' not in header
-    assert '  k2                      0.05, held' in written
+    assert 'k2' in header and 'k3' in header and 't4' in header
+    assert 't1' not in header
+    assert '  t1                      20, held' in written
 
 
 def test_the_grid_is_printed_before_it_is_walked(capsys):
@@ -252,9 +255,9 @@ def test_a_search_that_reaches_nothing_writes_no_report(tmp_path, capsys):
     directory = tmp_path / 'nothing'
 
     assert search_main(['f9', '--altitude', '500', '--programme', '5f',
-                        '--range', 't1=20', '--range', 'k2=0.05',
-                        '--range', 'k3=0.50:0.56:4',
-                        '--range', 't4=502:503.5:4',
+                        '--range', 't1=20', '--range', 'k2=0.03:0.07:3',
+                        '--range', 'k3=0.50:0.56:3',
+                        '--range', 't4=502:503:3',
                         '--tolerance', '0.001', '--refinements', '0',
                         '--steps', '1', '--workers', '1',
                         '--report', str(directory)]) == 1

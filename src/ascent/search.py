@@ -116,6 +116,27 @@ TOLERANCE = 500.0
 # altitude and is not going fast enough to stay there
 SPEED_TOLERANCE = 10.0
 
+# The tenth of a second every instant and every duration of the flight is
+# asked for and reported in.
+#
+# No vehicle is commanded to shut its engines down at 502.6720 s, and none
+# begins its turn at 14.2676. A timeline is issued to a tenth of a second at
+# best, so an answer written any finer is not a better answer - it is the same
+# answer with digits after it that nothing can act on, and two of them that
+# differ only there are one answer written twice.
+#
+# It is what the model already works in: a pitch programme is tabulated on a
+# tenth-of-a-second grid, so an instant between two of its points is read back
+# by interpolation anyway.
+#
+# What this leaves the search to steer with is the shape of the turn. Those are
+# coefficients of a guidance law rather than instants on a timeline - k2 and k3,
+# the fullness of a quartic, the angles a tangent passes through - and nothing
+# rounds them. Every family keeps exactly two of them, which is what the two
+# terminal conditions of a circular orbit need.
+TIME_DECIMALS = 1
+TIME_QUANTUM = 10.0 ** -TIME_DECIMALS
+
 # How many of the sets found are printed, best first
 TOP = 15
 
@@ -430,6 +451,11 @@ class SearchResult:
     max_dynamic_pressure: float | None = None
     # processes the nodes of a pass were divided over
     workers: int = 1
+    # what each axis being searched is resolved to by the end, one entry per
+    # axis of `searched`. The sweep step halved once per pass, except on an
+    # axis of instants, which stops at the tenth of a second the flight is
+    # asked in
+    spacing: dict[str, float] = field(default_factory=dict)
     # axes whose best value came out on a bound of the grid, where a better set
     # may lie just outside
     on_edge: tuple[str, ...] = ()
@@ -503,11 +529,26 @@ class SearchResult:
 # property of the shape that follows.
 RISE = Range(12.0, 30.0, 4)
 
-# Nodes along the cut-off axis of a first pass, spread over the window the
-# ascent-time estimate gives. A step of that window is worth tens of kilometres
-# of apogee, which is what the refining passes are for; a first pass finer than
-# this costs more than closing in on what it found.
-CUT_OFF_NODES = 25
+# Values along the cut-off axis of a sweep, spread over the window the
+# ascent-time estimate gives.
+#
+# This is the one count worth arguing about, and the argument is not about
+# precision. The passes that close in halve their spacing each time, so ten of
+# them resolve any of these axes far past what the tolerance asks; what they
+# cannot do is travel. A pass reaches one step of the sweep either side of the
+# best value it found, the next half a step, and so on, so the whole search can
+# move about two sweep steps away from where the sweep pointed it and no
+# further. What the sweep decides is therefore not how finely the answer is
+# resolved but which part of the family it is resolved in.
+#
+# That makes the count matter in proportion to how small two steps are against
+# the whole range. On the vertical rise, four values put two steps at two
+# thirds of the range and there is nothing to gain. On the cut-off, forty-one
+# values over a window some fifty seconds wide put two steps at a twentieth of
+# it - and the cut-off is the steepest axis there is, at some eighty kilometres
+# of apogee for every second of burn. Forty-one rather than twenty-five for
+# that reason and no other, at a sweep half again as large.
+CUT_OFF_NODES = 41
 
 
 def _window_axis(window: tuple[float, float]) -> Range:
@@ -523,6 +564,11 @@ class Family:
     one node rather than by being left out. `build` turns one node into a
     programme and the instant the engines stop; `parameters` turns it into the
     specification that would fly it again.
+
+    `TIMES` names the axes that are instants of the flight or durations of it,
+    as against coefficients of the guidance law. Those are rounded to
+    `TIME_QUANTUM` wherever the grid produces them, so that the answer is an
+    answer a vehicle could be given.
 
     Two axes worth naming here, because they are the two whose default range is
     a single node.
@@ -544,6 +590,9 @@ class Family:
     Neither is fixed by the model, and both are ranges like the rest.
     """
     name: str
+    # the axes that are instants of the flight or durations of it. The end of
+    # the programme is one, because the engines stop `coast` after it
+    TIMES: tuple[str, ...] = ()
 
     def ranges(self, window: tuple[float, float]) -> dict[str, Range]:
         raise NotImplementedError
@@ -567,6 +616,7 @@ class FivePhase(Family):
     zero where a vehicle would bound it.
     """
     name = 'five-phase'
+    TIMES = ('t1', 't4', 'coast')
 
     def ranges(self, window):
         return {
@@ -608,11 +658,19 @@ class VelocityShare(Family):
     exist. The specification written out carries `tf` itself.
     """
     name = 'velocity-share'
+    # `turn` is not among them: where the turn ends is a coefficient of the
+    # quartic rather than an instant anything happens at, since the share of
+    # the speed it drives to zero arrives there flat. The specification written
+    # out carries the `tf` it comes to, unrounded, as the law's own number
+    TIMES = ('t1', 'te', 'coast')
 
     def ranges(self, window):
         return {
             't1': RISE,
-            'turn': Range(0.5, 1.0, 6),
+            # nine rather than six: where the turn ends is this family's
+            # steep parameter, and two steps of six is two fifths of what it
+            # can be given
+            'turn': Range(0.5, 1.0, 9),
             # the quartic has an interior stationary point outside this, where
             # the share leaves [0, 1] and the turn kinks
             's': Range(-3.0, 3.0, 9),
@@ -655,11 +713,19 @@ class BilinearTangent(Family):
     is asked to start, the less the turn resembles anything a vehicle flies.
     """
     name = 'bilinear-tangent'
+    # `mid` is not among them, for the reason `turn` is not one of the velocity
+    # share's: it says where the middle angle is prescribed, which is how the
+    # law is written down rather than a moment of the flight
+    TIMES = ('t1', 'te', 'coast')
 
     def ranges(self, window):
         return {
             't1': RISE,
-            'start': Range(80.0, 89.6, 5),
+            # nine rather than five, for the same reason as `turn` above:
+            # this family steps its flight-path angle at t1, from the vertical
+            # straight to whatever the tangent says, so the angle it starts at
+            # is also the size of that step and the orbit answers to it sharply
+            'start': Range(80.0, 89.6, 9),
             'mid': Range(0.5, 0.5, 1),
             'middle': Range(5.0, 60.0, 12),
             'te': _window_axis(window),
@@ -790,6 +856,10 @@ def plan(vehicle: LaunchVehicle, target_altitude: float, programme: str,
         max_dynamic_pressure=max_dynamic_pressure)
     result.passes = refinements + 1
     result.planned_nodes = _planned_nodes(grid, refinements)
+    result.spacing = {
+        name: (max(span.step / 2 ** refinements, TIME_QUANTUM)
+               if name in family.TIMES else span.step / 2 ** refinements)
+        for name, span in grid.items() if span.nodes > 1}
     return result
 
 
@@ -878,8 +948,12 @@ def search(vehicle: LaunchVehicle, target_altitude: float, programme: str,
             centre = result.found[0].values
             grid = _closer(grid, centre, reach, bounds)
             # five nodes over the two widths either side, so the next pass
-            # resolves every axis it is searching twice as finely as this one
-            reach = {name: 0.5 * width for name, width in reach.items()}
+            # resolves every axis it is searching twice as finely as this one -
+            # except an axis of instants, which stops once its window is
+            # narrower than the tenth of a second the flight is asked in,
+            # because every value left in it would be the same instant
+            reach = {name: 0.5 * width for name, width in reach.items()
+                     if name not in family.TIMES or width >= 2.0 * TIME_QUANTUM}
     except KeyboardInterrupt:
         # the queue holds most of a pass, and a plain shutdown would wait for
         # every node of it before letting the interrupt through - which is the
@@ -941,11 +1015,19 @@ def _planned_nodes(grid: dict[str, Range], refinements: int) -> int:
     return math.prod(span.nodes for span in grid.values()) + refinements * refined
 
 
-def _nodes(grid: dict[str, Range]):
-    """Every combination of the grid, one set of values at a time."""
+def _nodes(grid: dict[str, Range], times: tuple[str, ...] = ()):
+    """Every combination of the grid, one set of values at a time.
+
+    Rounded as it is produced rather than as it is used, so that two values of
+    an instant that come to the same tenth of a second are the same node - one
+    key, one trajectory, one row of the table - and not two answers that differ
+    where nothing can act on the difference.
+    """
     names = list(grid)
     for point in product(*(grid[name].values() for name in names)):
-        yield {name: float(value) for name, value in zip(names, point)}
+        yield {name: (round(value, TIME_DECIMALS) if name in times
+                      else float(value))
+               for name, value in zip(names, point)}
 
 
 def _key(values: dict[str, float]) -> tuple:
@@ -986,7 +1068,11 @@ def _closer(grid: dict[str, Range], centre: dict[str, float],
     closer = {}
     for name, span in grid.items():
         if name not in reach:
-            closer[name] = span
+            # held from the start, or an axis of instants that has closed in as
+            # far as a tenth of a second lets it. Either way it stays where the
+            # best set has it, which for one held from the start is where it
+            # always was
+            closer[name] = Range(centre[name], centre[name], 1)
             continue
         low, high = bounds[name]
         near, far = (max(low, centre[name] - reach[name]),
@@ -1031,7 +1117,7 @@ def _sweep(flight: "_Flight", grid: dict[str, Range], result: SearchResult,
     ranked: it is not a worse answer, it is not an answer.
     """
     values = []
-    for one in _nodes(grid):
+    for one in _nodes(grid, flight.family.TIMES):
         key = _key(one)
         if key in walked:
             result.revisited += 1

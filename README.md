@@ -495,13 +495,13 @@ The sets that meet all three tolerances are marked `*`; the answer at the foot
 of the page is the best of those, or simply the best if none of them does.
 
 ```
-TOP 15 OF THE 8,174 SETS THAT REACHED AN ORBIT, BEST FIRST
-703 of them meet all three tolerances, marked *
+TOP 15 OF THE 6,271 SETS THAT REACHED AN ORBIT, BEST FIRST
+55 of them meet all three tolerances, marked *
 
-   #        t1          k2          k3        t4   cut-off   gamma     h km   h err    v m/s   v err   per km   apo km      ecc orbit err
------------------------------------------------------------------------------------------------------------------------------------------
-  1*   23.0801    0.031133    0.549316  502.6720   502.672   0.000   499.99 0.00003   7616.6 0.00000   499.99   500.01 0.000002  0.000003
-  2*   23.0801    0.031211    0.549170  502.6720   502.672   0.000   499.98 0.00004   7616.6 0.00000   499.98   500.00 0.000001  0.000003
+   #     t1          k2          k3     t4   cut-off   gamma     h km   h err    v m/s   v err   per km   apo km      ecc orbit err
+-----------------------------------------------------------------------------------------------------------------------------------
+  1*   25.7    0.076016    0.468555  503.0     503.0  -0.000   499.94 0.00012   7616.6 0.00001   499.94   499.99 0.000004  0.000010
+  2*   25.7    0.076035    0.468506  503.0     503.0   0.000   499.94 0.00013   7616.6 0.00001   499.94   500.02 0.000006  0.000012
 ```
 
 `--csv` writes the whole of that table to a file, not just the head of it, so a
@@ -549,35 +549,68 @@ relies on cannot drift away from the data they were measured on.
 land on an orbit, and the reason is one number: near a circular orbit the
 apogee answers to the cut-off time at some 80 km per second. The cut-off axis
 spans the whole window the estimate allows, some fifty seconds, so one step of
-a twenty-five-node sweep is worth tens of kilometres of apogee — a map of where
-in the family the orbit lies, and nothing nearer. So the best node becomes the
-centre of a grid one step wide along every axis that was searched, five nodes
-to an axis, and the sweep runs again at half the step; ten times over, which
-takes that step from a couple of seconds to a couple of milliseconds. That is
-what turns the map into a set that meets the tolerance. `--refinements` is how
-many, and `--refinements 0` stops after the sweep, which is the map on its own.
+it is worth a hundred kilometres of apogee — a map of where in the family the
+orbit lies, and nothing nearer.
 
-Each of those passes is five nodes an axis rather than the whole grid again, so
-ten of them cost less than the sweep does. They are held inside the range each
-axis was given: a set that comes out on a bound is reported as such rather than
-chased past it, because the family may give out there or a better set may lie
-outside the range you named.
+So the best value found becomes the centre of the next grid, with one
+neighbour either side of it: the range from one step below to one step above,
+five values across it, which is the same two steps at half the spacing. Then
+the best of *those* with half a step either side, and so on — ten times over,
+which takes the spacing on the cut-off from well over a second to a couple of
+milliseconds. That is what turns the map into a set that meets the tolerance.
+`--refinements` is how many, and `--refinements 0` stops after the sweep, which
+is the map on its own.
+
+Each of those passes is five values an axis rather than the whole grid again,
+so ten of them cost less than the sweep does. They are held inside the range
+each axis was given: a set that comes out on a bound is reported as such rather
+than chased past it, because the family may give out there or a better set may
+lie outside the range you named.
+
+**Why the count on an axis matters, and which ones.** Not for precision. Ten
+passes resolve any of these axes far past what the tolerance asks, whatever the
+sweep gave them. What the passes cannot do is travel: one step either side,
+then half a step, then a quarter — the sum of which is two steps and no more.
+The whole search can move about two sweep steps away from where the sweep
+pointed it.
+
+So the count on an axis matters in proportion to how small two of its steps are
+against the whole range, and that varies enormously:
+
+| axis | values | two steps, against the range |
+|---|---|---|
+| `t1` | 4 | 12 s of 18 — two thirds |
+| `k2` | 4 | 0.04 of 0.06 — two thirds |
+| `turn`, `start` | 9 | about a quarter |
+| `s`, `middle` | 9, 12 | about a fifth |
+| `t4` / `te` | 41 | 2.8 s of 55 — a twentieth |
+
+The vertical rise needs no more values than it has: the passes reach most of
+its range from wherever they start. The cut-off is the opposite case, and it is
+also the steepest axis there is, which is why it gets forty-one where the shape
+of the turn gets four to twelve. Even so, no count makes the cut-off safe on
+its own — a twentieth of the window is still a twentieth — and what covers the
+rest is the staged recipe below: read the map, then search again with the
+ranges narrowed on to what it showed.
 
 **How close that gets.** The surface the passes walk has a narrow valley in
 it: every shape of turn has its own cut-off that closes the orbit, so the two
 move together and the floor between them is thin. All three families land on
-it — Falcon 9 to 500 km comes back 13 m out on the five-phase turn, 11 m on the
-velocity share and 326 m on the bilinear tangent, against a tolerance of 500 m.
+it — Falcon 9 to 500 km comes back 59 m out on the five-phase turn, 34 m on
+the velocity share and 199 m on the bilinear tangent, against a tolerance of
+500 m, with the cut-off of each on a whole tenth of a second.
 
 The bilinear tangent is the hardest of the three to land on, for the reason
 given further up: it reaches the horizon linearly, so how far the cut-off falls
 past the end of its turn *is* the eccentricity of the orbit, and the floor of
 its valley is a few hundredths of a second wide where the other two are a good
 deal wider.
-Where that matters, the answer is the staged recipe below rather than more
-passes. The same orbit searched again on a grid narrowed to what the first
-search found, its `te` split fine enough to step a fiftieth of a second at a
-time, comes back 4 m out like the other two.
+
+That is also why the recipe below is worth the trouble on this family: the same
+orbit searched again on a grid narrowed to what the first search found, with
+every tenth of a second in that neighbourhood offered, comes back 220 m out in
+35 seconds. Not closer than the whole sweep managed — the same, for a twentieth
+of the cost, and from a grid you can see the shape of.
 
 **What it costs.**
 
@@ -586,9 +619,9 @@ thirteen processes of a twenty-core machine:
 
 | family | sweep | nodes walked | screened out | trajectories flown | wall clock | error |
 |---|---|---|---|---|---|---|
-| `five-phase` | 7,600 | 13,532 | 23 % | 10,476 | 5 min 53 s | 13 m |
-| `velocity-share` | 5,400 | 10,990 | 45 % | 5,997 | 3 min 32 s | 11 m |
-| `bilinear-tangent` | 6,000 | 11,521 | 31 % | 7,998 | 4 min 26 s | 326 m |
+| `five-phase` | 12,464 | 15,072 | 33 % | 10,064 | 5 min 07 s | 59 m |
+| `velocity-share` | 13,284 | 15,941 | 74 % | 4,201 | 2 min 15 s | 34 m |
+| `bilinear-tangent` | 17,712 | 20,244 | 51 % | 9,908 | 4 min 43 s | 199 m |
 
 The sweep is the whole grid; the ten passes that close in add five nodes an
 axis each, and between three hundred and seven hundred of those turn out to
@@ -623,7 +656,7 @@ uv run ascent-search f9 -a 500 -p bt --refinements 0 --csv out/map.csv
 # and the set: narrowed on to what the map showed, with a fine step on te
 uv run ascent-search f9 -a 500 -p bt \
     --range t1=20 --range start=87:89:5 \
-    --range middle=29:31:9 --range te=500.5:501.5:51
+    --range middle=29:31:9 --range te=500.5:501.5:11
 ```
 
 `--dry-run` on the second of those says what it will cost before it costs it.
@@ -646,28 +679,27 @@ uv run python examples/parameter_search.py       # all three families, side by s
 four numbers of every set where the dissertation holds them — the vertical rise
 at 20 s, the five-phase `k2` at 0.05, the instant the bilinear tangent's middle
 angle is prescribed at half way along the turn, and every turn aimed at the
-horizon — and solves for what is left.
-This searches all of them, so it has freedom the catalogue never spent and
-lands somewhere else in the family. Hold those four where the catalogue holds
-them and the two agree: `--range t1=20 --range k2=0.05` on Falcon 9 to 500 km
-returns `k3` = 0.5309 against the 0.52958 on file and a cut-off of 502.735 s
-against 502.712, which is 436 m of orbit, because with `k3` and the cut-off
-left for two terminal conditions there is nothing to prefer. Narrow the grid
-about that set as well and both come back to four figures, which is what
-`tests/test_search.py` checks. Let them
-go and it returns `t1` = 23.08 s, `k2` = 0.0311 and `k3` = 0.5493 cutting off
-at 502.672 s instead — a different set, on the same circle to 13 m.
+horizon — and solves the rest with the cut-off free to whatever precision it
+liked. Its five-phase set for Falcon 9 to 500 km cuts off at 502.71245 s.
 
-What the two do have to agree on is the orbit, and they do. The velocity budget
-beside each is what that particular route to it cost, and the routes differ:
-the catalogue's five-phase set spends 516.8 m/s on steering and 3110.1 in
-total, and the set found here spends 507.6 and 3099.1. Do not read that as the
-search finding the cheaper route — it is not asked to, and on another run of
-another family it lands on a dearer one. The ranking asks how close the orbit
-came and nothing at all about what the route to it cost. `--csv` writes the
-velocity budget of every set found beside its errors, which is where to look
-when the cheapest route to the circle is wanted rather than the closest one
-to it.
+This search cannot answer that, and should not: it asks for the cut-off in
+tenths of a second, and the nearest it will offer is 502.7. Two of the four the
+catalogue holds are therefore not held here at all — `k2` has to be searched,
+because with the cut-off in tenths it is `k2` and `k3` that carry the two
+terminal conditions between them. What comes back is a different route to the
+same circle, and it is the one of the two that could be put on a timeline.
+
+What the two do have to agree on is the orbit, and they do. Searching every
+parameter of the five-phase turn returns `t1` = 25.7 s, `k2` = 0.0760,
+`k3` = 0.4686 and a cut-off at 503.0 s, which is the circle to 59 m. The
+velocity budget beside each set is what that particular route to it cost, and
+the routes differ: the catalogue's set spends 516.8 m/s on steering and 3110.1
+in total, and this one spends 608.1 and 3213.7. The searched set is the dearer
+of the two by 104 m/s, and nothing here is wrong — the ranking asks how close
+the orbit came and nothing at all about what the route to it cost. `--csv`
+writes the velocity budget of every set found beside its errors, which is where
+to look when the cheapest route to the circle is wanted rather than the closest
+one to it.
 
 ## Reproducing a published result
 

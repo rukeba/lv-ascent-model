@@ -28,23 +28,29 @@ from ascent.constants import circular_velocity
 from ascent.estimates import equivalent_time
 from ascent.search import (FAMILIES, NODE_LIMIT, REFINED_NODES,
                            BilinearTangent, FivePhase, Range, VelocityShare,
-                           _closer, axis_names, parse_ranges, plan, search)
+                           _closer, _nodes, axis_names, parse_ranges, plan,
+                           search)
 
 FALCON = load_vehicle('config/lv.f9.yaml')
 CATALOGUE = load_catalogue('config/catalogue.yaml')
 SITE = {'latitude_deg': 28.5, 'azimuth_deg': 90.0}
 
-# The catalogue's own five-phase set for 500 km with the grid narrowed on to it:
-# the vertical rise and k2 held where the catalogue holds them, k3 and the end
-# of the turn swept over four nodes each. Some 130 trajectories, three seconds.
-NARROW = {'t1': Range(20.0, 20.0), 'k2': Range(0.05, 0.05),
-          'k3': Range(0.50, 0.56, 4), 't4': Range(502.0, 503.5, 4),
+# A five-phase grid narrowed on to the catalogue's own set for 500 km: the
+# vertical rise held where the catalogue holds it, and three values each of k2,
+# k3 and the end of the turn. Some 310 trajectories, seven seconds.
+#
+# Both of the shape parameters are searched and neither is held, because
+# between them they have to carry both terminal conditions. The cut-off cannot
+# help: it is asked for in tenths of a second and a tenth is some eight
+# kilometres of apogee, which is sixteen times the tolerance below.
+NARROW = {'t1': Range(20.0, 20.0), 'k2': Range(0.03, 0.07, 3),
+          'k3': Range(0.50, 0.56, 3), 't4': Range(502.0, 503.0, 3),
           'angle': Range(0.0, 0.0), 'coast': Range(0.0, 0.0)}
 
 
 def quick(**overrides):
     """A search narrow enough for a test and complete in every step of itself."""
-    settings = {'ranges': NARROW, 'refinements': 7, 'steps_per_second': 1,
+    settings = {'ranges': NARROW, 'refinements': 6, 'steps_per_second': 1,
                 'workers': 1, 'tolerance': 1000.0, **SITE}
     settings.update(overrides)
     return search(FALCON, 500_000, 'five-phase', **settings)
@@ -140,6 +146,31 @@ def test_the_engines_stop_a_coast_after_the_programme_does(family, end):
     programme, cutoff = family.build({**values, 'coast': 7.5})
     assert cutoff == pytest.approx(487.5)
     assert programme.end_time == pytest.approx(480.0, abs=0.1)
+
+
+def test_the_grid_asks_for_an_instant_in_tenths_of_a_second():
+    """No vehicle begins its turn at 14.2578 s, and none at 14.2676 either.
+
+    A timeline is issued to a tenth of a second at best, so those are one
+    instant and not two: one node of the grid, one trajectory, one row of the
+    table. The shape of the turn is not rounded - those are coefficients of a
+    guidance law rather than moments of a flight - so k2 keeps all three of its
+    values here while t1 comes back with one.
+    """
+    grid = {'t1': Range(14.2578, 14.2676, 2), 'k2': Range(0.03, 0.07, 3)}
+    walked = list(_nodes(grid, FivePhase.TIMES))
+
+    assert sorted({one['t1'] for one in walked}) == [14.3]
+    assert len({one['k2'] for one in walked}) == 3
+
+
+def test_every_instant_of_the_set_found_is_a_tenth(found):
+    """And the set the search answers with is one a vehicle could be given."""
+    best = found.best
+    for name in FivePhase.TIMES:
+        assert best.values[name] == round(best.values[name], 1)
+    assert best.cutoff_time == round(best.cutoff_time, 1)
+    assert found.specification('lv.f9')['cutoff']['time'] == best.cutoff_time
 
 
 def test_the_families_cover_the_catalogue():
@@ -262,7 +293,7 @@ def test_the_work_is_counted_out_before_any_of_it_is_done():
     """The sweep, and then five nodes an axis for every pass that closes in."""
     result = outline(refinements=3)
     assert result.passes == 4
-    assert result.planned_nodes == 4 * 4 + 3 * REFINED_NODES ** 2
+    assert result.planned_nodes == 3 * 3 * 3 + 3 * REFINED_NODES ** 3
 
 
 def test_a_coarser_grid_is_a_thinner_one():
@@ -348,6 +379,20 @@ def test_a_held_parameter_is_not_closed_in_on():
 # --- the table -------------------------------------------------------------
 
 
+def test_a_column_of_instants_prints_them_as_they_are_asked_for():
+    """25.7 and not 25.70: an axis of instants lands on the decimal lattice.
+
+    The spare digit `_decimals` carries is for values that do not, and given
+    the values themselves it can see that these do and drop it.
+    """
+    from ascent.summary import _decimals
+
+    assert _decimals(0.1, [25.7, 502.8, 14.3]) == 1
+    # and it is still carried where the values are off the lattice
+    assert _decimals(0.1, [25.75, 502.85]) == 2
+    assert _decimals(0.1) == 2
+
+
 @pytest.mark.parametrize('low, step', [(0.5, 1.0), (0.25, 0.5), (12.0, 6.0),
                                        (0.0, 0.05), (500.85, 0.04)])
 def test_a_column_has_the_decimals_to_tell_its_nodes_apart(low, step):
@@ -368,17 +413,20 @@ def test_a_column_has_the_decimals_to_tell_its_nodes_apart(low, step):
 # --- what a search finds --------------------------------------------------
 
 
-def test_the_search_recovers_the_set_on_file(found):
-    """The catalogue's five-phase set for 500 km, found again from the orbit.
+def test_the_shape_of_the_turn_carries_the_two_conditions(found):
+    """Because the cut-off, asked for in tenths of a second, cannot.
 
-    With the vertical rise and k2 held where the catalogue holds them, the
-    family has k3 and the cut-off left for two terminal conditions, so there is
-    nothing to prefer and the search has to come back with the set on file.
+    A tenth of a second of burn is some eight kilometres of apogee - sixteen
+    times the tolerance here - so an instant a vehicle could actually be given
+    is far too coarse a thing to place an orbit with. What places it is the
+    shape of the turn, k2 and k3, which are coefficients of the guidance law
+    and are not rounded to anything. The cut-off gets the ascent to the right
+    tenth of a second and stops there, near the 502.71 s the catalogue solved
+    for when it was free to place the cut-off to any precision it liked.
     """
     assert found.reaches_orbit, f'missed by {found.best.miss:.0f} m'
-    assert found.best.cutoff_time == pytest.approx(502.712, abs=0.05)
-    assert found.best.values['k3'] == pytest.approx(0.52958, abs=0.002)
-    assert found.best.miss < 200.0
+    assert found.best.miss < 500.0
+    assert found.best.cutoff_time == pytest.approx(502.7, abs=0.5)
 
 
 # The catalogue's own sets for 500 km in the coordinates the grid uses, each
@@ -392,16 +440,26 @@ def test_the_search_recovers_the_set_on_file(found):
 # past the end of its turn is the eccentricity of the orbit: the floor of the
 # valley it is being searched down is some hundredths of a second wide, and a
 # grid whose step steps over it finds the wall instead.
+# The other two families, each narrowed on to the catalogue's set for 500 km,
+# with the cut-off it should come back with and the passes it takes. Two shape
+# parameters are searched in each and neither is held, for the reason `NARROW`
+# gives above: with the cut-off in tenths of a second, the shape is what has to
+# carry both terminal conditions.
+#
+# The bilinear tangent gets the narrower ranges and the more values in them,
+# and that is the family rather than the test. It reaches the horizon linearly,
+# so how far the cut-off falls past the end of its turn is the eccentricity of
+# the orbit, and the floor of the valley it is searched down is thin.
 NARROW_BY_FAMILY = {
     'velocity-share': ({'t1': Range(20.0, 20.0), 'turn': Range(0.96, 0.99, 3),
-                        's': Range(1.1194, 1.1194),
+                        's': Range(1.0, 1.3, 3),
                         'te': Range(501.5, 503.0, 3),
-                        'coast': Range(0.0, 0.0)}, 502.193),
-    'bilinear-tangent': ({'t1': Range(20.0, 20.0), 'start': Range(87.934, 87.934),
-                          'mid': Range(0.5, 0.5), 'middle': Range(29.3, 29.7, 3),
-                          'te': Range(500.85, 500.97, 4),
+                        'coast': Range(0.0, 0.0)}, 502.2, 6),
+    'bilinear-tangent': ({'t1': Range(20.0, 20.0), 'start': Range(87.5, 88.5, 5),
+                          'mid': Range(0.5, 0.5), 'middle': Range(29.0, 30.0, 5),
+                          'te': Range(500.8, 501.0, 3),
                           'angle': Range(0.0, 0.0),
-                          'coast': Range(0.0, 0.0)}, 500.910),
+                          'coast': Range(0.0, 0.0)}, 500.9, 5),
 }
 
 
@@ -411,14 +469,15 @@ def test_a_narrow_grid_reaches_the_orbit_in_every_family(programme):
 
     The five-phase family is tested above and in more detail; this is that the
     other two are searched, closed in on and reported the same way, and that
-    each comes back with the cut-off on file.
+    each comes back on the tenth of a second the catalogue set is nearest to.
     """
-    ranges, cutoff = NARROW_BY_FAMILY[programme]
-    result = search(FALCON, 500_000, programme, ranges=ranges, refinements=5,
-                    steps_per_second=1, workers=1, tolerance=1000.0, **SITE)
+    ranges, cutoff, refinements = NARROW_BY_FAMILY[programme]
+    result = search(FALCON, 500_000, programme, ranges=ranges,
+                    refinements=refinements, steps_per_second=1, workers=1,
+                    tolerance=1000.0, **SITE)
 
     assert result.reaches_orbit, f'missed by {result.best.miss:.0f} m'
-    assert result.best.cutoff_time == pytest.approx(cutoff, abs=0.1)
+    assert result.best.cutoff_time == cutoff
     assert result.best.orbit.eccentricity < 1e-3
 
 
@@ -480,11 +539,11 @@ def test_the_speed_is_judged_against_the_orbit_asked_for(found):
         assert candidate.speed_miss == pytest.approx(abs(candidate.speed - target))
 
     # and the two readings are not the same reading, so the choice is a choice:
-    # the grid reaches from some ten kilometres under the target to ten over
+    # the grid reaches well under the target as well as over it
     lowest = min(found.found, key=lambda candidate: candidate.altitude)
-    assert lowest.altitude < 495_000
-    assert abs(lowest.speed - circular_velocity(lowest.altitude)) > 4.0
-    assert lowest.speed_miss < 2.0
+    assert lowest.altitude < 490_000
+    against_its_own = abs(lowest.speed - circular_velocity(lowest.altitude))
+    assert abs(lowest.speed_miss - against_its_own) > 5.0
 
 
 def test_a_set_is_judged_by_all_three_errors(found):
