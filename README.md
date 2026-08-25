@@ -33,7 +33,9 @@ uv run ascent f9 --altitude 650             # fly one of them
 uv run ascent f9 --altitude 650 --programme bilinear-tangent
 uv run ascent f9 -a 650 -p bt               # the same, in short
 
-uv run ascent-search f9 --altitude 500      # solve for a set instead of flying one
+uv run ascent-search f9 --altitude 500      # search for a set instead of flying one
+uv run ascent-search f9 -a 500 -p 5f --dry-run          # the grid, before it is flown
+uv run ascent-search f9 -a 500 -p 5f --range t1=10:30:2 # one parameter, my way
 uv run ascent-search f9 -a 650 -p bt --yaml
 ```
 
@@ -332,10 +334,15 @@ drives that share of the turn to zero, which is a step in pitch rate and
 defeats the point of the phase, so it is a design choice rather than something
 the terminal condition can settle - which leaves `k3` and the cut-off time,
 two unknowns for two conditions. The other two programmes keep a third
-parameter, and among the sets meeting the condition the search preferred the
-smaller steering loss. Every entry records the orbit it produces and what it
-costs, and `tests/test_catalogue.py` flies all of them to check that it still
-does.
+parameter, and among the sets meeting the condition the search that solved
+them preferred the smaller steering loss. Every entry records the orbit it
+produces and what it costs, and `tests/test_catalogue.py` flies all of them to
+check that it still does.
+
+`ascent-search` no longer works that way. It searches every parameter of a
+family, `t1` and `k2` included, and ranks by the orbit reached rather than by
+what the ascent cost, so it does not reproduce these sets unless it is told to
+hold what they hold - which is the last part of the section below.
 
 ```sh
 uv run python examples/programme_catalogue.py    # the whole table
@@ -360,67 +367,156 @@ stage.
 
 `ascent-search` solves the problem the catalogue holds the answers to. Give it
 a vehicle, a circular orbit and one of the three programme families, and it
-returns the parameters that reach that orbit — and, among the sets that do, the
-ones that reach it soonest.
+sweeps a grid over **every parameter of that family** and returns the sets that
+reach the orbit, ranked by how close each came.
 
 ```sh
 uv run ascent-search f9 --altitude 500
 uv run ascent-search f9 --altitude 650 --programme bilinear-tangent
-uv run ascent-search a62 --altitude 700 --yaml            # as a catalogue entry
-uv run ascent-search f9 --altitude 500 --report           # fly it and report it
-uv run ascent-search h3 --altitude 1100 --coarse 0.5      # a quicker, rougher look
-uv run ascent-search f9 --altitude 500 --workers 1        # in this process alone
+uv run ascent-search f9 -a 500 -p 5f --dry-run             # the grid, before it is flown
+uv run ascent-search f9 -a 500 -p 5f --range t1=10:30:2    # one parameter, my way
+uv run ascent-search f9 -a 500 -p 5f --range k2=0.05       # or held at one value
+uv run ascent-search a62 --altitude 700 --yaml             # as a catalogue entry
+uv run ascent-search f9 --altitude 500 --report            # fly it and report it
+uv run ascent-search f9 --altitude 500 --csv out/sets.csv  # every set found
+uv run ascent-search h3 --altitude 1100 --coarse 0.5       # a quicker, rougher sweep
+uv run ascent-search f9 --altitude 500 --workers 1         # in this process alone
 ```
 
 The mission file supplies the vehicle and the launch site and nothing else;
-`--altitude` and `--programme` — or `-a` and `-p` — say what to search for. `--yaml` prints the set
-found as a catalogue entry, ready to paste; `--report` turns it into that same
-entry, flies it and writes the page `ascent --report` writes, so a set that was
-searched for and one that was filed give the same report. A set that misses the
-orbit is not an entry: it is printed, and it is not flown. A search prints its progress as it
-runs — which pass it is on, how many trajectories it has integrated and roughly
-how much longer it will take.
+`--altitude` and `--programme` — or `-a` and `-p` — say what to search for.
+`--yaml` prints the set found as a catalogue entry, ready to paste; `--report`
+turns it into that same entry, flies it and writes the page `ascent --report`
+writes, so a set that was searched for and one that was filed give the same
+report. A set that misses the orbit is not an entry: it is printed, and it is
+not flown. A search prints its progress as it runs — which pass it is on, how
+many trajectories it has integrated and roughly how much longer it will take.
 
-**What is gridded and what is solved.** The grid runs over the shape of the
-turn, and only over the shape: one number for the five-phase family, two for
-each of the others. The cut-off is not one of its axes. The two conditions of a
-circular orbit divide between the parameters the way the dissertation this
-model was written for divides them — the condition on the speed fixes the end
-of the powered flight, the condition on the altitude fixes the shape of the
-turn — and this follows that division. It has to: near a circular orbit the apogee answers to the
-cut-off time at some 80 km per second, so a grid fine enough to resolve it
-along that axis would be enormous and one coarse enough to afford would resolve
-nothing. So at every node the cut-off is solved for instead, by driving the
-semi-major axis to the radius at cut-off, which is what makes an orbit
-circular. Every node the search flies therefore sits on a circular orbit
-already, at its own altitude; the grid is looking for the shape whose altitude
-is the one asked for.
+**Every parameter of the turn is an axis.** Nothing is held behind your back.
+The vertical rise, the shape of the turn, the instant the programme ends and
+the instant the engines do are all coordinates of the same grid, and `--dry-run`
+prints every one of them with the range and the step it will be searched over:
 
-**The two estimates.** Both come from the dissertation, both are quadrature
-rather than integration, and both are in `estimates.py`:
+| family | parameters on the grid, and what each is |
+|---|---|
+| `five-phase` | `t1` the vertical rise, 12–30 s · `k2` the share of the turn spent building the pitch rate up, 0.03–0.09 · `k3` the share spent at a constant rate, 0–0.9 · `t4` the end of the turn, over the cut-off window · `angle` the flight-path angle the turn is aimed at, 0° · `coast` powered flight after the programme, 0 s |
+| `velocity-share` | `t1` · `turn` where the turn ends as a share of the end of the programme, 0.5–1 · `s` the fullness of the quartic, −3 to 3 · `te` the end of the programme, over the cut-off window · `coast` |
+| `bilinear-tangent` | `t1` · `start` the angle the turn begins at, 80–89.6° · `mid` how far through the turn the middle angle is prescribed, 0.5 · `middle` that angle, 5–60° · `te` · `angle` the angle the turn ends at, 0° · `coast` |
+
+A parameter is held by giving it a range of one node, which is all that
+`angle=0`, `mid=0.5` and `coast=0` are: a circular orbit is entered along the
+horizon, and every set on file ends its programme exactly at cut-off. They are
+axes like the rest, and `--range coast=0:10:2` or `--range angle=-1:1:0.5`
+opens either of them. The summary prints the held ones too, with the value they
+were held at, so a figure that did not move is one you can see was not asked to.
+
+Two of these are not the programme's own arguments, and both are
+reparametrisations rather than things left out. The velocity share takes the
+end of its turn as a **share** of the end of the programme, because the two are
+not independent — the family refuses a turn that outlasts the burn — so a share
+keeps every node of the grid inside the family wherever the cut-off is searched
+to, where a pair of times would spend half the grid on sets that do not exist.
+The bilinear tangent is gridded through the **angles its turn passes through**
+rather than over `a`, `b` and `c`, which are nearly degenerate: scaling `b` and
+`c` together leaves almost the same turn, so a grid over them would spend most
+of its nodes on programmes it had already flown. The coefficients are recovered
+from the three angles. Neither reparametrisation reaches the entry written out:
+that carries `a`, `b` and `c` for the one and `tf` for the other, as any
+mission file does.
+
+**How a grid is written.** One `--range` per parameter, repeatable:
+
+```sh
+--range t1=10:30:2      # from 10 to 30 in steps of 2 — eleven nodes
+--range k2=0.05         # held at 0.05 — one node
+```
+
+The equals sign separates the parameter from its numbers and the colons
+separate the numbers from each other, in the order a Python slice reads in:
+low, high, step. The top of a range is a ceiling rather than necessarily a
+node — `t1=10:30:7` stops at 24 — and the summary prints where it actually
+stopped. A parameter the family does not have is refused at the command line,
+with the parameters it does have, rather than several minutes into a search
+that has already started.
+
+**What a set is judged by.** Three errors, and they are the three conditions of
+a circular orbit at a given altitude:
+
+- the **altitude** at cut-off, against the target;
+- the **speed** there, against the speed of that circular orbit. The inertial
+  speed, because that is what the orbit is built from;
+- the **orbit** itself: how far the apogee and the perigee each ended up from
+  the circle asked for. Their sum is the ranking.
+
+The first two are printed as a share of what was asked for — the altitude and
+the speed of the orbit — and the third as a share of its radius, because an
+apogee and a perigee are radii and a difference of radii over an altitude would
+be a different error at every target. So the three columns each say something
+about themselves and are not to be compared with one another.
+
+The third is the ranking because it is the only one of the three that is not
+blind to the shape of the orbit. A set at the right altitude with the right
+speed but a degree off the horizon is on an ellipse, and neither of the first
+two says so. The sum of the apsidal errors is zero only when apogee = perigee =
+target, which is the altitude and the circularity at once, in one relative
+figure with no weighting to argue over — and the eccentricity, which is the
+spread of the two, is printed beside it.
+
+A set counts as reaching the orbit when all three are inside their tolerances:
+`--tolerance` in kilometres for the first and the third, `--speed-tolerance` in
+metres per second for the second. Ranked by the third either way, so a search
+that reaches nothing still says what came closest rather than saying nothing at
+all — which is what tells you where to narrow the grid to next.
+
+**A search is a table before it is an answer.** Every distinct set that closed
+an orbit comes back ranked, and `--top` of them are printed — fifteen by
+default — with the parameters that were swept and the errors each is judged by.
+The sets that meet all three tolerances are marked `*`; the answer at the foot
+of the page is the best of those, or simply the best if none of them does.
+
+```
+TOP 15 OF THE 8,174 SETS THAT REACHED AN ORBIT, BEST FIRST
+703 of them meet all three tolerances, marked *
+
+   #        t1          k2          k3        t4   cut-off   gamma     h km   h err    v m/s   v err   per km   apo km      ecc orbit err
+-----------------------------------------------------------------------------------------------------------------------------------------
+  1*   23.0801    0.031133    0.549316  502.6720   502.672   0.000   499.99 0.00003   7616.6 0.00000   499.99   500.01 0.000002  0.000003
+  2*   23.0801    0.031211    0.549170  502.6720   502.672   0.000   499.98 0.00004   7616.6 0.00000   499.98   500.00 0.000001  0.000003
+```
+
+`--csv` writes the whole of that table to a file, not just the head of it, so a
+coarse sweep can be looked at as the map it is — sorted, plotted, narrowed on.
+A held parameter gets no column, because it is the same in every row and is
+printed once above with the value it was held at.
+
+**The two estimates.** Both come from the dissertation this model was written
+for, both are quadrature rather than integration, and both are in
+`estimates.py`. The search does not work without them: a grid over every
+parameter of a family is large, and these are what keep it affordable.
 
 - the **energy-equivalent ascent time** is the instant at which the propellant
   has bought the orbit — the characteristic velocity accumulated less what the
-  orbit costs in energy less everything lost on the way. It bounds the cut-off:
-  the search brackets its solve inside a window around the estimate, and the
-  same balance says before anything is flown whether the vehicle has the
-  propellant for the orbit at all. Measured against the catalogue it sits
-  between 4.8 per cent high and 9.1 per cent low, and the window carries that
-  band with something to spare. The method is published: R. Keba and A. M.
+  orbit costs in energy less everything lost on the way. It is what bounds the
+  cut-off: the window around it *is* the default range of the `t4`/`te` axis,
+  so the search never spends a node on a cut-off the vehicle could not have.
+  The same balance says before anything is flown whether the vehicle has the
+  propellant for the orbit at all. Measured against the catalogue the estimate
+  sits between 4.8 per cent high and 9.1 per cent low, and the window carries
+  that band with something to spare. The method is published: R. Keba and A. M.
   Kulabukhov, *Journal of Rocket-Space Technology* **35**(1), 94–99 (2026),
   [doi:10.15421/452567](https://doi.org/10.15421/452567).
-- the **analytic altitude integral** is the altitude a programme reaches,
-  taken as the integral of the vertical component of the velocity with the
-  speed from the Tsiolkovsky equation stage by stage and the flight-path angle
-  read off the programme itself. It screens the grid: the altitude a shape
-  would reach at either end of the cut-off window bounds what it can reach
-  anywhere inside it, and a shape that cannot reach the target is dropped
-  without a trajectory. It reads between 1.005 and 1.185 times the altitude the
-  flight reaches — never low, because the air, the thrust deficit at sea level
-  and the fall of gravity with altitude all push the same way — and the screen
-  is that band applied backwards, widened to 0.95–1.40 because it is a gate: a
-  node it rejects is never flown, and the measurement behind it is of three
-  vehicles. The method behind it is not published yet; its DOI belongs here and
+- the **analytic altitude integral** is the altitude a programme reaches, taken
+  as the integral of the vertical component of the velocity with the speed from
+  the Tsiolkovsky equation stage by stage and the flight-path angle read off
+  the programme itself. It screens every node: a set whose integral says it
+  cannot reach the target is dropped without a trajectory. It reads between
+  1.005 and 1.185 times the altitude the flight reaches — never low, because
+  the air, the thrust deficit at sea level and the fall of gravity with
+  altitude all push the same way — and the screen is that band applied
+  backwards, widened to 0.95–1.40 because it is a gate: a node it rejects is
+  never flown, and the measurement behind it is of three vehicles. `--no-screen`
+  turns it off and flies everything, which is how you check it is not hiding
+  anything. The method behind it is not published yet; its DOI belongs here and
   is a placeholder until it is —
   [doi:XX.YYYYY/ZZZZZ](https://doi.org/XX.YYYYY/ZZZZZ).
 
@@ -429,83 +525,129 @@ to say which flights are worth making, and `tests/test_estimates.py` checks
 both bands against every entry in the catalogue, so the constants the search
 relies on cannot drift away from the data they were measured on.
 
-**Which node a pass closes in on.** Not simply the quickest one that reached
-the orbit. At the resolution of an early pass, whether a node lands on the
-orbit at all is largely luck, and a set half a kilometre out but two seconds
-quicker is the better thing to look near. What the passes follow instead is the
-cut-off each node would need to reach the target, read off the line its own
-pass draws between the altitude reached and the instant of cut-off — a line
-because the two are readings of the same energy. Where that leads into a corner
-of the family from which the orbit cannot be reached, which happens on a
-vehicle near its limit, the grid is run a second time for the orbit alone and
-the better of the two answers is reported. Falcon 9 to 700 km on the bilinear
-tangent is the case that needs it, and the summary says when it has happened.
+**The sweep, and the ten passes that close in on it.** A sweep alone cannot
+land on an orbit, and the reason is one number: near a circular orbit the
+apogee answers to the cut-off time at some 80 km per second. The cut-off axis
+spans the whole window the estimate allows, some fifty seconds, so one step of
+a twenty-five-node sweep is worth tens of kilometres of apogee — a map of where
+in the family the orbit lies, and nothing nearer. So the best node becomes the
+centre of a grid one step wide along every axis that was searched, five nodes
+to an axis, and the sweep runs again at half the step; ten times over, which
+takes that step from a couple of seconds to a couple of milliseconds. That is
+what turns the map into a set that meets the tolerance. `--refinements` is how
+many, and `--refinements 0` stops after the sweep, which is the map on its own.
 
-**What it costs.** Eleven passes: the first over the whole range of the family,
-then ten closing in, each one grid step wide about the best node of the pass
-before and halving the step. A five-phase search integrates some seven hundred
-trajectories, one of the two-axis families some three thousand, and twice that
-where the grid has to be run again.
+Each of those passes is five nodes an axis rather than the whole grid again, so
+ten of them cost less than the sweep does. They are held inside the range each
+axis was given: a set that comes out on a bound is reported as such rather than
+chased past it, because the family may give out there or a better set may lie
+outside the range you named.
 
-Not of wall-clock, though. The nodes of a pass are independent — each is its own
-cut-off solved over its own handful of trajectories — so they are divided over
-two thirds of the cores, which is seven times faster on a machine with fourteen
-of them and turns several minutes into under one. It finds exactly the same
-set: the nodes are collected in the order of the grid, so the answer does not
-depend on how many processes answered it. `--workers` says how many, and
-`--workers 1` searches in this process alone.
+**How close that gets.** The surface the passes walk has a narrow valley in
+it: every shape of turn has its own cut-off that closes the orbit, so the two
+move together and the floor between them is thin. All three families land on
+it — Falcon 9 to 500 km comes back 13 m out on the five-phase turn, 11 m on the
+velocity share and 326 m on the bilinear tangent, against a tolerance of 500 m.
 
-What the screen saves is almost all on the first pass, the only one that covers
-the whole range of a family: of a Falcon 9 first pass to 500 km it drops four
-fifths of the velocity-share nodes unflown, half of the bilinear-tangent ones
-and a sixth of the five-phase ones, which have a single axis and less to
-reject. On the passes after it, already gathered about an answer, it drops
-nothing, and it is not meant to. `--steps` and `--coarse` are there for a
-quicker look: the orbit a set reaches is the same to within a few metres at one
-step a second as at ten, and so is the velocity budget: it is read off the last
-powered row rather than off the cut-off itself, but by then the vehicle is
-level and out of the air, so all three integrands are near zero there and the
-part left out is fractions of a metre per second. The entry the search writes
-out asks for ten steps a second whatever it was searched at.
+The bilinear tangent is the hardest of the three to land on, for the reason
+given further up: it reaches the horizon linearly, so how far the cut-off falls
+past the end of its turn *is* the eccentricity of the orbit, and the floor of
+its valley is a few hundredths of a second wide where the other two are a good
+deal wider.
+Where that matters, the answer is the staged recipe below rather than more
+passes. The same orbit searched again on a grid narrowed to what the first
+search found, with a step of a fiftieth of a second on `te`, comes back 4 m out
+like the other two.
 
-**What the quicker ascent is paid for.** A quicker ascent is a flatter one,
-and a flatter one goes faster lower down. The set found is reported with the
-peak dynamic pressure it asks of the airframe, beside the figure the vehicle
-file declares it is designed for, and with the peak thrust deflection it asks
-of the guidance — and the first of those is not free. Searching Falcon 9 to
-500 km on the bilinear tangent returns a set that cuts off at 499.203 s rather
-than the 500.910 on file, and it peaks at 37.8 kPa against a design figure of
-35. Neither figure enters the ranking unless you say so: `--max-q` puts the
-airframe into the constraint, and a set that peaks above it is then not an
-answer however quick it is, which is where a limit on the dynamic pressure
-belongs in a search of this kind and where the dissertation puts it. Without
-the flag the peaks are reported and nothing more, which is how the rest of the
-model treats them.
+**What it costs.**
+
+Falcon 9 to 500 km, at the settings above and with nothing narrowed, on
+thirteen processes of a twenty-core machine:
+
+| family | sweep | nodes walked | screened out | trajectories flown | wall clock | error |
+|---|---|---|---|---|---|---|
+| `five-phase` | 7,600 | 13,532 | 23 % | 10,476 | 5 min 53 s | 13 m |
+| `velocity-share` | 5,400 | 10,990 | 45 % | 5,997 | 3 min 32 s | 11 m |
+| `bilinear-tangent` | 6,000 | 11,521 | 31 % | 7,998 | 4 min 26 s | 326 m |
+
+The sweep is the whole grid; the ten passes that close in add five nodes an
+axis each, and between three hundred and seven hundred of those turn out to
+have been walked already — a pass is centred on a node of the pass before it
+and reaches a whole width either side — and are skipped rather than flown
+twice.
+
+The nodes of a pass are independent, so they are divided over two thirds of the
+cores. It finds exactly the same set however many: the nodes are collected in
+the order of the grid, so the answer does not depend on how many processes
+answered it. `--workers` says how many, and `--workers 1` searches in this
+process alone.
+
+`--coarse`, `--steps` and `--dry-run` are the three ways to spend less.
+`--coarse 0.5` lengthens the stride of every axis the family gave, leaving any
+axis you wrote out yourself alone; `--steps 1` integrates at one step a second
+rather than ten, which barely moves the orbit or the budget — the budget is
+read off the last powered row, and by then the vehicle is level and out of the
+air, so all three integrands are near zero there and the part left out is
+fractions of a metre per second. The entry written out asks for ten steps a
+second whatever it was searched at. And `--dry-run` costs nothing at all: it
+prints the grid and what the passes come to, which is worth reading before a
+grid you have widened yourself.
+
+**The staged way to use it.** A sweep says where in the family the orbit lies;
+a second search narrowed on to what it found is how the set itself is reached.
+
+```sh
+# the map: one sweep, no passes, every set it found written out
+uv run ascent-search f9 -a 500 -p bt --refinements 0 --csv out/map.csv
+
+# and the set: narrowed on to what the map showed, with a fine step on te
+uv run ascent-search f9 -a 500 -p bt \
+    --range t1=20 --range start=87:89:0.5 \
+    --range middle=29:31:0.25 --range te=500.5:501.5:0.02
+```
+
+`--dry-run` on the second of those says what it will cost before it costs it.
+
+**What the quicker ascent is paid for.** A flatter ascent goes faster lower
+down. The set found is reported with the peak dynamic pressure it asks of the
+airframe, beside the figure the vehicle file declares it is designed for, and
+with the peak thrust deflection it asks of the guidance. Neither enters the
+ranking unless you say so: `--max-q` puts the airframe into the constraint, and
+a set that peaks above it is then not an answer however close it came, which is
+where a limit on the dynamic pressure belongs in a search of this kind and
+where the dissertation puts it. Without the flag the peaks are reported and
+nothing more, which is how the rest of the model treats them.
 
 ```sh
 uv run python examples/parameter_search.py       # all three families, side by side
 ```
 
-**It does not reproduce the catalogue, and should not.** The catalogue
-preferred the smallest steering loss among the sets that reach the orbit; this
-prefers the earliest cut-off. For the five-phase family there is nothing to
-prefer — two conditions and two unknowns leave no freedom — and the two agree
-to the figures the grid resolves: searching Falcon 9 to 500 km returns a
-cut-off of 502.698 s against the 502.712 on file, and the same velocity budget
-to within a metre per second, as it does at 650 km and as H3 does at 1100. The
-other two families keep a parameter to spend, and the search spends it
-differently: Falcon 9 to 500 km on the velocity share cuts off at 501.700 s
-rather than 502.193, for 2916.5 m/s of losses rather than 2996.4.
+**It does not reproduce the catalogue, and should not.** The catalogue holds
+four numbers of every set where the dissertation holds them — the vertical rise
+at 20 s, the five-phase `k2` at 0.05, the instant the bilinear tangent's middle
+angle is prescribed at half way along the turn, and every turn aimed at the
+horizon — and solves for what is left.
+This searches all of them, so it has freedom the catalogue never spent and
+lands somewhere else in the family. Hold those four where the catalogue holds
+them and the two agree: `--range t1=20 --range k2=0.05` on Falcon 9 to 500 km
+returns `k3` = 0.5309 against the 0.52958 on file and a cut-off of 502.735 s
+against 502.712, which is 436 m of orbit, because with `k3` and the cut-off
+left for two terminal conditions there is nothing to prefer. Narrow the grid
+about that set as well and both come back to four figures, which is what
+`tests/test_search.py` checks. Let them
+go and it returns `t1` = 23.08 s, `k2` = 0.0311 and `k3` = 0.5493 cutting off
+at 502.672 s instead — a different set, on the same circle to 13 m.
 
-The second of those figures need not follow the first, and on H3 it does not.
-An earlier cut-off is always less propellant burned — the burn is shorter — but
-only the gravity and the aerodynamic terms are paid by the trajectory. The
-steering loss is the price of holding the programme, recovered from the normal
-equation after the fact rather than spent on the way, so a set can cut off
-sooner and still be charged more of it. On H3 it is not even comparable: the
-thrust cannot hold any of these programmes over part of the burn, the demand
-saturates, and the figure stops measuring anything — which the search reports,
-along with the peak, for exactly that reason.
+What the two do have to agree on is the orbit, and they do. The velocity budget
+beside each is what that particular route to it cost, and the routes differ:
+the catalogue's five-phase set spends 516.8 m/s on steering and 3110.1 in
+total, and the set found here spends 507.6 and 3099.1. Do not read that as the
+search finding the cheaper route — it is not asked to, and on another run of
+another family it lands on a dearer one. The ranking asks how close the orbit
+came and nothing at all about what the route to it cost. `--csv` writes the
+velocity budget of every set found beside its errors, which is where to look
+when the cheapest route to the circle is wanted rather than the closest one
+to it.
 
 ## Reproducing a published result
 
