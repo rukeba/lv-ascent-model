@@ -21,7 +21,7 @@ around 60 m/s^2 an event misplaced by one step at 10 Hz is worth several m/s.
 import math
 from dataclasses import dataclass
 
-from .atmosphere import Air, air_at, gravity
+from .atmosphere import air_at, gravity
 from .constants import EARTH_OMEGA, EARTH_RADIUS
 from .cutoff import Cutoff
 from .integrators import rk4_step
@@ -41,7 +41,7 @@ def rotation_in_plane(latitude_deg: float, azimuth_deg: float) -> float:
         * math.sin(math.radians(azimuth_deg))
 
 
-@dataclass(frozen=True)
+@dataclass(slots=True)
 class Segment:
     """What is held constant over one smooth piece of a step."""
     stage: Stage
@@ -49,8 +49,12 @@ class Segment:
     throttle: float
     # attitude flown once the programme has ended, rad; None while it runs
     attitude: float | None
-    # False once the tank is dry: the piece is flown on what the vehicle has
-    burning: bool = True
+    # the throttle the engines actually run at over the piece, zero once the
+    # tank is dry. Settled here and never at a trial point: a trial point that
+    # overshot the capacity would drop the thrust in the middle of the step,
+    # which is the step change that cutting the step at the dry instant exists
+    # to keep out
+    power: float = 0.0
 
 
 class Mission:
@@ -106,6 +110,7 @@ class Mission:
             state.thrust = self.vehicle.stages[0].thrust(air_at(0.0).pressure) * throttle
         self.telemetry.record(state)
 
+        record = self.telemetry.record
         for step in range(int(round(self.duration * self.steps_per_second))):
             # computed, not accumulated, so step times land exactly on the
             # event times the step is cut at
@@ -115,7 +120,7 @@ class Mission:
                     self._release_guidance(begin)
                 self._integrate(begin, end)
             state = self._collect(state, t)
-            self.telemetry.record(state)
+            record(state)
 
         self.final_state = state
         self.orbit: Orbit = orbit_from_state(
@@ -128,14 +133,17 @@ class Mission:
 
     def _segment_bounds(self, begin: float, end: float) -> list[tuple[float, float]]:
         """The step, cut at every discontinuity that falls inside it."""
-        events = set(self.vehicle.staging_times_within(begin, end))
+        events = self.vehicle.staging_times_within(begin, end)
         scheduled = self.cutoff.scheduled_time()
         if scheduled is not None and begin < scheduled < end:
-            events.add(scheduled)
+            events.append(scheduled)
         handover = self.pitch_programme.end_time
         if begin < handover < end:
-            events.add(handover)
-        bounds = [begin, *sorted(events), end]
+            events.append(handover)
+        # almost every step of a flight has nothing at all inside it
+        if not events:
+            return [(begin, end)] if end > begin else []
+        bounds = [begin, *sorted(set(events)), end]
         return [(a, b) for a, b in zip(bounds, bounds[1:]) if b > a]
 
     def _integrate(self, begin: float, end: float) -> None:
@@ -151,17 +159,16 @@ class Mission:
         # straddles a scheduled switching instant, and a watched threshold asks
         # about the state the piece begins in
         capacity = stage.propellant_mass
-        segment = Segment(stage, index, self._probe_throttle(begin),
-                          self._attitude, self._burned[index] < capacity)
-        self._throttle = segment.throttle
+        throttle = self._probe_throttle(begin)
+        alight = self._burned[index] < capacity and throttle > 0
+        segment = Segment(stage, index, throttle, self._attitude,
+                          min(1.0, throttle) if alight else 0.0)
+        self._throttle = throttle
 
-        derivatives = self._guided_rates if self._guided else self._free_rates
-        def rates(t, y):
-            return derivatives(t, y, segment)
-
+        rates = self._guided_rates if self._guided else self._free_rates
         y = (*self._y, self._burned[index])
-        advanced = rk4_step(rates, begin, y, end - begin)
-        event, emptied = self._event_within(rates, y, begin, end,
+        advanced = rk4_step(rates, begin, y, end - begin, segment)
+        event, emptied = self._event_within(rates, segment, y, begin, end,
                                             advanced, capacity)
 
         if event is None:
@@ -169,25 +176,26 @@ class Mission:
             self._burned[index] = min(advanced[-1], capacity)
             return
 
-        at_event = rk4_step(rates, begin, y, event - begin)
+        at_event = rk4_step(rates, begin, y, event - begin, segment)
         self._y = at_event[:-1]
         # dry to the last bit, or the rest of the step relights on the remainder
         self._burned[index] = capacity if emptied else min(at_event[-1], capacity)
         self._integrate(event, end)
 
-    def _event_within(self, rates, y, begin: float, end: float, advanced,
-                      capacity: float) -> tuple[float | None, bool]:
+    def _event_within(self, rates, segment, y, begin: float, end: float,
+                      advanced, capacity: float) -> tuple[float | None, bool]:
         """The first instant strictly inside the piece at which it stops holding."""
         dry = cut = None
         # the burn is allowed to run past the tank: that overshoot is the only
         # thing that says the tank empties inside the piece, and where
         if y[-1] < capacity < advanced[-1]:
-            dry = self._solve_exhaustion(rates, y, begin, end, advanced[-1], capacity)
+            dry = self._solve_exhaustion(rates, segment, y, begin, end,
+                                         advanced[-1], capacity)
         # watched whether or not this piece is under thrust: a threshold that
         # is crossed and fallen back through during a coast would otherwise
         # never fire, and a later stage would light against it
         if self.cutoff.watches:
-            cut = self._solve_cut_off(rates, y, begin, end)
+            cut = self._solve_cut_off(rates, segment, y, begin, end)
 
         inside = [(t, t is dry) for t in (dry, cut) if t is not None and begin < t < end]
         return min(inside) if inside else (None, False)
@@ -200,7 +208,7 @@ class Mission:
         """
         if self._guided:
             speed, radius = y[0], y[1]
-            angle = self.pitch_programme.sample(t)[0]
+            angle = self.pitch_programme.angle_at(t)
             horizontal, vertical = speed * math.cos(angle), speed * math.sin(angle)
         else:
             radius, _, vertical, horizontal = y[:4]
@@ -210,7 +218,8 @@ class Mission:
     def _probe_throttle(self, t: float) -> float:
         return self.cutoff.throttle(t, *self._watched(t, self._y))
 
-    def _solve_cut_off(self, rates, y, begin: float, end: float) -> float | None:
+    def _solve_cut_off(self, rates, segment, y,
+                       begin: float, end: float) -> float | None:
         """The first instant inside the piece at which a watched threshold is met.
 
         Walked rather than tested at the end alone: the inertial speed can rise
@@ -222,7 +231,7 @@ class Mission:
         low = begin
         for i in range(1, self.CUT_OFF_SAMPLES + 1):
             high = begin + (end - begin) * i / self.CUT_OFF_SAMPLES
-            trial = rk4_step(rates, begin, y, high - begin)
+            trial = rk4_step(rates, begin, y, high - begin, segment)
             if self.cutoff.fired(*self._watched(high, trial)):
                 break
             low = high
@@ -231,14 +240,14 @@ class Mission:
 
         for _ in range(self.CUT_OFF_PASSES):
             middle = 0.5 * (low + high)
-            trial = rk4_step(rates, begin, y, middle - begin)
+            trial = rk4_step(rates, begin, y, middle - begin, segment)
             if self.cutoff.fired(*self._watched(middle, trial)):
                 high = middle
             else:
                 low = middle
         return high
 
-    def _solve_exhaustion(self, rates, y, begin: float, end: float,
+    def _solve_exhaustion(self, rates, segment, y, begin: float, end: float,
                           burned_at_end: float, capacity: float) -> float:
         """The instant inside the piece at which the tank runs dry.
 
@@ -260,7 +269,7 @@ class Mission:
             if span <= 0.0:
                 break
             dry = low + (high - low) * (capacity - burned_low) / span
-            burned = rk4_step(rates, begin, y, dry - begin)[-1]
+            burned = rk4_step(rates, begin, y, dry - begin, segment)[-1]
             if abs(burned - capacity) <= tolerance:
                 break
             if burned < capacity:
@@ -306,11 +315,13 @@ class Mission:
         the velocity and does no work on its magnitude.
         """
         speed, radius, _, burned = y
-        angle = self.pitch_programme.sample(t)[0]
-        air = air_at(radius - EARTH_RADIUS)
+        altitude = radius - EARTH_RADIUS
+        angle = self.pitch_programme.angle_at(t)
+        air = air_at(altitude)
         mass = self.vehicle.mass_on(segment.index, burned)
-        thrust, flow = self._propulsion(segment, air)
-        drag = self.vehicle.drag(air, radius - EARTH_RADIUS, speed, segment.index)
+        thrust, flow = (segment.stage.propulsion(air.pressure, segment.power)
+                        if segment.power else (0.0, 0.0))
+        drag = self.vehicle.drag(air, altitude, speed, segment.index)
 
         acceleration = (thrust - drag) / mass \
             - (gravity(radius) - self.omega**2 * radius) * math.sin(angle)
@@ -327,11 +338,13 @@ class Mission:
         flying at a small angle of attack.
         """
         radius, _, vertical, horizontal, burned = y
+        altitude = radius - EARTH_RADIUS
         speed = math.hypot(vertical, horizontal)
-        air = air_at(radius - EARTH_RADIUS)
+        air = air_at(altitude)
         mass = self.vehicle.mass_on(segment.index, burned)
-        thrust, flow = self._propulsion(segment, air)
-        drag = self.vehicle.drag(air, radius - EARTH_RADIUS, speed, segment.index)
+        thrust, flow = (segment.stage.propulsion(air.pressure, segment.power)
+                        if segment.power else (0.0, 0.0))
+        drag = self.vehicle.drag(air, altitude, speed, segment.index)
 
         axial = (thrust - drag) / mass
         omega = self.omega
@@ -341,20 +354,6 @@ class Mission:
         tangential = axial * math.cos(segment.attitude) \
             - vertical * horizontal / radius - 2.0 * omega * vertical
         return (vertical, horizontal / radius, radial, tangential, flow)
-
-    def _propulsion(self, segment: Segment, air: Air) -> tuple[float, float]:
-        """Thrust (N) and propellant flow (kg/s) over one piece of a step.
-
-        Whether the tank has anything in it is settled once for the piece and
-        never at a trial point: a trial point that overshoots the capacity
-        would drop the thrust in the middle of the step, which is the step
-        change that cutting the step at the dry instant exists to keep out.
-        """
-        if not segment.burning or segment.throttle <= 0:
-            return 0.0, 0.0
-        throttle = min(1.0, segment.throttle)
-        return (segment.stage.thrust(air.pressure) * throttle,
-                segment.stage.mass_flow(air.pressure, throttle))
 
     # --- reporting --------------------------------------------------------
 
@@ -389,13 +388,14 @@ class Mission:
             state.horizontal_speed + self.omega * radius, state.vertical_speed)
 
         index, stage = self.vehicle.active_stage(t)
-        air = air_at(state.altitude)
+        altitude, burned = radius - EARTH_RADIUS, self._burned[index]
+        air = air_at(altitude)
         state.stage = index
-        state.mass = self.vehicle.mass(t, self._burned[index])
-        state.thrust = 0.0 if self._burned[index] >= stage.propellant_mass \
+        state.mass = self.vehicle.mass_on(index, burned)
+        state.thrust = 0.0 if burned >= stage.propellant_mass \
             else stage.thrust(air.pressure) * self._throttle
-        state.drag = self.vehicle.drag(air, state.altitude, state.speed, index)
-        state.dynamic_pressure = 0.0 if state.altitude > 100_000 \
+        state.drag = self.vehicle.drag(air, altitude, state.speed, index)
+        state.dynamic_pressure = 0.0 if altitude > 100_000 \
             else 0.5 * air.density * state.speed**2
 
         if self._guided:

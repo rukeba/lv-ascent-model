@@ -11,7 +11,10 @@ from dataclasses import dataclass
 from .constants import EARTH_RADIUS
 
 
-@dataclass
+# `slots` because one is built for every step of every flight and read back
+# column by column straight afterwards, and a slot is both quicker to fill and
+# quicker to read than an instance dictionary
+@dataclass(slots=True)
 class FlightState:
     # time from lift-off, s
     t: float = 0.0

@@ -23,7 +23,18 @@ class PitchProgramme:
         self.angle = angle
         self.rate = rate
         self.acceleration = acceleration
-        self._inverse_step = 1.0 / (time[1] - time[0])
+        self._inverse_step = float(1.0 / (time[1] - time[0]))
+        # The same tables as plain floats, and the figures the two readers
+        # below take off their ends. Those readers are the most-run lines in
+        # the model - four calls an integration step - and taking a number out
+        # of a numpy array wraps it in a numpy scalar first; the arithmetic
+        # that follows is the same IEEE double either way.
+        self._start = float(time[0])
+        self._end_time = float(time[-1])
+        self._last_angle = float(angle[-1])
+        self._angles, self._rates, self._accelerations = (
+            np.asarray(table).tolist() for table in (angle, rate, acceleration))
+        self._top = len(self._angles) - 2
 
     @staticmethod
     def _grid(end_time: float) -> np.ndarray:
@@ -36,7 +47,7 @@ class PitchProgramme:
 
     @property
     def end_time(self) -> float:
-        return float(self.time[-1])
+        return self._end_time
 
     def sample(self, t: float) -> tuple[float, float, float]:
         """Angle, rate and acceleration at an arbitrary instant.
@@ -45,17 +56,32 @@ class PitchProgramme:
         multi-stage integrator probes the middle of a step, and a staircase
         there caps the order of accuracy whatever the scheme.
         """
-        if t >= self.end_time:
-            return float(self.angle[-1]), 0.0, 0.0
+        if t >= self._end_time:
+            return self._last_angle, 0.0, 0.0
 
-        position = (t - self.time[0]) * self._inverse_step
-        i = min(max(int(position), 0), len(self.time) - 2)
+        position = (t - self._start) * self._inverse_step
+        i = min(max(int(position), 0), self._top)
         weight = position - i
+        angle, rate, acceleration = self._angles, self._rates, self._accelerations
         return (
-            float(self.angle[i] + (self.angle[i + 1] - self.angle[i]) * weight),
-            float(self.rate[i] + (self.rate[i + 1] - self.rate[i]) * weight),
-            float(self.acceleration[i] + (self.acceleration[i + 1] - self.acceleration[i]) * weight),
+            angle[i] + (angle[i + 1] - angle[i]) * weight,
+            rate[i] + (rate[i + 1] - rate[i]) * weight,
+            acceleration[i] + (acceleration[i + 1] - acceleration[i]) * weight,
         )
+
+    def angle_at(self, t: float) -> float:
+        """The angle alone, which is all the equations of motion ask for.
+
+        `sample` interpolates three tables; the rate and the acceleration
+        beside the angle are for the reporting. This is the one of the two the
+        scheme calls, four times an integration step.
+        """
+        if t >= self._end_time:
+            return self._last_angle
+        position = (t - self._start) * self._inverse_step
+        i = min(max(int(position), 0), self._top)
+        angle = self._angles
+        return angle[i] + (angle[i + 1] - angle[i]) * (position - i)
 
     def describe(self) -> str:
         raise NotImplementedError

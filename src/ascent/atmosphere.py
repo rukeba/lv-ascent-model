@@ -6,6 +6,7 @@ thrust and the specific impulse, the other two set the drag.
 """
 
 import math
+from bisect import bisect_right
 from dataclasses import dataclass
 
 from .constants import MU, STANDARD_GRAVITY
@@ -27,8 +28,27 @@ LAYERS = (
     (84_852, 186.946, 0.3734, 0.0),
 )
 
+# Where one layer gives way to the next, and what never changes inside one.
+# `air_at` is asked some five times an integration step, so the layer is found
+# by bisection rather than by walking the table, and the two figures a layer
+# fixes are worked out here rather than on every call: the exponent of the
+# barometric formula where the temperature falls with height, and the scale
+# height of the exponential where it does not.
+# The top layer is where the greater part of every ascent here is flown:
+# everything above 85 km is in it, and finding it is worth a comparison rather
+# than a search.
+CEILINGS = tuple(layer[0] for layer in LAYERS[1:])
+SOUND_FACTOR = HEAT_CAPACITY_RATIO * GAS_CONSTANT
+_LAYERS = tuple(
+    (base_height, base_temperature, base_pressure, lapse_rate,
+     -STANDARD_GRAVITY / (lapse_rate * GAS_CONSTANT) if lapse_rate else 0.0,
+     GAS_CONSTANT * base_temperature)
+    for base_height, base_temperature, base_pressure, lapse_rate in LAYERS)
+_TOP = _LAYERS[-1]
+_TOP_BASE = LAYERS[-1][0]
 
-@dataclass(frozen=True)
+
+@dataclass(slots=True)
 class Air:
     pressure: float
     density: float
@@ -37,28 +57,25 @@ class Air:
 
 def air_at(altitude: float) -> Air:
     """State of the atmosphere at the given altitude."""
-    height = max(0.0, altitude)
+    height = altitude if altitude > 0.0 else 0.0
 
-    base_height, base_temperature, base_pressure, lapse_rate = LAYERS[-1]
-    for layer, next_layer in zip(LAYERS, LAYERS[1:]):
-        if height < next_layer[0]:
-            base_height, base_temperature, base_pressure, lapse_rate = layer
-            break
+    base_height, base_temperature, base_pressure, lapse_rate, exponent, scale = \
+        _TOP if height >= _TOP_BASE else _LAYERS[bisect_right(CEILINGS, height)]
 
     rise = height - base_height
     if lapse_rate == 0.0:
         temperature = base_temperature
-        pressure = base_pressure * math.exp(
-            -STANDARD_GRAVITY * rise / (GAS_CONSTANT * base_temperature))
+        pressure = base_pressure * math.exp(-STANDARD_GRAVITY * rise / scale)
+        density = pressure / scale
     else:
         temperature = base_temperature + lapse_rate * rise
-        pressure = base_pressure * (temperature / base_temperature) ** (
-            -STANDARD_GRAVITY / (lapse_rate * GAS_CONSTANT))
+        pressure = base_pressure * (temperature / base_temperature) ** exponent
+        density = pressure / (GAS_CONSTANT * temperature)
 
     return Air(
         pressure=pressure,
-        density=pressure / (GAS_CONSTANT * temperature),
-        speed_of_sound=math.sqrt(HEAT_CAPACITY_RATIO * GAS_CONSTANT * temperature),
+        density=density,
+        speed_of_sound=math.sqrt(SOUND_FACTOR * temperature),
     )
 
 
