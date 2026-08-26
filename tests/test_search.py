@@ -490,6 +490,28 @@ def test_a_search_reports_the_valleys_it_followed_not_the_ones_it_asked_for():
         plan(FALCON, 500_000, 'five-phase', basins=5, **SITE))
 
 
+def test_the_valleys_counted_are_the_valleys_a_pass_walked():
+    """The last pass has nothing after it, so what it would pick is not counted.
+
+    Valleys are picked from the ranking at the end of every pass and closed in
+    on by the pass after. There is no pass after the last one, so a count taken
+    there would report valleys as followed that nothing ever walked - and it
+    would be the widest count of the search, since the ranking is largest at the
+    end. A search with no refinements at all is the plainest case of it: one
+    sweep, no pass that closes in, and so no valley followed however many were
+    asked for.
+    """
+    swept = quick(refinements=0, basins=5)
+    assert swept.passes == 1
+    assert swept.basins == 5, 'the count asked for, never having been used'
+    assert 'and no more' in summarise_plan(swept)
+
+    # and with passes, the count is one a pass actually closed in on
+    closed = quick(refinements=2, basins=5)
+    assert closed.passes == 3
+    assert 1 <= closed.basins <= 5
+
+
 def test_following_several_valleys_costs_several_passes_and_no_more():
     """What a pass costs is what says whether following more is affordable."""
     grid = {'k3': Range(0.0, 0.9, 19), 't4': Range(400.0, 500.0, 41)}
@@ -718,6 +740,24 @@ def test_a_set_that_misses_is_not_written_out_as_an_entry(found):
     assert strict.best is not None
     with pytest.raises(ValueError, match='not a catalogue entry'):
         strict.specification('lv.f9')
+
+
+def test_a_tolerance_is_written_as_it_was_asked_for(found):
+    """Not rounded, because rounding a term changes what the entry claims.
+
+    Every other figure on an entry is a measurement, and rounding one of those
+    costs a little precision and nothing else. These two are the terms the set
+    was accepted under: a search asked for four tenths of a metre would be filed
+    as having been asked for nothing at all, and the entry would then say
+    something that is not merely imprecise but false.
+    """
+    awkward = copy.copy(found)
+    # loose enough that the set still reaches, and written to more places than
+    # any rounding would keep
+    awkward.tolerance, awkward.speed_tolerance = 1234.5678, 12.3456789
+
+    tolerance = awkward.specification('lv.f9')['tolerance']
+    assert tolerance == {'orbit_km': 1.2345678, 'speed_ms': 12.3456789}
 
 
 def test_an_entry_records_what_it_was_searched_at(found):

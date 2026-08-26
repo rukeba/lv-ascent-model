@@ -601,9 +601,15 @@ class SearchResult:
                            'steps_per_second': self.steps_per_second},
             # what was asked of it, before what it did: the perigee, the apogee
             # and the altitude at cut-off all inside the first, the inertial
-            # speed at cut-off inside the second
-            'tolerance': {'orbit_km': round(self.tolerance / 1000, 3),
-                          'speed_ms': round(self.speed_tolerance, 3)},
+            # speed at cut-off inside the second.
+            #
+            # Written as they are and not rounded. Every other figure of an
+            # entry is a measurement and rounding one costs a little precision;
+            # these are the terms the entry was accepted under, and rounding a
+            # term changes what the entry claims. A search asked for 0.4 m would
+            # be filed as having been asked for nothing at all
+            'tolerance': {'orbit_km': self.tolerance / 1000,
+                          'speed_ms': self.speed_tolerance},
             'reached': {
                 'perigee_km': round(best.orbit.perigee_altitude / 1000, 2),
                 'apogee_km': round(best.orbit.apogee_altitude / 1000, 2),
@@ -1032,7 +1038,7 @@ def search(vehicle: LaunchVehicle, target_altitude: float, programme: str,
     try:
         seen: dict[tuple, Candidate] = {}
         walked: set[tuple] = set()
-        for _ in range(refinements + 1):
+        for pass_number in range(refinements + 1):
             result.pass_number += 1
             _sweep(flight, grids, result, seen, walked, report, pool)
             if not seen:
@@ -1041,6 +1047,11 @@ def search(vehicle: LaunchVehicle, target_altitude: float, programme: str,
                 break
             result.found = sorted(seen.values(), key=_rank)
             result.best = _best(result)
+            if pass_number == refinements:
+                # the last pass has nothing after it to close in, so there is
+                # nothing to work out and nothing to count: valleys picked here
+                # would be reported as followed without a pass ever walking them
+                break
             # centred on the head of the table rather than on the set the
             # search would answer with. The two differ only where the closest
             # orbit found does not yet meet the tolerances, and then it is the
@@ -1051,7 +1062,8 @@ def search(vehicle: LaunchVehicle, target_altitude: float, programme: str,
             centres = _centres(result.found, sweep_grid, family.TIMES, basins)
             # the most any pass came to rather than the last, so that a search
             # reports the widest it ever looked rather than how narrow the
-            # ranking had grown by the end
+            # ranking had grown by the end. Counted here, where the pass that
+            # walks them is certain to follow
             result.basins = max(followed, len(centres))
             followed = result.basins
             grids = [_closer(sweep_grid, centre, reach, bounds)
