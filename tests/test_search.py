@@ -31,7 +31,7 @@ from ascent.search import (FAMILIES, NODE_LIMIT, REFINED_NODES,
                            BilinearTangent, Candidate, FivePhase, Range,
                            VelocityShare, _centres, _closer, _nodes,
                            _planned_nodes, axis_names, parse_ranges, plan,
-                           search, step_schedule)
+                           halvings, search, step_schedule)
 from ascent.summary import summarise_plan
 
 FALCON = load_vehicle('config/lv.f9.yaml')
@@ -460,6 +460,87 @@ def test_a_node_walked_coarsely_is_walked_again_at_the_finer_step():
     # and the ramp flies more than a search that never steps up, because
     # stepping up is flying some of it twice
     assert ramped.flown > flat.flown
+
+
+def test_a_pass_that_steps_up_does_not_also_narrow():
+    """So the spacing reported is the spacing reached, and not four times finer.
+
+    A pass that steps up to a finer integration is re-flying the ground the pass
+    before it covered, and the point of it is to see that ground plainly rather
+    than to narrow on a coarse reading of it. So it keeps its reach, the two
+    step-ups of a full ramp cost two halvings, and eleven passes resolve what
+    nine would have. Both the spacing a search reports and the edge it decides a
+    set sits on are read off that, so getting it wrong would have the search
+    overstating what it resolved by a factor of four.
+    """
+    assert halvings(step_schedule(11, 10.0)) == 8
+    assert halvings(step_schedule(11, 1.0)) == 10, 'no step-up, no cost'
+    assert halvings(step_schedule(1, 10.0)) == 0
+
+    # and the plan reports the spacing that ramp actually leaves
+    ramped = plan(FALCON, 500_000, 'five-phase', **SITE)
+    flat = plan(FALCON, 500_000, 'five-phase', steps_per_second=1.0, **SITE)
+    assert ramped.spacing['k2'] == pytest.approx(4 * flat.spacing['k2'])
+
+
+def test_a_search_reports_the_schedule_it_walked():
+    """And not one laid again over however many passes it got through.
+
+    A search that finds no orbit at all stops after its sweep, and `passes` is
+    rewritten to what it walked. Working the ramp out again from that shortened
+    count would lay a one-pass ramp - which is the finest step - and report a
+    sweep that ran at one step a second as having run at ten.
+    """
+    # an orbit inside the family but far outside this grid, so the sweep closes
+    # nothing and the search stops where it started
+    nothing = search(FALCON, 500_000, 'five-phase', workers=1,
+                     steps_per_second=10, refinements=6, ranges={
+                         't1': Range(20.0, 20.0), 'k2': Range(0.05, 0.05),
+                         'k3': Range(0.0, 0.0), 't4': Range(470.0, 471.0, 2),
+                         'angle': Range(0.0, 0.0), 'coast': Range(0.0, 0.0)},
+                     **SITE)
+
+    assert nothing.passes == 1
+    assert nothing.schedule == (1.0,), 'the sweep ran coarse and says so'
+    assert '1 Hz' in summarise_plan(nothing)
+
+
+def test_a_coarse_row_is_not_marked_as_reaching_the_orbit(tmp_path):
+    """In the table or in the CSV, which are the two places rows are read.
+
+    `reaching` holds the rule - a set flown by a coarse pass has not been shown
+    to meet anything at the step the search was asked for - and an output that
+    asked each row for itself instead would mark rows the search would not
+    answer with, with nothing on the row to say why.
+    """
+    from ascent.cli import _write_search_csv
+    from ascent.summary import search_table
+
+    # loose enough that rows from the coarse sweep do meet the tolerances when
+    # asked directly, which is what makes this worth testing rather than
+    # asserting: with a tight one they would all fail anyway and the marker
+    # would look right for the wrong reason
+    result = quick(refinements=3, steps_per_second=2, tolerance=50_000.0)
+    coarse = [c for c in result.found if c.steps_per_second == 1.0]
+    assert coarse, 'the sweep ran at one step a second'
+    assert any(c.reaches(result.tolerance, result.speed_tolerance)
+               for c in coarse)
+    assert not any(c in result.reaching for c in coarse)
+
+    # the rows themselves, which begin after the rule under the column names -
+    # the line above it carries a `*` of its own, explaining the marker
+    table = search_table(result)
+    rows = table[table.index(next(line for line in table
+                                  if set(line) == {'-'})) + 1:]
+    assert sum(line.count('*') for line in rows)         == len(result.reaching[:result.top])
+
+    rows = _write_search_csv(result, tmp_path / 'found.csv').read_text().splitlines()
+    header = rows[0].split(',')
+    assert 'steps_per_second' in header
+    step, says = header.index('steps_per_second'), header.index('reaches_orbit')
+    assert any(row.split(',')[step] == '1' for row in rows[1:])
+    assert not any(row.split(',')[step] == '1' and row.split(',')[says] == 'yes'
+                   for row in rows[1:])
 
 
 # --- which valleys are closed in on ----------------------------------------

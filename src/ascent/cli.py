@@ -517,16 +517,22 @@ def _write_search_csv(result, path: Path) -> Path:
     """
     path.parent.mkdir(parents=True, exist_ok=True)
     axes = list(result.ranges)
+    # what the search would answer with, rather than every row that happens to
+    # sit inside the tolerances. A set flown by one of the coarse early passes
+    # is known to within a hundred metres or so and has not been shown to meet
+    # anything at the step the search was asked for; `steps_per_second` beside
+    # it is what lets a reader see which rows those are
+    reaching = {id(candidate) for candidate in result.reaching}
     with open(path, 'w', newline='', encoding='utf-8') as handle:
         writer = csv.writer(handle)
         writer.writerow([*axes, *(name for name, _ in SEARCH_CSV_COLUMNS),
-                         'reaches_orbit'])
+                         'steps_per_second', 'reaches_orbit'])
         for candidate in result.found:
             writer.writerow([
                 *(f'{candidate.values[axis]:.10g}' for axis in axes),
                 *(f'{read(candidate):.10g}' for _, read in SEARCH_CSV_COLUMNS),
-                'yes' if candidate.reaches(result.tolerance,
-                                           result.speed_tolerance) else 'no'])
+                f'{candidate.steps_per_second:g}',
+                'yes' if id(candidate) in reaching else 'no'])
     return path
 
 

@@ -271,6 +271,24 @@ def step_schedule(passes: int, finest: float) -> tuple[float, ...]:
     return tuple(ramp) + (finest,) * (passes - len(ramp))
 
 
+def halvings(schedule: tuple[float, ...]) -> int:
+    """How many times the passes of `schedule` halve what they reach.
+
+    Not one per pass. A pass that steps up to a finer integration keeps the
+    reach it had, because it is re-flying the ground the pass before it covered
+    and the point of it is to see that ground plainly rather than to narrow on
+    a coarse reading of it - so the two step-ups of a full ramp cost two
+    halvings, and eleven passes resolve what nine would have.
+
+    Which is why this is worked out rather than assumed: the spacing a search
+    reports and the edge it decides a set sits on are both read off the reach it
+    actually ended with, and a figure four times finer than the truth would be
+    the search overstating what it resolved.
+    """
+    return sum(1 for at in range(len(schedule) - 1)
+               if schedule[at + 1] == schedule[at])
+
+
 # What one node of the grid can come to. Each is a field of `SearchResult`, and
 # every node increments exactly one of them
 OUTCOMES = ('screened', 'refused', 'failed', 'no_orbit', 'closed')
@@ -578,6 +596,11 @@ class SearchResult:
     max_dynamic_pressure: float | None = None
     # processes the nodes of a pass were divided over
     workers: int = 1
+    # what each pass integrated at, in order - see `COARSE_STEPS`. Recorded
+    # rather than worked out again from `passes`, which a search that stopped
+    # early rewrites: laying a fresh ramp over the shortened count would report
+    # a sweep that ran at one step a second as having run at ten
+    schedule: tuple[float, ...] = ()
     # what each axis being searched is resolved to by the end, one entry per
     # axis of `searched`. The sweep step halved once per pass, except on an
     # axis of instants, which stops at the tenth of a second the flight is
@@ -1035,10 +1058,12 @@ def plan(vehicle: LaunchVehicle, target_altitude: float, programme: str,
         basins=max(1, basins),
         max_dynamic_pressure=max_dynamic_pressure)
     result.passes = refinements + 1
+    result.schedule = step_schedule(result.passes, steps_per_second)
     result.planned_nodes = _planned_nodes(grid, refinements, max(1, basins))
+    closed = halvings(result.schedule)
     result.spacing = {
-        name: (max(span.step / 2 ** refinements, TIME_QUANTUM)
-               if name in family.TIMES else span.step / 2 ** refinements)
+        name: (max(span.step / 2 ** closed, TIME_QUANTUM)
+               if name in family.TIMES else span.step / 2 ** closed)
         for name, span in grid.items() if span.nodes > 1}
     return result
 
@@ -1117,7 +1142,7 @@ def search(vehicle: LaunchVehicle, target_altitude: float, programme: str,
     try:
         seen: dict[tuple, Candidate] = {}
         walked: set[tuple] = set()
-        schedule = step_schedule(refinements + 1, steps_per_second)
+        schedule = result.schedule
         for pass_number in range(refinements + 1):
             result.pass_number += 1
             _sweep(flight, grids, schedule[pass_number], result, seen, walked,
@@ -1176,16 +1201,28 @@ def search(vehicle: LaunchVehicle, target_altitude: float, programme: str,
             pool.shutdown()
 
     # a search that stopped early is reported as what was walked rather than as
-    # what was planned
+    # what was planned - the schedule included, which is why it is cut to length
+    # rather than laid again over the shorter count
     result.passes = result.pass_number
+    result.schedule = result.schedule[:result.passes]
     result.planned_nodes = result.nodes
+    # and the spacing it actually closed down to, which is not one halving a
+    # pass: a pass that steps up to a finer integration keeps the reach it had
+    closed = halvings(result.schedule)
+    result.spacing = {
+        name: (max(span.step / 2 ** closed, TIME_QUANTUM)
+               if name in family.TIMES else span.step / 2 ** closed)
+        for name, span in result.ranges.items() if span.nodes > 1}
 
     if result.best is not None:
         # against the step the passes closed down to rather than the step they
         # started from: what this is reporting is that the search converged on
         # to a bound of the range it was given and would have gone further, and
-        # a sweep step is far too wide to tell that from an interior answer
-        finest = 2 ** max(result.passes - 1, 0)
+        # a sweep step is far too wide to tell that from an interior answer.
+        # The count of halvings and not of passes, for the reason `halvings`
+        # gives - a threshold four times finer than what was resolved would call
+        # an interior answer an edge
+        finest = 2 ** closed
         result.on_edge = tuple(
             name for name, (low, high) in bounds.items()
             if result.ranges[name].nodes > 1
