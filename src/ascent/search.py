@@ -58,6 +58,27 @@ it. They can travel about two sweep steps and no further, which is why the
 count on an axis decides which part of the family is searched rather than how
 finely - see `CUT_OFF_NODES`.
 
+**And it closes in on more than one place at once.** A pass is a local descent
+and answers only the valley it started in, which is enough where the ranking
+has one. The cut-off axis is where it does not: a tenth of a second of burn is
+kilometres of apogee, so the ranking along it is a row of narrow valleys, each
+a cut-off the shape of the turn can very nearly make an orbit of, and a sweep
+steps across several of them between two of its own nodes. Following only the
+best is how a search lands on the bottom of the wrong one - a set whose apogee
+is exact to ten metres and whose perigee is kilometres out. So the passes
+follow the best few valleys together, one grid each, walked as a single pass -
+see `BASINS` and `_centres`.
+
+What separates one valley from the next is not the same on every axis, and the
+difference is the point. On a coefficient of the guidance law it is a step of
+the sweep, which is the scale a valley was missed at. On an axis of instants it
+is the tenth of a second the answer is written in: such an axis stops being
+closed in on once its window is under a tenth, and from then it does not move,
+so a cut-off that locked on to the wrong tenth is a search that converges on to
+a set a kilometre or two out and cannot do better. Read at the sweep step, every
+tenth within five seconds of the best would be one valley and only one of them
+would ever be tried.
+
 **Instants are asked for in tenths of a second.** The vertical rise, the end of
 the programme and the cut-off are rounded there, because that is the finest a
 timeline is ever issued to, and two values that come to the same tenth are one
@@ -166,6 +187,34 @@ REFINEMENTS = 10
 # so halve the step, at the cost of five flights an axis; a wider grid closes
 # in faster per pass and pays for it as the power of its width.
 REFINED_NODES = 5
+
+# How many places on the grid the passes close in on at once.
+#
+# A pass that closes in is a local descent, and a local descent answers only
+# the valley it started in. That is the whole of what one of them can do, and
+# for most of this it is enough - the ranking near a circular orbit is one
+# broad valley and the head of the sweep is in it.
+#
+# It is not always one valley. The cut-off axis is the case that matters: a
+# tenth of a second of burn is some five kilometres of apogee on a vehicle that
+# burns for a thousand seconds, so the ranking along it is a row of narrow
+# valleys rather than one, each a cut-off that the shape of the turn can very
+# nearly - but not quite - make an orbit of. A sweep steps across several of
+# them between two of its own nodes, and which one its best node lands in is
+# not the same question as which one holds the orbit. Following only that one
+# is how a search comes back with a set whose apogee is exact to ten metres and
+# whose perigee is kilometres out: the bottom of the wrong valley.
+#
+# So the passes follow several. The best node is one of them; the rest are the
+# best nodes that are not in the valley of any already taken, which is what
+# `_centres` decides and it decides it by the step of the sweep - two sets in
+# the same cell of the sweep are the same valley, and the pass that closes in
+# on one closes in on both.
+#
+# Five is what it costs against what it buys. A pass is five nodes an axis
+# whatever the grid was, so five valleys are five of those, against a sweep that
+# is the whole grid and is where most of the time of a search goes.
+BASINS = 5
 
 # What one node of the grid can come to. Each is a field of `SearchResult`, and
 # every node increments exactly one of them
@@ -460,6 +509,11 @@ class SearchResult:
     tolerance: float = TOLERANCE
     speed_tolerance: float = SPEED_TOLERANCE
     top: int = TOP
+    # places on the grid the passes close in on at once, asked for, and how
+    # many the ranking actually offered - fewer where the sets found were all
+    # in the same few cells of the sweep. See `BASINS`
+    basins: int = BASINS
+    basins_asked: int = BASINS
     max_dynamic_pressure: float | None = None
     # processes the nodes of a pass were divided over
     workers: int = 1
@@ -797,7 +851,7 @@ def plan(vehicle: LaunchVehicle, target_altitude: float, programme: str,
          ranges: dict[str, Range] | None = None,
          tolerance: float = TOLERANCE,
          speed_tolerance: float = SPEED_TOLERANCE,
-         refinements: int = REFINEMENTS, top: int = TOP,
+         refinements: int = REFINEMENTS, basins: int = BASINS, top: int = TOP,
          max_dynamic_pressure: float | None = None,
          coarseness: float = 1.0, steps_per_second: float = 10) -> SearchResult:
     """The grid a search would walk, before a single trajectory is flown.
@@ -865,9 +919,10 @@ def plan(vehicle: LaunchVehicle, target_altitude: float, programme: str,
         vacuum_time=vacuum_time(vehicle, target_altitude) or 0.0,
         equivalent_time=estimate, window=window, tolerance=tolerance,
         speed_tolerance=speed_tolerance, top=top,
+        basins=max(1, basins), basins_asked=max(1, basins),
         max_dynamic_pressure=max_dynamic_pressure)
     result.passes = refinements + 1
-    result.planned_nodes = _planned_nodes(grid, refinements)
+    result.planned_nodes = _planned_nodes(grid, refinements, max(1, basins))
     result.spacing = {
         name: (max(span.step / 2 ** refinements, TIME_QUANTUM)
                if name in family.TIMES else span.step / 2 ** refinements)
@@ -880,7 +935,7 @@ def search(vehicle: LaunchVehicle, target_altitude: float, programme: str,
            ranges: dict[str, Range] | None = None,
            tolerance: float = TOLERANCE,
            speed_tolerance: float = SPEED_TOLERANCE,
-           refinements: int = REFINEMENTS, top: int = TOP,
+           refinements: int = REFINEMENTS, basins: int = BASINS, top: int = TOP,
            max_dynamic_pressure: float | None = None,
            coarseness: float = 1.0, steps_per_second: float = 10,
            workers: int | None = None, screen: bool = True,
@@ -911,7 +966,8 @@ def search(vehicle: LaunchVehicle, target_altitude: float, programme: str,
                   latitude_deg=latitude_deg, azimuth_deg=azimuth_deg,
                   ranges=ranges, tolerance=tolerance,
                   speed_tolerance=speed_tolerance, refinements=refinements,
-                  top=top, max_dynamic_pressure=max_dynamic_pressure,
+                  basins=basins, top=top,
+                  max_dynamic_pressure=max_dynamic_pressure,
                   coarseness=coarseness, steps_per_second=steps_per_second)
     family = FAMILIES[programme]()
     grid = result.ranges
@@ -940,12 +996,14 @@ def search(vehicle: LaunchVehicle, target_altitude: float, programme: str,
     # with every pass; an axis the caller held has no entry and is not closed
     # in on
     reach = {name: span.step for name, span in grid.items() if span.nodes > 1}
+    sweep_grid = grid
+    grids = [grid]
     try:
         seen: dict[tuple, Candidate] = {}
         walked: set[tuple] = set()
         for _ in range(refinements + 1):
             result.pass_number += 1
-            _sweep(flight, grid, result, seen, walked, report, pool)
+            _sweep(flight, grids, result, seen, walked, report, pool)
             if not seen:
                 # nothing to close in on: a pass that found no orbit at all
                 # leaves the next one nowhere to centre itself
@@ -956,9 +1014,13 @@ def search(vehicle: LaunchVehicle, target_altitude: float, programme: str,
             # search would answer with. The two differ only where the closest
             # orbit found does not yet meet the tolerances, and then it is the
             # closest orbit that says where the orbit is: what the next pass is
-            # for is to walk the ranking downhill, and the ranking is the head
-            centre = result.found[0].values
-            grid = _closer(grid, centre, reach, bounds)
+            # for is to walk the ranking downhill, and the ranking is the head -
+            # and on the head of each of the other valleys being followed, for
+            # which see `_centres` and `BASINS`
+            centres = _centres(result.found, sweep_grid, family.TIMES, basins)
+            result.basins = len(centres)
+            grids = [_closer(sweep_grid, centre, reach, bounds)
+                     for centre in centres]
             # five nodes over the two widths either side, so the next pass
             # resolves every axis it is searching twice as finely as this one -
             # except an axis of instants, which stops once its window is
@@ -1020,11 +1082,19 @@ def _grid(family: Family, window: tuple[float, float],
     return {name: ranges.get(name, span) for name, span in grid.items()}
 
 
-def _planned_nodes(grid: dict[str, Range], refinements: int) -> int:
-    """How many nodes the whole search will visit, known before it starts."""
+def _planned_nodes(grid: dict[str, Range], refinements: int,
+                   basins: int = 1) -> int:
+    """How many nodes the whole search will visit, known before it starts.
+
+    The upper bound of it. A pass closes in on as many valleys as the ranking
+    offers, up to `basins`, and where two of them lie near each other the nodes
+    they share are walked once - so a search that follows five reports rather
+    fewer than five passes' worth of nodes, and says so as it goes.
+    """
     refined = math.prod(REFINED_NODES if span.nodes > 1 else 1
                         for span in grid.values())
-    return math.prod(span.nodes for span in grid.values()) + refinements * refined
+    return (math.prod(span.nodes for span in grid.values())
+            + refinements * refined * max(1, basins))
 
 
 def _nodes(grid: dict[str, Range], times: tuple[str, ...] = ()):
@@ -1094,6 +1164,63 @@ def _closer(grid: dict[str, Range], centre: dict[str, float],
     return closer
 
 
+def _centres(found: list[Candidate], sweep: dict[str, Range],
+             times: tuple[str, ...], basins: int) -> list[dict[str, float]]:
+    """The places the next pass closes in on, best first.
+
+    The head of the ranking, and then the best set that is not already in a
+    valley being followed, until `basins` of them are held or the table runs
+    out.
+
+    Two sets are the same valley when they sit within one scale of each other on
+    every axis that was searched, and the scale is not the same on every axis.
+
+    On a coefficient of the guidance law it is the step of the sweep: that is
+    the scale the valleys were missed at, and it does not move. Not the reach of
+    the pass, which halves from pass to pass - measuring by that would split one
+    valley into finer and finer pieces as the search converged and spend the
+    passes on distinctions inside an answer rather than on answers it has not
+    looked at.
+
+    On an axis of instants it is the tenth of a second the flight is asked in,
+    and this is the one that matters. Such an axis stops being closed in on once
+    its window is narrower than a tenth, which happens after six passes or so -
+    and from then it does not move again. A cut-off that locked on to the wrong
+    tenth cannot be recovered by any amount of shaping the turn, because the
+    orbit answers to it at kilometres of apogee per tenth: the search converges,
+    but on to a set a kilometre or two out. Read at the sweep step, every tenth
+    within five seconds of the best would be the same valley and only one of
+    them would ever be tried. Read at the tenth, they are what they are - one
+    turn each, solved at its own cut-off.
+
+    An axis the caller held is left out, because a value that is the same
+    everywhere makes every pair of sets the same valley.
+    """
+    # half a tenth on an axis of instants, which is to say: the same tenth, and
+    # nothing else. A whole tenth would fold the neighbouring one in, and the
+    # neighbouring one is precisely what has to be tried - once such an axis has
+    # locked, the grid a pass builds on it is the single value it locked to, so
+    # a cut-off one tenth away is covered by nothing at all. On a coefficient a
+    # whole step is right, because there the pass reaches one step either side
+    # and does cover its neighbours
+    scale = {name: (0.5 * TIME_QUANTUM if name in times else span.step)
+             for name, span in sweep.items() if span.nodes > 1}
+    if not scale or basins <= 1:
+        return [found[0].values] if found else []
+
+    centres: list[dict[str, float]] = []
+    for candidate in found:
+        values = candidate.values
+        if any(all(abs(values[name] - taken[name]) <= step
+                   for name, step in scale.items())
+               for taken in centres):
+            continue
+        centres.append(values)
+        if len(centres) == basins:
+            break
+    return centres
+
+
 def _rank(candidate: Candidate) -> tuple[float, float]:
     """The order the sets found are reported in.
 
@@ -1116,26 +1243,34 @@ def _best(result: SearchResult) -> Candidate:
     return reaching[0] if reaching else result.found[0]
 
 
-def _sweep(flight: "_Flight", grid: dict[str, Range], result: SearchResult,
+def _sweep(flight: "_Flight", grids: list[dict[str, Range]], result: SearchResult,
            seen: dict[tuple, Candidate], walked: set, report, pool) -> None:
-    """One pass over the grid: every node screened, the survivors flown.
+    """One pass over the grids: every node screened, the survivors flown.
+
+    `grids` is one grid for the sweep and one per valley thereafter. They are
+    walked as a single pass rather than as several, because they are one step
+    of the same search: the ranking they feed is shared, the nodes where two of
+    them overlap are worth flying once, and a caller watching the progress of a
+    search is watching how much of it is left rather than which valley it is in.
 
     A node this search has already walked is not walked again - see `_key` -
     which is a set of nodes every pass that closes in shares with the pass
-    before it. The rest are independent, so they are answered over a pool of
-    processes where there is one, in the order of the grid, so that a search
+    before it, and now also the nodes two valleys have in common where they lie
+    near each other. The rest are independent, so they are answered over a pool
+    of processes where there is one, in the order of the grids, so that a search
     returns the same table however many of them there are. A set that asks more
     of the airframe than the caller allowed is put aside here rather than
     ranked: it is not a worse answer, it is not an answer.
     """
     values = []
-    for one in _nodes(grid, flight.family.TIMES):
-        key = _key(one)
-        if key in walked:
-            result.revisited += 1
-            continue
-        walked.add(key)
-        values.append(one)
+    for grid in grids:
+        for one in _nodes(grid, flight.family.TIMES):
+            key = _key(one)
+            if key in walked:
+                result.revisited += 1
+                continue
+            walked.add(key)
+            values.append(one)
 
     result.pass_nodes = len(values)
     result.pass_node = 0

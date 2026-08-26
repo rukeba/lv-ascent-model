@@ -26,9 +26,11 @@ from ascent.config import (PITCH_PROGRAMMES, load_catalogue, load_vehicle,
                            mission_from_spec)
 from ascent.constants import circular_velocity
 from ascent.estimates import equivalent_time
+from ascent.orbit import Orbit
 from ascent.search import (FAMILIES, NODE_LIMIT, REFINED_NODES,
-                           BilinearTangent, FivePhase, Range, VelocityShare,
-                           _closer, _nodes, axis_names, parse_ranges, plan,
+                           BilinearTangent, Candidate, FivePhase, Range,
+                           VelocityShare, _centres, _closer, _nodes,
+                           _planned_nodes, axis_names, parse_ranges, plan,
                            search)
 
 FALCON = load_vehicle('config/lv.f9.yaml')
@@ -290,10 +292,16 @@ def test_the_cut_off_is_searched_over_the_window_the_estimate_gives():
 
 
 def test_the_work_is_counted_out_before_any_of_it_is_done():
-    """The sweep, and then five nodes an axis for every pass that closes in."""
-    result = outline(refinements=3)
+    """The sweep, and then five nodes an axis for every valley of every pass."""
+    result = outline(refinements=3, basins=1)
     assert result.passes == 4
     assert result.planned_nodes == 3 * 3 * 3 + 3 * REFINED_NODES ** 3
+
+    # the upper bound of it: a pass closes in on as many valleys as the ranking
+    # offers, and where two lie near each other the nodes they share are walked
+    # once, so a search that follows several reports rather fewer than this
+    followed = outline(refinements=3, basins=4)
+    assert followed.planned_nodes == 3 * 3 * 3 + 4 * 3 * REFINED_NODES ** 3
 
 
 def test_a_coarser_grid_is_a_thinner_one():
@@ -376,6 +384,98 @@ def test_a_held_parameter_is_not_closed_in_on():
     assert _closer(grid, {'k2': 0.05}, {}, {'k2': (0.05, 0.05)}) == grid
 
 
+# --- which valleys are closed in on ----------------------------------------
+
+# a sweep whose steps are 10 on one axis and 1 on the other. `te` is an instant
+# of the flight, so two sets are two valleys there once they differ by a tenth
+# of a second - the resolution the answer is written in - where on `start`,
+# which is a coefficient of the guidance law, it takes a whole step of the sweep
+SWEEP = {'te': Range(100.0, 200.0, 11), 'start': Range(0.0, 10.0, 11)}
+TIMES = ('te',)
+
+
+def _set(**values):
+    """A candidate that is nothing but its coordinates, which is all `_centres`
+    reads: the ranking is the order they are handed over in."""
+    return Candidate(values=values, parameters={}, cutoff_time=0.0,
+                     orbit=Orbit(0.0, 0.0, 0.0, 0.0, 0.0, 0.0), altitude=0.0,
+                     speed=0.0, flight_path_angle=0.0, altitude_miss=0.0,
+                     speed_miss=0.0, miss=0.0)
+
+
+def test_two_sets_in_one_cell_of_the_sweep_are_one_valley():
+    """And the pass that closes in on the better of them closes in on both.
+
+    Both axes have to fold for the sets to be one valley: the same cut-off to
+    the tenth, and within one sweep step on the coefficient.
+    """
+    found = [_set(te=150.0, start=5.0),
+             _set(te=150.0, start=5.5),   # the same instant, half a step over
+             _set(te=150.0, start=9.0)]   # four steps over
+    assert [centre['start'] for centre in _centres(found, SWEEP, TIMES, 5)] \
+        == [5.0, 9.0]
+
+
+def test_a_set_a_step_away_on_one_axis_alone_is_another_valley():
+    """The axes are read together: one of them out of reach is enough."""
+    found = [_set(te=150.0, start=5.0), _set(te=150.0, start=7.0)]
+    assert len(_centres(found, SWEEP, TIMES, 5)) == 2
+
+
+def test_a_cut_off_one_tenth_away_is_another_valley():
+    """The point of the whole thing, and the reason a tenth is the scale.
+
+    An axis of instants stops being closed in on once its window is under a
+    tenth of a second, and from then it does not move. So a set whose cut-off is
+    one tenth from the best is a turn that will never be solved unless it is
+    followed as a valley of its own - and the orbit answers to that tenth at
+    kilometres of apogee. Read at the sweep step, which is five seconds here,
+    every one of these would be the same valley as the head.
+    """
+    found = [_set(te=150.0, start=5.0), _set(te=150.1, start=5.0),
+             _set(te=149.9, start=5.0), _set(te=150.2, start=5.0)]
+    assert [centre['te'] for centre in _centres(found, SWEEP, TIMES, 9)] \
+        == [150.0, 150.1, 149.9, 150.2]
+
+
+def test_a_coefficient_is_not_read_at_the_tenth_a_cut_off_is():
+    """`start` is a coefficient of the guidance law, not a moment of the flight.
+
+    Nothing rounds it and nothing stops closing in on it, so the scale that
+    separates two of its valleys is the step of the sweep - a tenth apart on
+    that axis is deep inside one valley, not beside it.
+    """
+    found = [_set(te=150.0, start=5.0), _set(te=150.0, start=5.1)]
+    assert len(_centres(found, SWEEP, TIMES, 9)) == 1
+
+
+def test_the_valleys_are_taken_in_the_order_they_are_ranked_in():
+    found = [_set(te=100.0 + 20 * step, start=0.0) for step in range(6)]
+    assert [centre['te'] for centre in _centres(found, SWEEP, TIMES, 3)] \
+        == [100.0, 120.0, 140.0]
+
+
+def test_one_valley_is_the_head_of_the_ranking_and_nothing_else():
+    """`--basins 1` is the search as it closed in before it followed several."""
+    found = [_set(te=150.0, start=5.0), _set(te=190.0, start=9.0)]
+    assert _centres(found, SWEEP, TIMES, 1) == [found[0].values]
+
+
+def test_a_search_with_nothing_found_has_no_valley_to_close_in_on():
+    assert _centres([], SWEEP, TIMES, 5) == []
+
+
+def test_following_several_valleys_costs_several_passes_and_no_more():
+    """What a pass costs is what says whether following more is affordable."""
+    grid = {'k3': Range(0.0, 0.9, 19), 't4': Range(400.0, 500.0, 41)}
+    one = _planned_nodes(grid, refinements=10, basins=1)
+    five = _planned_nodes(grid, refinements=10, basins=5)
+
+    sweep = 19 * 41
+    assert one == sweep + 10 * REFINED_NODES ** 2
+    assert five - sweep == 5 * (one - sweep)
+
+
 # --- the table -------------------------------------------------------------
 
 
@@ -454,7 +554,7 @@ NARROW_BY_FAMILY = {
     'velocity-share': ({'t1': Range(20.0, 20.0), 'turn': Range(0.96, 0.99, 3),
                         's': Range(1.0, 1.3, 3),
                         'te': Range(501.5, 503.0, 3),
-                        'coast': Range(0.0, 0.0)}, 502.2, 6),
+                        'coast': Range(0.0, 0.0)}, 502.1, 6),
     'bilinear-tangent': ({'t1': Range(20.0, 20.0), 'start': Range(87.5, 88.5, 5),
                           'mid': Range(0.5, 0.5), 'middle': Range(29.0, 30.0, 5),
                           'te': Range(500.8, 501.0, 3),
@@ -465,11 +565,20 @@ NARROW_BY_FAMILY = {
 
 @pytest.mark.parametrize('programme', sorted(NARROW_BY_FAMILY))
 def test_a_narrow_grid_reaches_the_orbit_in_every_family(programme):
-    """Each of the other two families, narrowed on to the set the catalogue has.
+    """Each of the other two families, narrowed on to a set that reaches.
 
     The five-phase family is tested above and in more detail; this is that the
     other two are searched, closed in on and reported the same way, and that
-    each comes back on the tenth of a second the catalogue set is nearest to.
+    each comes back on one particular tenth of a second.
+
+    The tenth is pinned rather than derived, and it is the answer the search
+    gives rather than a figure from anywhere else - so it moves when the search
+    changes, and it did: the velocity share landed on 502.2 while the passes
+    followed one valley and on 502.1 once they followed five. Neither is wrong
+    and the second is not better, at 67 m against 62; a pass that closes in on
+    several places lays its grids differently, so a valley that was already the
+    right one can come back a few metres coarser. What that buys is the
+    families and vehicles where one valley lands nowhere near.
     """
     ranges, cutoff, refinements = NARROW_BY_FAMILY[programme]
     result = search(FALCON, 500_000, programme, ranges=ranges,

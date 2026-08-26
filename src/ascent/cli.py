@@ -31,7 +31,7 @@ import yaml
 from .config import (PITCH_PROGRAMMES, PROGRAMME_ALIASES, find_in_catalogue,
                      load_catalogue, load_vehicle, mission_from_spec,
                      programme_name, read_spec, resolve)
-from .search import (FAMILIES, REFINEMENTS, SPEED_TOLERANCE, TOP, axis_names,
+from .search import (BASINS, FAMILIES, REFINEMENTS, SPEED_TOLERANCE, TOP, axis_names,
                      default_workers, parse_ranges, plan, search)
 from .summary import summarise, summarise_found, summarise_plan
 
@@ -318,6 +318,16 @@ def _search(argv: list[str] | None) -> int:
                              f'every axis searched (default {REFINEMENTS}). A '
                              f'step of the sweep is worth tens of kilometres of '
                              f'apogee, and these are what close that down')
+    parser.add_argument('--basins', type=int, default=BASINS, metavar='N',
+                        help=f'places on the grid the passes close in on at '
+                             f'once (default {BASINS}). A pass that closes in is '
+                             f'a local descent and answers only the valley it '
+                             f'started in; where the ranking has several - which '
+                             f'is what the cut-off axis has, a tenth of a second '
+                             f'of burn being kilometres of apogee - following '
+                             f'one is how a search lands on the bottom of the '
+                             f'wrong one. 1 to follow the best set and nothing '
+                             f'else')
     parser.add_argument('--max-q', type=float, metavar='KPA',
                         help='put the airframe into the constraint: sets whose '
                              'dynamic pressure peaks above this are not answers, '
@@ -373,6 +383,9 @@ def _search(argv: list[str] | None) -> int:
     if arguments.refinements < 0:
         parser.error(f'--refinements cannot be negative, and is '
                      f'{arguments.refinements}')
+    if arguments.basins < 1:
+        parser.error(f'--basins is at least one valley to close in on, and is '
+                     f'{arguments.basins}')
     if arguments.max_q is not None and arguments.max_q <= 0.0:
         parser.error(f'--max-q has to be above zero, and is {arguments.max_q:g}')
 
@@ -392,6 +405,7 @@ def _search(argv: list[str] | None) -> int:
         tolerance=arguments.tolerance * 1000,
         speed_tolerance=arguments.speed_tolerance,
         refinements=arguments.refinements,
+        basins=arguments.basins,
         top=arguments.top,
         max_dynamic_pressure=(arguments.max_q * 1000
                               if arguments.max_q is not None else None),
