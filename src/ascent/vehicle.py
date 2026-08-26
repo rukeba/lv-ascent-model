@@ -9,7 +9,6 @@ import math
 from bisect import bisect_right
 from dataclasses import dataclass, field
 
-from .atmosphere import Air
 from .constants import SEA_LEVEL_PRESSURE, STANDARD_GRAVITY
 
 # altitude above which the model takes the air as gone, m
@@ -158,8 +157,13 @@ class LaunchVehicle:
         return self._stack_masses[index] \
             - min(propellant_burned, self._capacities[index])
 
-    def drag(self, air: Air, altitude: float, speed: float, index: int) -> float:
+    def drag(self, density: float, speed_of_sound: float, altitude: float,
+             speed: float, index: int) -> float:
         """Aerodynamic drag on the stack from `index` upwards, N.
+
+        The two figures of the air it needs rather than the whole of it: the
+        equations of motion read the atmosphere as three numbers - see
+        `atmosphere.air_values` - and the pressure is not one of these two.
 
         Taken as zero above `DRAG_CEILING`. A vehicle given no drag profile flies
         without drag, rather than through an interpolation with nothing to
@@ -167,9 +171,9 @@ class LaunchVehicle:
         """
         if altitude > DRAG_CEILING or not self._has_drag:
             return 0.0
-        cd = _interpolated(speed / air.speed_of_sound, self._mach_points,
+        cd = _interpolated(speed / speed_of_sound, self._mach_points,
                            self._cd_values, self._cd_slopes)
-        return cd * air.density * speed**2 / 2 * self.frontal_areas[index]
+        return cd * density * speed**2 / 2 * self.frontal_areas[index]
 
     def staging_times_within(self, begin: float, end: float) -> list[float]:
         """Separation instants strictly inside the interval."""

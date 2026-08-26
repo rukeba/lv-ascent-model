@@ -3,6 +3,12 @@
 One call returns pressure, density and the speed of sound together, because
 the equations of motion need all three at the same altitude: pressure sets the
 thrust and the specific impulse, the other two set the drag.
+
+`air_values` returns the three as a tuple and `air_at` returns them named. The
+equations of motion take the tuple: they ask for it four times an integration
+step and unpack it on the spot, and building an object to be read three times
+and dropped is a fifth of what the whole atmosphere costs. Everything else -
+where it is held, passed on or printed - takes `Air`.
 """
 
 import math
@@ -28,15 +34,13 @@ LAYERS = (
     (84_852, 186.946, 0.3734, 0.0),
 )
 
-# Where one layer gives way to the next, and what never changes inside one.
-# `air_at` is asked some five times an integration step, so the layer is found
-# by bisection rather than by walking the table, and the two figures a layer
-# fixes are worked out here rather than on every call: the exponent of the
-# barometric formula where the temperature falls with height, and the scale
-# height of the exponential where it does not.
-# The top layer is where the greater part of every ascent here is flown:
-# everything above 85 km is in it, and finding it is worth a comparison rather
-# than a search.
+# Where one layer gives way to the next, and what never changes inside one:
+# the exponent of the barometric formula where the temperature falls with
+# height, and the scale of the exponential where it does not. Both are worked
+# out here rather than on each of sixteen million calls a search, and the layer
+# is found by bisection rather than by walking the table - with the top one,
+# which is where the greater part of every ascent is flown, taken by a
+# comparison ahead of the search.
 CEILINGS = tuple(layer[0] for layer in LAYERS[1:])
 SOUND_FACTOR = HEAT_CAPACITY_RATIO * GAS_CONSTANT
 _LAYERS = tuple(
@@ -48,15 +52,15 @@ _TOP = _LAYERS[-1]
 _TOP_BASE = LAYERS[-1][0]
 
 
-@dataclass(slots=True)
+@dataclass(frozen=True, slots=True)
 class Air:
     pressure: float
     density: float
     speed_of_sound: float
 
 
-def air_at(altitude: float) -> Air:
-    """State of the atmosphere at the given altitude."""
+def air_values(altitude: float) -> tuple[float, float, float]:
+    """Pressure (Pa), density (kg/m^3) and the speed of sound (m/s) up there."""
     height = altitude if altitude > 0.0 else 0.0
 
     base_height, base_temperature, base_pressure, lapse_rate, exponent, scale = \
@@ -72,11 +76,12 @@ def air_at(altitude: float) -> Air:
         pressure = base_pressure * (temperature / base_temperature) ** exponent
         density = pressure / (GAS_CONSTANT * temperature)
 
-    return Air(
-        pressure=pressure,
-        density=density,
-        speed_of_sound=math.sqrt(SOUND_FACTOR * temperature),
-    )
+    return pressure, density, math.sqrt(SOUND_FACTOR * temperature)
+
+
+def air_at(altitude: float) -> Air:
+    """State of the atmosphere at the given altitude, with the three named."""
+    return Air(*air_values(altitude))
 
 
 def gravity(radius: float) -> float:

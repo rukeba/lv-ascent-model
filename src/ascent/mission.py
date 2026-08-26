@@ -21,7 +21,7 @@ around 60 m/s^2 an event misplaced by one step at 10 Hz is worth several m/s.
 import math
 from dataclasses import dataclass
 
-from .atmosphere import air_at, gravity
+from .atmosphere import air_values, gravity
 from .constants import EARTH_OMEGA, EARTH_RADIUS
 from .cutoff import Cutoff
 from .integrators import rk4_step
@@ -41,7 +41,7 @@ def rotation_in_plane(latitude_deg: float, azimuth_deg: float) -> float:
         * math.sin(math.radians(azimuth_deg))
 
 
-@dataclass(slots=True)
+@dataclass(frozen=True, slots=True)
 class Segment:
     """What is held constant over one smooth piece of a step."""
     stage: Stage
@@ -107,7 +107,7 @@ class Mission:
         # stage with nothing in its tank is not alight, whatever the policy says
         throttle = min(1.0, self._probe_throttle(0.0))
         if self.vehicle.stages[0].propellant_mass > 0.0:
-            state.thrust = self.vehicle.stages[0].thrust(air_at(0.0).pressure) * throttle
+            state.thrust = self.vehicle.stages[0].thrust(air_values(0.0)[0]) * throttle
         self.telemetry.record(state)
 
         record = self.telemetry.record
@@ -317,11 +317,11 @@ class Mission:
         speed, radius, _, burned = y
         altitude = radius - EARTH_RADIUS
         angle = self.pitch_programme.angle_at(t)
-        air = air_at(altitude)
+        pressure, density, sound = air_values(altitude)
         mass = self.vehicle.mass_on(segment.index, burned)
-        thrust, flow = (segment.stage.propulsion(air.pressure, segment.power)
+        thrust, flow = (segment.stage.propulsion(pressure, segment.power)
                         if segment.power else (0.0, 0.0))
-        drag = self.vehicle.drag(air, altitude, speed, segment.index)
+        drag = self.vehicle.drag(density, sound, altitude, speed, segment.index)
 
         acceleration = (thrust - drag) / mass \
             - (gravity(radius) - self.omega**2 * radius) * math.sin(angle)
@@ -340,11 +340,11 @@ class Mission:
         radius, _, vertical, horizontal, burned = y
         altitude = radius - EARTH_RADIUS
         speed = math.hypot(vertical, horizontal)
-        air = air_at(altitude)
+        pressure, density, sound = air_values(altitude)
         mass = self.vehicle.mass_on(segment.index, burned)
-        thrust, flow = (segment.stage.propulsion(air.pressure, segment.power)
+        thrust, flow = (segment.stage.propulsion(pressure, segment.power)
                         if segment.power else (0.0, 0.0))
-        drag = self.vehicle.drag(air, altitude, speed, segment.index)
+        drag = self.vehicle.drag(density, sound, altitude, speed, segment.index)
 
         axial = (thrust - drag) / mass
         omega = self.omega
@@ -389,14 +389,15 @@ class Mission:
 
         index, stage = self.vehicle.active_stage(t)
         altitude, burned = radius - EARTH_RADIUS, self._burned[index]
-        air = air_at(altitude)
+        pressure, density, sound = air_values(altitude)
         state.stage = index
         state.mass = self.vehicle.mass_on(index, burned)
         state.thrust = 0.0 if burned >= stage.propellant_mass \
-            else stage.thrust(air.pressure) * self._throttle
-        state.drag = self.vehicle.drag(air, altitude, state.speed, index)
+            else stage.thrust(pressure) * self._throttle
+        state.drag = self.vehicle.drag(density, sound, altitude,
+                                       state.speed, index)
         state.dynamic_pressure = 0.0 if altitude > 100_000 \
-            else 0.5 * air.density * state.speed**2
+            else 0.5 * density * state.speed**2
 
         if self._guided:
             self._accumulate_steering(state)

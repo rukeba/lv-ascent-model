@@ -43,9 +43,16 @@ def test_drag_coefficient_is_what_numpy_interpolates():
 
 
 def test_a_drag_table_of_one_point_is_that_number_everywhere():
-    assert _interpolated(0.0, (1.5,), (0.42,), ()) == 0.42
-    assert _interpolated(9.0, (1.5,), (0.42,), ()) == 0.42
-    assert _interpolated(float('nan'), (1.5,), (0.42,), ()) == 0.42
+    """A table of one point has no interval to interpolate over, and numpy
+    answers it with that one number for every Mach - a Mach that is not a
+    number included, which is the one place a NaN does not carry through. That
+    reads like an oversight and is not one: it is what `np.interp` does, and
+    the assertion below is against numpy rather than against a rule.
+    """
+    table = ((1.5,), (0.42,), ())
+    for mach in (0.0, 9.0, float('nan'), float('inf'), float('-inf'), 1.5):
+        assert _interpolated(mach, *table) \
+            == float(np.interp(mach, np.array([1.5]), np.array([0.42])))
 
 
 def test_the_active_stage_is_the_last_one_lit():

@@ -2,8 +2,10 @@
 
 import math
 
+import pytest
+
 from ascent.atmosphere import (GAS_CONSTANT, HEAT_CAPACITY_RATIO, LAYERS,
-                               air_at, gravity)
+                               air_at, air_values, gravity)
 from ascent.constants import EARTH_RADIUS, STANDARD_GRAVITY
 
 
@@ -68,3 +70,18 @@ def test_the_layer_constants_are_the_table_walked_out():
     for height in heights:
         air = air_at(height)
         assert (air.pressure, air.density, air.speed_of_sound) == walked(height)
+
+
+def test_the_named_air_is_the_three_values_in_order():
+    """The equations of motion read `air_values` and everything else reads
+    `air_at`, so the second has to be the first with the three named."""
+    for height in (-10.0, 0.0, 5_000.0, 11_000.0, 42_000.0, 84_852.0, 250_000.0):
+        air = air_at(height)
+        assert (air.pressure, air.density, air.speed_of_sound)             == air_values(height)
+
+
+def test_the_air_cannot_be_written_to():
+    """A value object: `drag` and the thrust read it and nothing edits it."""
+    air = air_at(0.0)
+    with pytest.raises(Exception):
+        air.density = 0.0

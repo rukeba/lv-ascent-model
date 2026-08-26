@@ -43,8 +43,10 @@ COLUMNS = (
 # them is recorded, so a separate call per column costs several times what
 # reading the state does. Expressions rather than functions is what lets the
 # row be one of them.
+# nothing but the one constant the expressions above use: they read a state and
+# multiply, and there is no call among them for the builtins to be reachable
 _row_of = eval('lambda s: (' + ', '.join(read for _, _, read in COLUMNS) + ',)',
-               {'DEGREES': DEGREES})
+               {'DEGREES': DEGREES, '__builtins__': {}})
 
 
 class Telemetry:
