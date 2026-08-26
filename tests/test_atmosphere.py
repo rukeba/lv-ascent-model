@@ -1,5 +1,6 @@
 """The standard atmosphere against its own reference values."""
 
+import dataclasses
 import math
 
 import pytest
@@ -77,11 +78,12 @@ def test_the_named_air_is_the_three_values_in_order():
     `air_at`, so the second has to be the first with the three named."""
     for height in (-10.0, 0.0, 5_000.0, 11_000.0, 42_000.0, 84_852.0, 250_000.0):
         air = air_at(height)
-        assert (air.pressure, air.density, air.speed_of_sound)             == air_values(height)
+        assert (air.pressure, air.density,
+                air.speed_of_sound) == air_values(height)
 
 
 def test_the_air_cannot_be_written_to():
-    """A value object: `drag` and the thrust read it and nothing edits it."""
+    """A value object: the equations of motion read it and nothing edits it."""
     air = air_at(0.0)
-    with pytest.raises(Exception):
+    with pytest.raises(dataclasses.FrozenInstanceError):
         air.density = 0.0
