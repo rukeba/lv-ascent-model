@@ -1,5 +1,5 @@
 # Pitch-programme parameters that place H3-22S on a circular orbit of
-# the given altitude - one set per programme and altitude, 8 in all,
+# the given altitude - one set per programme and altitude, 9 in all,
 # at 1000, 1100, 1200 km. This file is H3-22S and nothing else:
 # the catalogue is kept as one file a vehicle, and a command that wants the
 # whole of it reads the directory.
@@ -33,20 +33,6 @@
 # An entry is an ordinary mission specification with one block added: `reached`
 # records the orbit it produces and what it costs, so any entry can be checked
 # without repeating the search. tests/test_catalogue.py flies all of them.
-#
-# WHAT IS NOT HERE.
-#
-# An orbit is there and this search does not land on it. The sets it found have
-# one apsis exact to ten metres and the other kilometres away, which is what a
-# coordinate-wise descent looks like when it has walked into the wrong valley:
-# a tenth of a second of burn is some five kilometres of apogee on these
-# vehicles, so the ranking along the cut-off axis is a row of narrow valleys
-# rather than one, and the passes reach about two sweep steps and no further.
-# Pinning the cut-off and solving the turn at it gets much closer - 0.2 km
-# against 28 - but not reliably inside the tolerance, and a set that misses is
-# not an entry. Recorded here as what it is, a limit of the search rather than
-# of the vehicle:
-#   bilinear-tangent at 1100 km - closest 7.3 km out
 #
 #     ascent h3 --list
 #     ascent h3 --altitude 1000 --programme velocity-share
@@ -92,6 +78,14 @@ missions:
     cutoff: {type: time, time: 691.4}
     simulation: {duration: 751, steps_per_second: 10}
     reached: {perigee_km: 1099.99, apogee_km: 1100.00, gravity_loss: 3463.3, aerodynamic_loss: 121.3, steering_loss: 1743.6, total_loss: 5328.2}
+
+  - vehicle: lv.h3
+    target_altitude: 1_100_000
+    launch_site: {latitude: 30.4, azimuth: 90}
+    pitch_programme: {type: bilinear-tangent, t1: 12.0, a: -0.009110223730507057, b: 6.042811400445331, c: 0.009995520965874456, te: 675.3}
+    cutoff: {type: time, time: 675.3}
+    simulation: {duration: 735, steps_per_second: 10}
+    reached: {perigee_km: 1099.97, apogee_km: 1100.01, gravity_loss: 3340.5, aerodynamic_loss: 126.9, steering_loss: 2054.9, total_loss: 5522.3}
 
   - vehicle: lv.h3
     target_altitude: 1_200_000

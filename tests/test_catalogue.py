@@ -42,7 +42,7 @@ def test_entry_flies_as_recorded(spec):
 # read and agreed to rather than absorbed.
 COVERED = {
     'lv.f9': {
-        400_000: {'five-phase', 'velocity-share'},
+        400_000: {'five-phase', 'velocity-share', 'bilinear-tangent'},
         500_000: {'five-phase', 'velocity-share', 'bilinear-tangent'},
         600_000: {'five-phase', 'velocity-share', 'bilinear-tangent'},
         700_000: {'five-phase', 'bilinear-tangent'},
@@ -54,7 +54,7 @@ COVERED = {
     },
     'lv.h3': {
         1_000_000: {'five-phase', 'velocity-share', 'bilinear-tangent'},
-        1_100_000: {'five-phase', 'velocity-share'},
+        1_100_000: {'five-phase', 'velocity-share', 'bilinear-tangent'},
         1_200_000: {'five-phase', 'velocity-share', 'bilinear-tangent'},
     },
 }

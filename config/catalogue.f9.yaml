@@ -1,5 +1,5 @@
 # Pitch-programme parameters that place Falcon 9 on a circular orbit of
-# the given altitude - one set per programme and altitude, 10 in all,
+# the given altitude - one set per programme and altitude, 11 in all,
 # at 400, 500, 600, 700 km. This file is Falcon 9 and nothing else:
 # the catalogue is kept as one file a vehicle, and a command that wants the
 # whole of it reads the directory.
@@ -34,7 +34,7 @@
 # records the orbit it produces and what it costs, so any entry can be checked
 # without repeating the search. tests/test_catalogue.py flies all of them.
 #
-# WHAT IS NOT HERE, and it is of two kinds.
+# WHAT IS NOT HERE.
 #
 # The family reaches nothing near the orbit. Thousands of nodes were dropped by
 # the altitude integral before a trajectory was flown at all, and the handful
@@ -42,18 +42,6 @@
 # apsides wrong, not one of them. The turn cannot be shaped to put this vehicle
 # there, which is a property of the law and of what is left in the tanks:
 #   velocity-share at 700 km - closest 1668.8 km out
-#
-# An orbit is there and this search does not land on it. The sets it found have
-# one apsis exact to ten metres and the other kilometres away, which is what a
-# coordinate-wise descent looks like when it has walked into the wrong valley:
-# a tenth of a second of burn is some five kilometres of apogee on these
-# vehicles, so the ranking along the cut-off axis is a row of narrow valleys
-# rather than one, and the passes reach about two sweep steps and no further.
-# Pinning the cut-off and solving the turn at it gets much closer - 0.2 km
-# against 28 - but not reliably inside the tolerance, and a set that misses is
-# not an entry. Recorded here as what it is, a limit of the search rather than
-# of the vehicle:
-#   bilinear-tangent at 400 km - closest 0.9 km out
 #
 #     ascent f9 --list
 #     ascent f9 --altitude 400 --programme velocity-share
@@ -75,6 +63,14 @@ missions:
     cutoff: {type: time, time: 496.4}
     simulation: {duration: 556, steps_per_second: 10}
     reached: {perigee_km: 400.01, apogee_km: 400.12, gravity_loss: 2240.9, aerodynamic_loss: 29.9, steering_loss: 403.7, total_loss: 2674.4}
+
+  - vehicle: lv.f9
+    target_altitude: 400_000
+    launch_site: {latitude: 28.5, azimuth: 90}
+    pitch_programme: {type: bilinear-tangent, t1: 28.1, a: -0.14375324263577116, b: 67.03213704106008, c: 0.3840660208235191, te: 494.4}
+    cutoff: {type: time, time: 494.4}
+    simulation: {duration: 554, steps_per_second: 10}
+    reached: {perigee_km: 399.87, apogee_km: 400.00, gravity_loss: 2161.8, aerodynamic_loss: 30.2, steering_loss: 287.4, total_loss: 2479.4}
 
   - vehicle: lv.f9
     target_altitude: 500_000
