@@ -301,9 +301,13 @@ def _axes(result) -> list[tuple[str, str]]:
 def _grid_cost(result) -> list[tuple[str, str]]:
     """What the shape of the grid comes to: the passes and what they resolve."""
     refinements = max(result.passes - 1, 0)
-    asked = max(getattr(result, 'basins_asked', 1), 1)
-    where = ('the best set found so far' if asked == 1 else
-             f'the best {asked} sets found so far that are not in one '
+    # what the passes closed in on, which before a search has run is what it
+    # was asked for and after one is what the ranking actually offered: a
+    # search that only ever found the one valley says so rather than claiming
+    # to have looked around five
+    valleys = max(getattr(result, 'basins', 1), 1)
+    where = ('the best set found so far' if valleys == 1 else
+             f'the best {valleys} sets found so far that are not in one '
              f'another\'s cell of the sweep')
     passes = (f'{result.passes}: one over the whole grid above, then '
               f'{refinements} more, each looking only around {where} '

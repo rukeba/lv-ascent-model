@@ -509,11 +509,12 @@ class SearchResult:
     tolerance: float = TOLERANCE
     speed_tolerance: float = SPEED_TOLERANCE
     top: int = TOP
-    # places on the grid the passes close in on at once, asked for, and how
-    # many the ranking actually offered - fewer where the sets found were all
-    # in the same few cells of the sweep. See `BASINS`
+    # places on the grid the passes close in on at once. What was asked for
+    # until a pass has run, and thereafter the most any one of them actually
+    # closed in on - which is fewer where the sets found were all in the same
+    # few cells of the sweep, and there is no use reporting five valleys
+    # followed when the ranking only ever offered one. See `BASINS`
     basins: int = BASINS
-    basins_asked: int = BASINS
     max_dynamic_pressure: float | None = None
     # processes the nodes of a pass were divided over
     workers: int = 1
@@ -919,7 +920,7 @@ def plan(vehicle: LaunchVehicle, target_altitude: float, programme: str,
         vacuum_time=vacuum_time(vehicle, target_altitude) or 0.0,
         equivalent_time=estimate, window=window, tolerance=tolerance,
         speed_tolerance=speed_tolerance, top=top,
-        basins=max(1, basins), basins_asked=max(1, basins),
+        basins=max(1, basins),
         max_dynamic_pressure=max_dynamic_pressure)
     result.passes = refinements + 1
     result.planned_nodes = _planned_nodes(grid, refinements, max(1, basins))
@@ -998,6 +999,9 @@ def search(vehicle: LaunchVehicle, target_altitude: float, programme: str,
     reach = {name: span.step for name, span in grid.items() if span.nodes > 1}
     sweep_grid = grid
     grids = [grid]
+    # nothing has been closed in on yet, so a search that finds no orbit at all
+    # reports the count it was asked for and never used
+    followed = 0
     try:
         seen: dict[tuple, Candidate] = {}
         walked: set[tuple] = set()
@@ -1018,7 +1022,11 @@ def search(vehicle: LaunchVehicle, target_altitude: float, programme: str,
             # and on the head of each of the other valleys being followed, for
             # which see `_centres` and `BASINS`
             centres = _centres(result.found, sweep_grid, family.TIMES, basins)
-            result.basins = len(centres)
+            # the most any pass came to rather than the last, so that a search
+            # reports the widest it ever looked rather than how narrow the
+            # ranking had grown by the end
+            result.basins = max(followed, len(centres))
+            followed = result.basins
             grids = [_closer(sweep_grid, centre, reach, bounds)
                      for centre in centres]
             # five nodes over the two widths either side, so the next pass

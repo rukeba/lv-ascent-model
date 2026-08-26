@@ -32,6 +32,7 @@ from ascent.search import (FAMILIES, NODE_LIMIT, REFINED_NODES,
                            VelocityShare, _centres, _closer, _nodes,
                            _planned_nodes, axis_names, parse_ranges, plan,
                            search)
+from ascent.summary import summarise_plan
 
 FALCON = load_vehicle('config/lv.f9.yaml')
 CATALOGUE = load_catalogue('config')
@@ -463,6 +464,30 @@ def test_one_valley_is_the_head_of_the_ranking_and_nothing_else():
 
 def test_a_search_with_nothing_found_has_no_valley_to_close_in_on():
     assert _centres([], SWEEP, TIMES, 5) == []
+
+
+def test_a_search_reports_the_valleys_it_followed_not_the_ones_it_asked_for():
+    """Five asked for and one offered is a search that followed one.
+
+    `basins` is the count asked for until a pass has run and what the ranking
+    actually gave thereafter, so the summary of a finished search describes
+    what it did. A grid this narrow puts every set it finds inside one cell of
+    the sweep, which is one valley however many were asked for.
+    """
+    narrow = {'t1': Range(20.0, 20.0), 'k2': Range(0.056, 0.056),
+              'k3': Range(0.52, 0.53, 2), 't4': Range(502.8, 502.9, 2),
+              'angle': Range(0.0, 0.0), 'coast': Range(0.0, 0.0)}
+    result = search(FALCON, 500_000, 'five-phase', ranges=narrow,
+                    refinements=2, steps_per_second=1, workers=1,
+                    tolerance=5000.0, basins=5, **SITE)
+
+    assert 1 <= result.basins < 5
+    assert f'best {result.basins} sets' in summarise_plan(result)
+
+    # and before anything has run it is the count that was asked for, because
+    # that is all a plan can say
+    assert 'best 5 sets' in summarise_plan(
+        plan(FALCON, 500_000, 'five-phase', basins=5, **SITE))
 
 
 def test_following_several_valleys_costs_several_passes_and_no_more():
