@@ -31,7 +31,7 @@ import yaml
 from .config import (PITCH_PROGRAMMES, PROGRAMME_ALIASES, find_in_catalogue,
                      load_catalogue, load_vehicle, mission_from_spec,
                      programme_name, read_spec, resolve)
-from .search import (FAMILIES, REFINEMENTS, SPEED_TOLERANCE, TOP, axis_names,
+from .search import (BASINS, FAMILIES, REFINEMENTS, SPEED_TOLERANCE, TOP, axis_names,
                      default_workers, parse_ranges, plan, search)
 from .summary import summarise, summarise_found, summarise_plan
 
@@ -182,15 +182,21 @@ def _list(directory: Path, vehicle: str) -> None:
     catalogue = [spec for spec in load_catalogue(directory)
                  if spec['vehicle'] == vehicle]
     print(f'{"altitude":>10}{"programme":>18}{"cut-off":>10}'
-          f'{"steering":>10}{"total loss":>12}')
+          f'{"steering":>10}{"total loss":>12}{"to within":>11}')
     for spec in sorted(catalogue, key=lambda s: (s['target_altitude'],
                                                  s['pitch_programme']['type'])):
         reached = spec.get('reached', {})
+        # the tolerance the set was accepted at, printed beside it. Not every
+        # entry was asked for the same thing - a family that will not close to
+        # half a kilometre on a vehicle can still be worth an entry asked for at
+        # more - and a listing that left it out would show the two alike
+        asked = spec.get('tolerance', {}).get('orbit_km', float('nan'))
         print(f'{spec["target_altitude"] / 1000:>8g} km'
               f'{spec["pitch_programme"]["type"]:>18}'
               f'{spec["cutoff"]["time"]:>9.1f} s'
               f'{reached.get("steering_loss", float("nan")):>9.1f} '
-              f'{reached.get("total_loss", float("nan")):>11.1f} m/s')
+              f'{reached.get("total_loss", float("nan")):>11.1f} m/s'
+              f'{asked:>8.1f} km')
 
 
 class _Progress:
@@ -318,6 +324,16 @@ def _search(argv: list[str] | None) -> int:
                              f'every axis searched (default {REFINEMENTS}). A '
                              f'step of the sweep is worth tens of kilometres of '
                              f'apogee, and these are what close that down')
+    parser.add_argument('--basins', type=int, default=BASINS, metavar='N',
+                        help=f'places on the grid the passes close in on at '
+                             f'once (default {BASINS}). A pass that closes in is '
+                             f'a local descent and answers only the valley it '
+                             f'started in; where the ranking has several - which '
+                             f'is what the cut-off axis has, a tenth of a second '
+                             f'of burn being kilometres of apogee - following '
+                             f'one is how a search lands on the bottom of the '
+                             f'wrong one. 1 to follow the best set and nothing '
+                             f'else')
     parser.add_argument('--max-q', type=float, metavar='KPA',
                         help='put the airframe into the constraint: sets whose '
                              'dynamic pressure peaks above this are not answers, '
@@ -336,9 +352,13 @@ def _search(argv: list[str] | None) -> int:
                              'anything')
     parser.add_argument('--steps', type=float, default=10, metavar='PER_SECOND',
                         help='integration steps per second of every trajectory '
-                             'flown (default 10). A coarser step is for a quick '
-                             'look and barely moves the orbit or the budget; '
-                             'the entry written out asks for ten either way')
+                             'flown (default 10). Five barely moves the answer - '
+                             'across the whole catalogue it shifts an apsis by '
+                             'at most 3 m, against a tolerance of 500 - and '
+                             'halves what a search costs, which is worth having '
+                             'on the long-burn vehicles. The entry written out '
+                             'records the step it was searched at, because that '
+                             'is the model the set was found against')
     parser.add_argument('--workers', type=int, metavar='N',
                         help=f'processes the nodes of a pass are divided over '
                              f'(default {default_workers()}, two thirds of the '
@@ -373,6 +393,9 @@ def _search(argv: list[str] | None) -> int:
     if arguments.refinements < 0:
         parser.error(f'--refinements cannot be negative, and is '
                      f'{arguments.refinements}')
+    if arguments.basins < 1:
+        parser.error(f'--basins is at least one valley to close in on, and is '
+                     f'{arguments.basins}')
     if arguments.max_q is not None and arguments.max_q <= 0.0:
         parser.error(f'--max-q has to be above zero, and is {arguments.max_q:g}')
 
@@ -392,6 +415,7 @@ def _search(argv: list[str] | None) -> int:
         tolerance=arguments.tolerance * 1000,
         speed_tolerance=arguments.speed_tolerance,
         refinements=arguments.refinements,
+        basins=arguments.basins,
         top=arguments.top,
         max_dynamic_pressure=(arguments.max_q * 1000
                               if arguments.max_q is not None else None),

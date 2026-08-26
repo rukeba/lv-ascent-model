@@ -1,5 +1,5 @@
 # Pitch-programme parameters that place Ariane 62 on a circular orbit of
-# the given altitude - one set per programme and altitude, 3 in all,
+# the given altitude - one set per programme and altitude, 5 in all,
 # at 400, 500, 600 km. This file is Ariane 62 and nothing else:
 # the catalogue is kept as one file a vehicle, and a command that wants the
 # whole of it reads the directory.
@@ -13,10 +13,14 @@
 # An entry is the head of that ranking.
 #
 # A set counts as reaching the orbit when the perigee, the apogee and the
-# altitude at cut-off are all within 500 m of the target and the inertial speed
-# at cut-off is within 10 m/s of the speed of that circular orbit. So `reached`
-# does not read the target back twice over the way a root find would leave it:
-# it reads what the search actually landed on, inside that half-kilometre.
+# altitude at cut-off are all inside the tolerance it was asked for and the
+# inertial speed at cut-off is inside the tolerance on that. Both are written on
+# the entry, in `tolerance`, because they are not the same for all of them: the
+# orbit is half a kilometre nearly everywhere and two and a half on Ariane 62's
+# bilinear tangent, where half will not close and a set two kilometres out is
+# worth more than a blank. So `reached` does not read the target back twice over
+# the way a root find would leave it - it reads what the search actually landed
+# on, inside whatever the entry beside it says it was held to.
 #
 # Every instant is a whole tenth of a second - the vertical rise, the end of
 # the programme and the cut-off - because that is the finest a timeline is ever
@@ -34,7 +38,7 @@
 # records the orbit it produces and what it costs, so any entry can be checked
 # without repeating the search. tests/test_catalogue.py flies all of them.
 #
-# WHAT IS NOT HERE, and it is of two kinds.
+# WHAT IS NOT HERE, and what is here on other terms.
 #
 # Not one node of the grid came out on an orbit at all - not an open
 # trajectory that nearly closed, but no orbit anywhere in the family. Flown
@@ -45,19 +49,41 @@
 #   five-phase at 500 km
 #   five-phase at 600 km
 #
-# An orbit is there and this search does not land on it. The sets it found have
-# one apsis exact to ten metres and the other kilometres away, which is what a
-# coordinate-wise descent looks like when it has walked into the wrong valley:
-# a tenth of a second of burn is some five kilometres of apogee on these
-# vehicles, so the ranking along the cut-off axis is a row of narrow valleys
-# rather than one, and the passes reach about two sweep steps and no further.
-# Pinning the cut-off and solving the turn at it gets much closer - 0.2 km
-# against 28 - but not reliably inside the tolerance, and a set that misses is
-# not an entry. Recorded here as what it is, a limit of the search rather than
-# of the vehicle:
-#   bilinear-tangent at 400 km - closest 28.0 km out
-#   bilinear-tangent at 500 km - closest 114.5 km out
-#   bilinear-tangent at 600 km - closest 15.4 km out
+# The bilinear tangent at 600 km. An orbit is there and the search does not land
+# on it: what comes back has one apsis exact to ten metres and the other
+# seventeen kilometres away, and the speed at cut-off is 14 m/s out, which is
+# what a coordinate-wise descent looks like when it has walked into the wrong
+# valley. That it is the search and not the vehicle is measured rather than
+# supposed. Following five valleys instead of one recovers this same family at
+# 400 km on Falcon 9 and at 1100 on H3; here five leave the 400 km case 39,992 m
+# out and twenty leave it 39,471 m at three times the cost, so the count of
+# valleys is not what is short. The sweep's resolution on the two angle axes is:
+# `start` walks ten degrees in nine values while every answer for a vehicle that
+# burns for a thousand seconds sits in the top degree of it, which puts two
+# nodes where the whole answer lives:
+#   bilinear-tangent at 600 km - closest 17.6 km out
+#
+# THE OTHER TWO BILINEAR TANGENTS ARE WHAT THAT FINER SWEEP FOUND, and they are
+# not alike. Both were searched with `start` at 17 values and the middle angle
+# at 23, with thirty valleys followed, and both were flown at five steps a
+# second rather than ten - which is recorded in `simulation`, because a set is
+# found against a model and the step is part of which model. Across the whole
+# catalogue the two steps differ by at most 3 m of apsis, and what the coarser
+# one buys is half the cost of a search that takes an hour and a half a set.
+#
+# The 500 km set closes the orbit to 5 m. It is filed on the same terms as
+# everything else in this catalogue, at half a kilometre, and the only thing
+# remarkable about it is where it came from: the default grid left this very
+# case 114 km out. Where the sweep can see the answer at all, the passes land on
+# it exactly.
+#
+# The 400 km set is 1.3 km out and is asked for two and a half, which is the
+# only entry in the catalogue held to anything but half. It is here rather than
+# left out because a set a kilometre from the circle is a set a vehicle could
+# fly, and because what it fills is a statement about this family on this
+# vehicle that a blank line cannot make. What it is not is a set that meets the
+# condition the rest of the file meets - and that is why every entry carries the
+# tolerance it was accepted at.
 #
 #     ascent a62 --list
 #     ascent a62 --altitude 400 --programme velocity-share
@@ -70,20 +96,39 @@ missions:
     pitch_programme: {type: velocity-share, t1: 22.0, tf: 681.2455627441407, te: 1098.9, s: -2.12841796875}
     cutoff: {type: time, time: 1098.9}
     simulation: {duration: 1159, steps_per_second: 10}
+    tolerance: {orbit_km: 0.5, speed_ms: 10}
     reached: {perigee_km: 399.98, apogee_km: 399.98, gravity_loss: 2878.9, aerodynamic_loss: 164.9, steering_loss: 932.5, total_loss: 3976.2}
 
+  - vehicle: lv.a62
+    target_altitude: 400_000
+    launch_site: {latitude: 5.2, azimuth: 90}
+    pitch_programme: {type: bilinear-tangent, t1: 17.2, a: -0.007447168728564076, b: 7.521640415849717, c: 0.06962617446412135, te: 1027.2}
+    cutoff: {type: time, time: 1027.2}
+    simulation: {duration: 1087, steps_per_second: 5}
+    tolerance: {orbit_km: 2.5, speed_ms: 10}
+    reached: {perigee_km: 398.72, apogee_km: 400.00, gravity_loss: 2217.8, aerodynamic_loss: 226.9, steering_loss: 667.5, total_loss: 3112.1}
   - vehicle: lv.a62
     target_altitude: 500_000
     launch_site: {latitude: 5.2, azimuth: 90}
     pitch_programme: {type: velocity-share, t1: 14.0, tf: 647.6484375, te: 1152.0, s: 1.80029296875}
     cutoff: {type: time, time: 1152.0}
     simulation: {duration: 1212, steps_per_second: 10}
+    tolerance: {orbit_km: 0.5, speed_ms: 10}
     reached: {perigee_km: 499.87, apogee_km: 499.96, gravity_loss: 3441.8, aerodynamic_loss: 159.3, steering_loss: 1127.7, total_loss: 4728.8}
 
+  - vehicle: lv.a62
+    target_altitude: 500_000
+    launch_site: {latitude: 5.2, azimuth: 90}
+    pitch_programme: {type: bilinear-tangent, t1: 25.5, a: -0.0062461287270329366, b: 6.50846613356832, c: 0.04552467217042604, te: 1067.5}
+    cutoff: {type: time, time: 1067.5}
+    simulation: {duration: 1128, steps_per_second: 5}
+    tolerance: {orbit_km: 0.5, speed_ms: 10}
+    reached: {perigee_km: 499.99, apogee_km: 500.00, gravity_loss: 2639.5, aerodynamic_loss: 195.5, steering_loss: 592.0, total_loss: 3427.0}
   - vehicle: lv.a62
     target_altitude: 600_000
     launch_site: {latitude: 5.2, azimuth: 90}
     pitch_programme: {type: velocity-share, t1: 25.0, tf: 913.0582031250001, te: 1162.9, s: -2.671875}
     cutoff: {type: time, time: 1162.9}
     simulation: {duration: 1223, steps_per_second: 10}
+    tolerance: {orbit_km: 0.5, speed_ms: 10}
     reached: {perigee_km: 599.83, apogee_km: 599.99, gravity_loss: 3610.9, aerodynamic_loss: 160.6, steering_loss: 491.9, total_loss: 4263.4}

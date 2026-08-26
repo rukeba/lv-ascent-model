@@ -323,7 +323,7 @@ under [The three pitch programmes](#the-three-pitch-programmes):
 ## Catalogue of solved parameter sets
 
 The catalogue holds parameters that place each vehicle on a circular orbit of a
-given altitude - one set per vehicle, pitch programme and altitude, 21 in all.
+given altitude - one set per vehicle, pitch programme and altitude, 25 in all.
 It is kept as **one file a vehicle**: `config/catalogue.f9.yaml`,
 `config/catalogue.a62.yaml`, `config/catalogue.h3.yaml`. A search is run over
 one vehicle at a time and a vehicle is recomputed on its own, so a file that
@@ -340,9 +340,20 @@ an entry is the head of that ranking. Nothing is held behind the search's back
 tangent's middle angle is prescribed at - so the sets differ from what a root
 find with four of those numbers pinned would return. A set counts as reaching
 the orbit when the perigee, the apogee and the altitude at cut-off are all
-within 500 m of the target and the inertial speed at cut-off is within 10 m/s
-of the speed of that orbit, which is why `reached` does not read 400.00 and
-400.00: it reads what the search landed on, inside that half-kilometre.
+inside the tolerance it was asked for and the inertial speed at cut-off is
+inside the tolerance on that — which is why `reached` does not read 400.00 and
+400.00: it reads what the search landed on, inside whatever it was held to.
+
+**Each entry carries both tolerances**, in a `tolerance` block, and so does the
+step it was flown at, in `simulation`. Neither is a property of the file. The
+orbit is half a kilometre on every entry but one, and that one — Ariane 62's
+bilinear tangent at 400 km — is held to two and a half, because half will not
+close there and a set a kilometre from the circle is still worth having. The
+step is ten a second nearly everywhere and five on the two Ariane 62 bilinear
+sets, which halves the cost of a search that takes an hour and a half apiece and
+costs at most 3 m of apsis across the whole catalogue. A set is found against a
+model, and both of those say which model — so an entry means one thing without
+anyone having to know how the search that produced it was run.
 
 Every instant of an entry - the vertical rise, the end of the programme, the
 cut-off - is a whole tenth of a second, because that is the finest a timeline
@@ -376,18 +387,44 @@ on a low-thrust upper stage; and the velocity-share quartic gives out on Falcon
 9 above 600 km, where the handful of nodes that survive the screen come out on
 an ellipse with both apsides wrong.
 
-The other five are a limit of the search rather than of the vehicle, and are
-worth stating plainly: the bilinear tangent at 400 km on Falcon 9, at all three
-altitudes on Ariane 62 and at 1100 km on H3. An orbit is there - the sets found
-have one apsis exact to ten metres and the other kilometres away - and this
+The last is a limit of the search rather than of the vehicle: the bilinear
+tangent on Ariane 62 at 600 km. An orbit is there - what comes back has one
+apsis exact to ten metres and the other seventeen kilometres away - and this
 search does not land on it. A tenth of a second of burn is some five kilometres
-of apogee on the long-burn vehicles, so the ranking along the cut-off axis is a
-row of narrow valleys rather than one, and the refinement is a coordinate-wise
-descent that halves its reach each pass: it travels about two sweep steps and
-stays in whichever valley the sweep pointed it at. Pinning the cut-off and
-solving the turn at it closes most of the distance - 0.2 km against 28 - but
-not reliably inside the tolerance, and a set that misses the orbit is not a
-catalogue entry.
+of apogee on a vehicle that burns for a thousand seconds, so the ranking along
+the cut-off axis is a row of narrow valleys rather than one, and each pass is a
+coordinate-wise descent that halves its reach: it travels about two sweep steps
+and stays in whichever valley it started in.
+
+Following five valleys instead of one is what recovered the same family at
+400 km on Falcon 9 and at 1100 km on H3, which were on this list until the
+passes learnt to do it. It is not what recovers Ariane 62, and the measurements
+say why: five valleys leave the 400 km case 39,992 m out and twenty leave it
+39,471 m at three times the cost, so the count is not what is short. The sweep's
+resolution on the two angle axes is - `start` walks ten degrees in nine values
+while every answer for a vehicle that burns for a thousand seconds sits in the
+top degree of it, which puts two nodes where the whole answer lives.
+
+**So two of the three were searched again with that axis at 17 values and the
+middle angle at 23, and thirty valleys followed**, and the two came out quite
+differently. At 500 km the set closes the orbit to **5 m**, where the default
+grid had left the same case 114 km out: where the sweep can see the answer at
+all, the passes land on it exactly. At 400 km it comes to 1.3 km and stops
+there, so that entry is filed at a tolerance of 2.5 km and says so. At 600 km it
+is 17.6 km out and is left out.
+
+**Every entry carries the tolerance it was accepted at**, in a `tolerance` block
+beside `reached`, and that 400 km set is the only one in the catalogue held to
+anything but half a kilometre. It is filed rather than dropped because a set a
+kilometre from the circle is a set a vehicle could fly, and what it fills is a
+statement about this family on this vehicle that a blank line cannot make - but
+it is not a set that meets what the rest of the file meets, and the entry has to
+be readable as that without anyone knowing how the search was run.
+
+Where the last stretch stops, it stops because a grid is being asked to do a
+solver's job. At a fixed vertical rise and a fixed cut-off, the two coefficients
+of the turn are two unknowns for the two terminal conditions of a circular
+orbit, which is a root to be found rather than a floor to be walked down to.
 
 ## Searching for a parameter set
 
@@ -593,6 +630,62 @@ so ten of them cost less than the sweep does. They are held inside the range
 each axis was given: a set that comes out on a bound is reported as such rather
 than chased past it, because the family may give out there or a better set may
 lie outside the range you named.
+
+**And they close in on five places at once, not one.** A pass is a local
+descent, and a local descent answers only the valley it started in. Where the
+ranking has one broad valley that is the whole job. The cut-off axis is where it
+is not: a tenth of a second of burn is some five kilometres of apogee on a
+vehicle that burns for a thousand seconds, so the ranking along it is a row of
+narrow valleys — each a cut-off whose turn can be shaped to *very nearly* an
+orbit — and a sweep steps across several of them between two of its own nodes.
+Following only the best is how a search lands on the bottom of the wrong one,
+and it has a signature: the apogee exact to ten metres and the perigee
+kilometres away, or the other way about.
+
+So each pass takes the head of the ranking *and* the best sets that are not in
+the head's cell of the sweep, and closes in on all of them together, as one
+pass. `--basins` is how many — five by default, `--basins 1` for the descent
+that follows the best set and nothing else. Two sets count as the same valley
+when they sit within one sweep step of each other on every axis that was
+searched, which is the scale the valleys were missed at and does not move as the
+passes narrow.
+
+The scale is not the same on every axis, and that is the part that matters. On
+a coefficient of the guidance law it is a step of the sweep. On an axis of
+instants it is the tenth of a second the answer is written in — because such an
+axis stops being closed in on once its window is under a tenth, and from then it
+does not move at all. A cut-off that locked on to the wrong tenth is a search
+that converges neatly on to a set a kilometre or two out and can do nothing
+about it; read at the sweep step, every tenth within five seconds of the best
+would count as the same valley and only one of them would ever be tried.
+
+It is not free and it is not magic. A pass is five nodes an axis whatever the
+grid was, so five valleys are five of those, against a sweep that is the whole
+grid. Measured on the bilinear tangent, where the difference shows:
+
+| | one valley | five valleys |
+|---|---|---|
+| Falcon 9 to 400 km | misses by 860 m | **reaches, 131 m** |
+| | 20,184 nodes, 7,257 flown, 218 s | 30,063 nodes, 16,478 flown, 485 s |
+| H3 to 1100 km | misses by 7,328 m | **reaches, 34 m** |
+| | 20,965 nodes, 10,533 flown, 442 s | 30,861 nodes, 19,984 flown, 806 s |
+
+Half again as many nodes, a little over twice as many trajectories, a little
+over twice the wall clock — the nodes grow more slowly than the valleys do
+because neighbouring valleys share nodes and a search does not walk one twice.
+Fifteen valleys on the first of those reaches by 128 m and costs 914 s, which is
+where the returns stop being worth the wait.
+
+**Where it does not help.** Ariane 62 on the bilinear tangent, at every altitude
+on file. Five valleys leave it 39,992 m out and twenty leave it 39,471 m at
+three times the cost, so the valley count is not what is short there — the
+sweep's resolution on the two angle axes is. `start` walks ten degrees in nine
+values while every answer for a vehicle that burns for a thousand seconds sits
+in the top degree of it, which puts two nodes where the whole answer lives, and
+at that resolution the sweep's ranking says more about the angle being wrong
+than about which cell is worth descending into. Sweeping those two axes at
+17 and 23 values takes the same search from 28 km out to 2.1 km — and stops
+there, a good deal short of the half-kilometre an entry needs.
 
 **Why the count on an axis matters, and which ones.** Not for precision. Ten
 passes resolve any of these axes far past what the tolerance asks, whatever the

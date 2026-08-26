@@ -59,12 +59,20 @@ def test_an_orbit_out_of_reach_is_reported_as_such():
     assert vacuum_time(VEHICLES['lv.f9'], 100_000_000) is None
 
 
-# How far the estimate is out across the whole catalogue, measured: between
-# 4.8 per cent high and 9.1 per cent low, written here as the band the cut-off
-# on file sits in relative to it, with a hair of rounding either way. These are
-# literals on purpose - the test below is what pins the measurement down, so it
-# must not be able to move with the constants the search derives from it
-ESTIMATE_LOW, ESTIMATE_HIGH = 0.954, 1.101
+# How far the estimate is out across the whole catalogue, measured: the cut-off
+# on file sits between 0.949 and 1.089 of it, so the estimate reads up to 5.1
+# per cent high and up to 8.2 per cent low. A hair of rounding either way. These
+# are literals on purpose - the test below is what pins the measurement down, so
+# it must not be able to move with the constants the search derives from it.
+#
+# The early end is Ariane 62's bilinear tangent at 400 km, and it is the one
+# worth watching. It moved the band down from 0.954 when it was filed, which
+# leaves 0.9 per cent between the lowest cut-off on file and the early end of
+# the window the search bounds itself to - where there used to be 1.4. The
+# window still covers the measurement and the test below says so, but the room
+# it covers it by is now thin enough that a fourth vehicle sitting a little
+# lower would be searched over a window that does not contain its answer
+ESTIMATE_LOW, ESTIMATE_HIGH = 0.949, 1.089
 
 
 @pytest.mark.parametrize('spec', CATALOGUE, ids=[name(s) for s in CATALOGUE])
