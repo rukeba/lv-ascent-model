@@ -79,6 +79,24 @@ a set a kilometre or two out and cannot do better. Read at the sweep step, every
 tenth within five seconds of the best would be one valley and only one of them
 would ever be tried.
 
+**The step it integrates at rises as it goes.** A sweep is not measuring
+anything - its job is to say which cell of the family the orbit lies in, and its
+own step on the cut-off axis is worth tens of kilometres of apogee - so it runs
+at one step a second, where a trajectory is known to within a hundred metres or
+so and costs a tenth of what it would at ten. The pass after it runs at two, and
+every pass from the third on at the step the caller asked for, which is where
+the answer is resolved to metres and a coarse step would be noise instead of an
+answer rather than noise around one. See `COARSE_STEPS`.
+
+Two things follow, and both are what they look like. A node walked coarsely is
+walked again when the step rises: the same set at one step a second and at ten
+is two answers, and the second is the one worth having, so a search that ramps
+flies more trajectories than one that does not and still takes less time. And
+the answer is chosen only from sets flown at the step asked for - see `measured`
+- because a coarse set can outrank a fine one on the difference between the two
+rules rather than on the difference between the two sets. Everything found is
+kept, at whatever step: that is what a table and a CSV are for.
+
 **Instants are asked for in tenths of a second.** The vertical rise, the end of
 the programme and the cut-off are rounded there, because that is the finest a
 timeline is ever issued to, and two values that come to the same tenth are one
@@ -220,6 +238,56 @@ REFINED_NODES = 5
 # whatever the grid was, so five valleys are five of those, against a sweep that
 # is the whole grid and is where most of the time of a search goes.
 BASINS = 5
+
+# The integration steps a search walks up through, coarsest first, before it
+# settles on the one it was asked for.
+#
+# A sweep is not measuring anything. Its job is to say which cell of the family
+# the orbit lies in, and its own step on the cut-off axis is worth tens of
+# kilometres of apogee - so a trajectory integrated to within 130 m, which is
+# what one step a second comes to across this catalogue, tells it everything it
+# needs. The passes that follow resolve metres, and there a coarse step is not
+# noise around the answer but noise instead of it.
+#
+# So the sweep runs at one step a second and the pass after it at two, and every
+# pass from the third on runs at the step the caller asked for. Measured against
+# ten across the whole catalogue, one step a second moves an apsis by up to
+# 130 m and two by 28, against a tolerance of 500; and the sweep is where most
+# of the nodes of a search are, so this is most of a search made ten times
+# cheaper for a figure it cannot use anyway.
+#
+# The ramp is laid from the end rather than the start, so that the last pass is
+# always at the finest step whatever the count of them - a search with no
+# refinements at all is one pass, and that pass is the answer.
+COARSE_STEPS = (1.0, 2.0)
+
+
+def step_schedule(passes: int, finest: float) -> tuple[float, ...]:
+    """What each pass integrates at, in order. See `COARSE_STEPS`."""
+    # never coarser than what was asked for: a caller who wants two steps a
+    # second is not helped by a sweep at one and a pass at two
+    ramp = [min(step, finest) for step in COARSE_STEPS]
+    ramp = ramp[max(0, len(ramp) - (passes - 1)):]
+    return tuple(ramp) + (finest,) * (passes - len(ramp))
+
+
+def halvings(schedule: tuple[float, ...]) -> int:
+    """How many times the passes of `schedule` halve what they reach.
+
+    Not one per pass. A pass that steps up to a finer integration keeps the
+    reach it had, because it is re-flying the ground the pass before it covered
+    and the point of it is to see that ground plainly rather than to narrow on
+    a coarse reading of it - so the two step-ups of a full ramp cost two
+    halvings, and eleven passes resolve what nine would have.
+
+    Which is why this is worked out rather than assumed: the spacing a search
+    reports and the edge it decides a set sits on are both read off the reach it
+    actually ended with, and a figure four times finer than the truth would be
+    the search overstating what it resolved.
+    """
+    return sum(1 for at in range(len(schedule) - 1)
+               if schedule[at + 1] == schedule[at])
+
 
 # What one node of the grid can come to. Each is a field of `SearchResult`, and
 # every node increments exactly one of them
@@ -405,6 +473,11 @@ class Candidate:
     speed_miss: float
     # the larger of the two apsidal errors, m: what the tolerance is read against
     miss: float
+    # what this one was integrated at. Not the same for every candidate of a
+    # search: the early passes run coarse and the later ones at the step the
+    # caller asked for, so everything measured of a set - the orbit, the budget,
+    # the errors below - is measured at this and has to be read with it
+    steps_per_second: float = 10
     gravity_loss: float = 0.0
     aerodynamic_loss: float = 0.0
     steering_loss: float = 0.0
@@ -523,6 +596,11 @@ class SearchResult:
     max_dynamic_pressure: float | None = None
     # processes the nodes of a pass were divided over
     workers: int = 1
+    # what each pass integrated at, in order - see `COARSE_STEPS`. Recorded
+    # rather than worked out again from `passes`, which a search that stopped
+    # early rewrites: laying a fresh ramp over the shortened count would report
+    # a sweep that ran at one step a second as having run at ten
+    schedule: tuple[float, ...] = ()
     # what each axis being searched is resolved to by the end, one entry per
     # axis of `searched`. The sweep step halved once per pass, except on an
     # axis of instants, which stops at the tenth of a second the flight is
@@ -539,13 +617,49 @@ class SearchResult:
 
     @property
     def reaches_orbit(self) -> bool:
+        """Whether the search has an answer, at the step it was asked for.
+
+        Both halves of that matter. `best` is the closest set found and falls
+        back to a coarsely flown one where no pass at the finest step has closed
+        anything - which is every pass of the ramp before the first fine one,
+        and is also what is left if the fine passes re-fly what the sweep liked
+        and find it is not an orbit after all, or that it asks more of the
+        airframe than the caller allowed. Showing that set is right. Answering
+        with it is not: it has been measured to within a hundred metres or so
+        and the tolerances it would be judged by are tighter than that.
+
+        `specification` is gated on this, so nothing coarse can be filed.
+        """
         return self.best is not None \
+            and self.best.steps_per_second == self.steps_per_second \
             and self.best.reaches(self.tolerance, self.speed_tolerance)
 
     @property
-    def reaching(self) -> list[Candidate]:
-        """Every set found that meets all three conditions, best first."""
+    def measured(self) -> list[Candidate]:
+        """The sets flown at the step this search was asked for, best first.
+
+        Not all of them are. The early passes integrate coarsely - see
+        `COARSE_STEPS` - so the table holds sets measured to within a hundred
+        metres or so beside sets measured to within three, and the two are not
+        comparable as answers however well they compare as a map. A coarse set
+        that looks the better of two by less than the coarse step is worth is
+        not the better of them; it is the same set read with a wider rule.
+
+        So an answer is chosen from these, and everything found is kept in
+        `found` for what a table and a CSV are for - saying where in the family
+        the orbit lies, which is exactly what a coarse pass is good at.
+        """
         return [candidate for candidate in self.found
+                if candidate.steps_per_second == self.steps_per_second]
+
+    @property
+    def reaching(self) -> list[Candidate]:
+        """Every set that meets all three conditions, best first.
+
+        Of those flown at the step asked for. A set that meets the tolerances
+        at one step a second has not been shown to meet them at ten.
+        """
+        return [candidate for candidate in self.measured
                 if candidate.reaches(self.tolerance, self.speed_tolerance)]
 
     @property
@@ -591,14 +705,16 @@ class SearchResult:
             'launch_site': {'latitude': self.latitude_deg, 'azimuth': self.azimuth_deg},
             'pitch_programme': best.parameters,
             'cutoff': {'type': 'time', 'time': best.cutoff_time},
-            # the step the search actually flew, and not ten because ten is
-            # usual. A set is found against a model, and the step is part of
-            # which model: the orbit moves by a metre or two between five steps
-            # a second and ten, and the steering loss by up to a metre per
-            # second, so an entry filed at a step it was not searched at would
-            # not reproduce the figures written beside it
+            # the step this set was actually flown at, and not ten because
+            # ten is usual nor the finest of the search because the answer
+            # might not have come from a pass that ran there. A set is found
+            # against a model, and the step is part of which model: the orbit
+            # moves by a metre or two between five steps a second and ten, and
+            # the steering loss by up to a metre per second, so an entry filed
+            # at a step it was not searched at would not reproduce the figures
+            # written beside it
             'simulation': {'duration': round(best.cutoff_time + duration_margin),
-                           'steps_per_second': self.steps_per_second},
+                           'steps_per_second': best.steps_per_second},
             # what was asked of it, before what it did: the perigee, the apogee
             # and the altitude at cut-off all inside the first, the inertial
             # speed at cut-off inside the second.
@@ -956,10 +1072,12 @@ def plan(vehicle: LaunchVehicle, target_altitude: float, programme: str,
         basins=max(1, basins),
         max_dynamic_pressure=max_dynamic_pressure)
     result.passes = refinements + 1
+    result.schedule = step_schedule(result.passes, steps_per_second)
     result.planned_nodes = _planned_nodes(grid, refinements, max(1, basins))
+    closed = halvings(result.schedule)
     result.spacing = {
-        name: (max(span.step / 2 ** refinements, TIME_QUANTUM)
-               if name in family.TIMES else span.step / 2 ** refinements)
+        name: (max(span.step / 2 ** closed, TIME_QUANTUM)
+               if name in family.TIMES else span.step / 2 ** closed)
         for name, span in grid.items() if span.nodes > 1}
     return result
 
@@ -1038,9 +1156,11 @@ def search(vehicle: LaunchVehicle, target_altitude: float, programme: str,
     try:
         seen: dict[tuple, Candidate] = {}
         walked: set[tuple] = set()
+        schedule = result.schedule
         for pass_number in range(refinements + 1):
             result.pass_number += 1
-            _sweep(flight, grids, result, seen, walked, report, pool)
+            _sweep(flight, grids, schedule[pass_number], result, seen, walked,
+                   report, pool)
             if not seen:
                 # nothing to close in on: a pass that found no orbit at all
                 # leaves the next one nowhere to centre itself
@@ -1060,6 +1180,12 @@ def search(vehicle: LaunchVehicle, target_altitude: float, programme: str,
             # and on the head of each of the other valleys being followed, for
             # which see `_centres` and `BASINS`
             centres = _centres(result.found, sweep_grid, family.TIMES, basins)
+            # a pass that steps up to a finer one re-flies the ground the pass
+            # before it covered, at a step whose answers can be compared with
+            # what follows. So it keeps the reach it had rather than halving:
+            # closing in on a coarse measurement is closing in on noise, and the
+            # first pass at a new step is the one that has to see plainly
+            stepping_up = schedule[pass_number + 1] != schedule[pass_number]
             # the most any pass came to rather than the last, so that a search
             # reports the widest it ever looked rather than how narrow the
             # ranking had grown by the end. Counted here, where the pass that
@@ -1073,8 +1199,9 @@ def search(vehicle: LaunchVehicle, target_altitude: float, programme: str,
             # except an axis of instants, which stops once its window is
             # narrower than the tenth of a second the flight is asked in,
             # because every value left in it would be the same instant
-            reach = {name: 0.5 * width for name, width in reach.items()
-                     if name not in family.TIMES or width >= 2.0 * TIME_QUANTUM}
+            reach = reach if stepping_up else {
+                name: 0.5 * width for name, width in reach.items()
+                if name not in family.TIMES or width >= 2.0 * TIME_QUANTUM}
     except KeyboardInterrupt:
         # the queue holds most of a pass, and a plain shutdown would wait for
         # every node of it before letting the interrupt through - which is the
@@ -1088,16 +1215,28 @@ def search(vehicle: LaunchVehicle, target_altitude: float, programme: str,
             pool.shutdown()
 
     # a search that stopped early is reported as what was walked rather than as
-    # what was planned
+    # what was planned - the schedule included, which is why it is cut to length
+    # rather than laid again over the shorter count
     result.passes = result.pass_number
+    result.schedule = result.schedule[:result.passes]
     result.planned_nodes = result.nodes
+    # and the spacing it actually closed down to, which is not one halving a
+    # pass: a pass that steps up to a finer integration keeps the reach it had
+    closed = halvings(result.schedule)
+    result.spacing = {
+        name: (max(span.step / 2 ** closed, TIME_QUANTUM)
+               if name in family.TIMES else span.step / 2 ** closed)
+        for name, span in result.ranges.items() if span.nodes > 1}
 
     if result.best is not None:
         # against the step the passes closed down to rather than the step they
         # started from: what this is reporting is that the search converged on
         # to a bound of the range it was given and would have gone further, and
-        # a sweep step is far too wide to tell that from an interior answer
-        finest = 2 ** max(result.passes - 1, 0)
+        # a sweep step is far too wide to tell that from an interior answer.
+        # The count of halvings and not of passes, for the reason `halvings`
+        # gives - a threshold four times finer than what was resolved would call
+        # an interior answer an edge
+        finest = 2 ** closed
         result.on_edge = tuple(
             name for name, (low, high) in bounds.items()
             if result.ranges[name].nodes > 1
@@ -1285,13 +1424,22 @@ def _best(result: SearchResult) -> Candidate:
     simply the best, with `reaches_orbit` left to say that it does not meet
     them. A search that reaches nothing still has something to show, and what
     it shows is what a narrower search should be centred on.
+
+    Chosen from the sets flown at the step the search was asked for, and only
+    from the whole table where no pass has run at that step yet - which is the
+    passes before the last of the coarse ones, where there is nothing else to
+    answer with and nothing is being answered yet either.
     """
     reaching = result.reaching
-    return reaching[0] if reaching else result.found[0]
+    if reaching:
+        return reaching[0]
+    measured = result.measured
+    return measured[0] if measured else result.found[0]
 
 
-def _sweep(flight: "_Flight", grids: list[dict[str, Range]], result: SearchResult,
-           seen: dict[tuple, Candidate], walked: set, report, pool) -> None:
+def _sweep(flight: "_Flight", grids: list[dict[str, Range]], steps: float,
+           result: SearchResult, seen: dict[tuple, Candidate], walked: set,
+           report, pool) -> None:
     """One pass over the grids: every node screened, the survivors flown.
 
     `grids` is one grid for the sweep and one per valley thereafter. They are
@@ -1300,19 +1448,24 @@ def _sweep(flight: "_Flight", grids: list[dict[str, Range]], result: SearchResul
     them overlap are worth flying once, and a caller watching the progress of a
     search is watching how much of it is left rather than which valley it is in.
 
-    A node this search has already walked is not walked again - see `_key` -
-    which is a set of nodes every pass that closes in shares with the pass
-    before it, and now also the nodes two valleys have in common where they lie
-    near each other. The rest are independent, so they are answered over a pool
-    of processes where there is one, in the order of the grids, so that a search
-    returns the same table however many of them there are. A set that asks more
-    of the airframe than the caller allowed is put aside here rather than
-    ranked: it is not a worse answer, it is not an answer.
+    A node this search has already walked at this step is not walked again - see
+    `_key` - which is a set of nodes every pass that closes in shares with the
+    pass before it, and now also the nodes two valleys have in common where they
+    lie near each other. At this step, and not simply at all: the passes do not
+    all integrate at the same one, and the same node answered at one step a
+    second and at ten is two answers, the second of which is the one worth
+    having. A pass that steps up is a pass that flies its inheritance again.
+
+    The rest are independent, so they are answered over a pool of processes
+    where there is one, in the order of the grids, so that a search returns the
+    same table however many of them there are. A set that asks more of the
+    airframe than the caller allowed is put aside here rather than ranked: it is
+    not a worse answer, it is not an answer.
     """
     values = []
     for grid in grids:
         for one in _nodes(grid, flight.family.TIMES):
-            key = _key(one)
+            key = (_key(one), steps)
             if key in walked:
                 result.revisited += 1
                 continue
@@ -1323,8 +1476,9 @@ def _sweep(flight: "_Flight", grids: list[dict[str, Range]], result: SearchResul
     result.pass_node = 0
     limit = result.max_dynamic_pressure
 
-    answers = ((flight.at(one) for one in values) if pool is None
-               else pool.map(_answer, values, chunksize=8))
+    jobs = [(one, steps) for one in values]
+    answers = ((flight.at(*job) for job in jobs) if pool is None
+               else pool.map(_answer, jobs, chunksize=8))
 
     for node in answers:
         result.nodes += 1
@@ -1364,8 +1518,14 @@ class _Flight:
         # whether the altitude integral is allowed to reject a node unflown
         self.screen = screen
 
-    def at(self, values: dict[str, float]) -> Node:
-        """Answer one node of the grid, flying as little as it takes."""
+    def at(self, values: dict[str, float], steps: float) -> Node:
+        """Answer one node of the grid, flying as little as it takes.
+
+        `steps` is what this pass integrates at, which is not the same for every
+        pass - see `COARSE_STEPS`. It comes with the node rather than living on
+        the flight because the flight is handed to the worker processes once,
+        when the pool starts, and the step changes under them as the passes go.
+        """
         try:
             programme, cutoff_time = self.family.build(values)
         except ValueError:
@@ -1377,13 +1537,13 @@ class _Flight:
         if self.screen and not self._worth_flying(programme, values):
             return Node(values, 'screened', None, 0)
 
-        flown = self._fly(programme, cutoff_time)
+        flown = self._fly(programme, cutoff_time, steps)
         if flown is None:
             # the set cannot be flown by this vehicle: it runs out of speed
             # against its own programme, or the trajectory leaves the model
             return Node(values, 'failed', None, 1)
 
-        candidate = self._measure(values, cutoff_time, *flown)
+        candidate = self._measure(values, cutoff_time, steps, *flown)
         if candidate is None:
             return Node(values, 'no_orbit', None, 1)
         return Node(values, 'closed', candidate, 1)
@@ -1409,23 +1569,23 @@ class _Flight:
         return (ALTITUDE_RATIO_LOW * self.target_altitude <= reached
                 <= ALTITUDE_RATIO_HIGH * self.target_altitude)
 
-    def _fly(self, programme: PitchProgramme,
-             cutoff_time: float) -> tuple[Telemetry, Mission] | None:
+    def _fly(self, programme: PitchProgramme, cutoff_time: float,
+             steps: float) -> tuple[Telemetry, Mission] | None:
         """Integrate one trajectory, or nothing if it cannot be flown."""
         try:
             mission = Mission(
                 vehicle=self.vehicle, pitch_programme=programme,
                 cutoff=CutoffAtTime(cutoff_time),
                 target_altitude=self.target_altitude,
-                duration=self._duration(cutoff_time),
-                steps_per_second=self.steps_per_second,
+                duration=self._duration(cutoff_time, steps),
+                steps_per_second=steps,
                 latitude_deg=self.latitude_deg, azimuth_deg=self.azimuth_deg)
             telemetry = mission.run()
         except ValueError:
             return None
         return telemetry, mission
 
-    def _duration(self, cutoff_time: float) -> float:
+    def _duration(self, cutoff_time: float, steps: float) -> float:
         """How long to fly for: to the first whole step at or past the cut-off.
 
         No further, because the orbit is read off the end of the flight and
@@ -1435,10 +1595,11 @@ class _Flight:
         cut-off would leave the state at the end of it from before the engines
         stopped.
         """
-        return math.ceil(cutoff_time * self.steps_per_second) / self.steps_per_second
+        return math.ceil(cutoff_time * steps) / steps
 
     def _measure(self, values: dict[str, float], cutoff_time: float,
-                 telemetry: Telemetry, mission: Mission) -> Candidate | None:
+                 steps: float, telemetry: Telemetry,
+                 mission: Mission) -> Candidate | None:
         """The three errors of one flight, or nothing if it reached no orbit."""
         orbit = mission.orbit
         if not orbit.is_orbit:
@@ -1475,7 +1636,7 @@ class _Flight:
 
         return Candidate(
             values=values, parameters=self.family.parameters(values),
-            cutoff_time=cutoff_time, orbit=orbit,
+            cutoff_time=cutoff_time, orbit=orbit, steps_per_second=steps,
             altitude=altitude, speed=speed,
             flight_path_angle=float(telemetry.flight_path_angle[at]),
             altitude_miss=altitude_miss, speed_miss=speed_miss,
@@ -1519,8 +1680,9 @@ def _begin(flight: _Flight) -> None:
     signal.signal(signal.SIGINT, signal.SIG_IGN)
 
 
-def _answer(values: dict[str, float]) -> Node:
-    return _WORKER.at(values)
+def _answer(job: tuple[dict[str, float], float]) -> Node:
+    values, steps = job
+    return _WORKER.at(*job)
 
 
 def _demands(telemetry: Telemetry, cutoff_time: float) -> tuple[float, float]:

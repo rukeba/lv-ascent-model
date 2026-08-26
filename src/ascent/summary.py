@@ -309,12 +309,32 @@ def _grid_cost(result) -> list[tuple[str, str]]:
     where = ('the best set found so far' if valleys == 1 else
              f'the best {valleys} sets found so far that are not in one '
              f'another\'s cell of the sweep')
+    # `halve` rather than `halves`: a pass that steps up to a finer integration
+    # keeps the reach it had, so the halvings are fewer than the passes
+    narrowing = ('and at half the spacing of the one before it'
+                 if len(set(getattr(result, 'schedule', ()))) <= 1 else
+                 'and, but for the ones that step up their integration, at half '
+                 'the spacing of the one before it')
     passes = (f'{result.passes}: one over the whole grid above, then '
-              f'{refinements} more, each looking only around {where} '
-              f'and at half the spacing of the one before it'
+              f'{refinements} more, each looking only around {where} {narrowing}'
               if refinements else
               f'{result.passes}: one over the whole grid above, and no more')
     rows = [('passes', passes)]
+
+    # what each of them integrated at, where that is not one figure throughout.
+    # A reader who sees a search cost less than the last one is owed the reason.
+    # Taken from the result rather than worked out again from the count of
+    # passes, which a search that stopped early rewrites - a sweep that ran at
+    # one step a second would otherwise be reported as having run at ten
+    # said whenever it is not simply the step that was asked for throughout -
+    # which covers a ramp, and covers a search that stopped after its coarse
+    # sweep and would otherwise be read as having run at the step it never got to
+    schedule = getattr(result, 'schedule', ())
+    if schedule and set(schedule) != {result.steps_per_second}:
+        rows.append(('integrated at', ', '.join(
+            f'{step:g} Hz' for step in schedule[:3]) + ' and so on to the end'
+            if len(schedule) > 3 else
+            ', '.join(f'{step:g} Hz' for step in schedule)))
 
     finest = ', '.join(f'{name} {spacing:g}'
                        for name, spacing in result.spacing.items())
@@ -348,6 +368,12 @@ def _cost(result) -> list[tuple[str, str]]:
 # of the family come before these and are built per search, since which of them
 # were searched and how finely is part of what the search was asked for.
 TERMINAL_COLUMNS = (
+    # what this row was integrated at, first of the measured columns because
+    # every one after it was measured at it. The table holds rows from the
+    # coarse early passes as well as the fine later ones - that is what makes it
+    # a map of the family - and a row known to within a hundred metres reads
+    # exactly like one known to within three unless it says so
+    ('Hz', 6, 0, lambda c: c.steps_per_second),
     ('cut-off', 10, 1, lambda c: c.cutoff_time),
     ('gamma', 8, 3, lambda c: c.flight_path_angle),
     ('h km', 9, 2, lambda c: c.altitude / 1000),
@@ -377,11 +403,14 @@ def search_table(result) -> list[str]:
         return []
 
     columns = [*_axis_columns(result), *TERMINAL_COLUMNS]
-    reaching = sum(1 for candidate in result.found
-                   if candidate.reaches(result.tolerance, result.speed_tolerance))
+    # what the search would answer with, which is not every row that happens to
+    # sit inside the tolerances: a set flown by a coarse pass is known to within
+    # a hundred metres or so and has not been shown to meet anything at the step
+    # the search was asked for. `reaching` is where that rule lives
+    reaching = {id(candidate) for candidate in result.reaching}
     lines = [f'TOP {len(rows):,} OF THE {len(result.found):,} SETS THAT '
              f'REACHED AN ORBIT, BEST FIRST',
-             f'{reaching:,} of them meet all three tolerances, marked *'
+             f'{len(reaching):,} of them meet all three tolerances, marked *'
              if reaching else 'none of them meets all three tolerances',
              '']
 
@@ -390,8 +419,7 @@ def search_table(result) -> list[str]:
     lines.append(header)
     lines.append('-' * len(header))
     for index, candidate in enumerate(rows, start=1):
-        marker = '*' if candidate.reaches(result.tolerance,
-                                          result.speed_tolerance) else ''
+        marker = '*' if id(candidate) in reaching else ''
         line = f'{f"{index}{marker}":>4}'
         for _, width, decimals, read in columns:
             line += f'{read(candidate):>{width}.{decimals}f}'

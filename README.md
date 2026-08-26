@@ -323,7 +323,7 @@ under [The three pitch programmes](#the-three-pitch-programmes):
 ## Catalogue of solved parameter sets
 
 The catalogue holds parameters that place each vehicle on a circular orbit of a
-given altitude - one set per vehicle, pitch programme and altitude, 25 in all.
+given altitude - one set per vehicle, pitch programme and altitude, 26 in all.
 It is kept as **one file a vehicle**: `config/catalogue.f9.yaml`,
 `config/catalogue.a62.yaml`, `config/catalogue.h3.yaml`. A search is run over
 one vehicle at a time and a vehicle is recomputed on its own, so a file that
@@ -388,9 +388,9 @@ on a low-thrust upper stage; and the velocity-share quartic gives out on Falcon
 an ellipse with both apsides wrong.
 
 The last is a limit of the search rather than of the vehicle: the bilinear
-tangent on Ariane 62 at 600 km. An orbit is there - what comes back has one
-apsis exact to ten metres and the other seventeen kilometres away - and this
-search does not land on it. A tenth of a second of burn is some five kilometres
+tangent on Ariane 62, which is on file at every altitude and at half a kilometre
+at only one of them. An orbit is there - what comes back has one apsis exact to
+ten metres and the other kilometres away - and this search does not land on it. A tenth of a second of burn is some five kilometres
 of apogee on a vehicle that burns for a thousand seconds, so the ranking along
 the cut-off axis is a row of narrow valleys rather than one, and each pass is a
 coordinate-wise descent that halves its reach: it travels about two sweep steps
@@ -405,21 +405,23 @@ resolution on the two angle axes is - `start` walks ten degrees in nine values
 while every answer for a vehicle that burns for a thousand seconds sits in the
 top degree of it, which puts two nodes where the whole answer lives.
 
-**So two of the three were searched again with that axis at 17 values and the
-middle angle at 23, and thirty valleys followed**, and the two came out quite
-differently. At 500 km the set closes the orbit to **5 m**, where the default
-grid had left the same case 114 km out: where the sweep can see the answer at
-all, the passes land on it exactly. At 400 km it comes to 1.3 km and stops
-there, so that entry is filed at a tolerance of 2.5 km and says so. At 600 km it
-is 17.6 km out and is left out.
+**So all three were searched again with that axis at 17 values and the middle
+angle at 23, thirty valleys followed**, and they came out quite differently. At
+500 km the set closes the orbit to **5 m**, where the default grid had left the
+same case 114 km out: where the sweep can see the answer at all, the passes land
+on it exactly. At 400 km it comes to **1.3 km** and stops. At 600 km it stops at
+**17.6 km**, with the speed at cut-off 14 m/s out.
 
 **Every entry carries the tolerance it was accepted at**, in a `tolerance` block
-beside `reached`, and that 400 km set is the only one in the catalogue held to
-anything but half a kilometre. It is filed rather than dropped because a set a
-kilometre from the circle is a set a vehicle could fly, and what it fills is a
-statement about this family on this vehicle that a blank line cannot make - but
-it is not a set that meets what the rest of the file meets, and the entry has to
-be readable as that without anyone knowing how the search was run.
+beside `reached`, and those last two are the only entries in the catalogue held
+to anything but half a kilometre - 2.5 km at 400, and 20 km and 15 m/s at 600.
+The second of those is not a tolerance so much as an admission: the perigee is
+on the circle and the apogee is eighteen kilometres above it, which is a set a
+vehicle could fly and an orbit nobody asked for. Both are filed rather than
+dropped because what they fill is a statement about this family on this vehicle
+that a blank line cannot make - and neither is a set that meets what the rest of
+the file meets, which is exactly why an entry has to be readable as that without
+anyone knowing how the search was run.
 
 Where the last stretch stops, it stops because a grid is being asked to do a
 solver's job. At a fixed vertical rise and a fixed cut-off, the two coefficients
@@ -686,6 +688,56 @@ at that resolution the sweep's ranking says more about the angle being wrong
 than about which cell is worth descending into. Sweeping those two axes at
 17 and 23 values takes the same search from 28 km out to 2.1 km — and stops
 there, a good deal short of the half-kilometre an entry needs.
+
+**And the step it integrates at rises as it goes.** A sweep is not measuring
+anything. Its job is to say which cell of the family the orbit lies in, and one
+step of its own on the cut-off axis is worth tens of kilometres of apogee — so a
+trajectory known to within a hundred metres tells it everything it can use. That
+is what one integration step a second comes to, measured across the whole
+catalogue against ten; two steps a second comes to 28 m, and five to 3.
+
+So the sweep runs at 1 Hz, the pass after it at 2, and every pass from the third
+on at the step you asked for — where the answer is being resolved to metres and
+a coarse step would not be noise around it but noise instead of it. The ramp is
+laid from the end, so the last pass is always at the finest step however few
+there are: `--refinements 0` is one pass, and that pass is the answer.
+
+Two things follow that look wrong until you see why. **A search that ramps flies
+more trajectories than one that does not** — a node walked at 1 Hz is walked
+again when the step rises, because the same set measured two ways is two answers
+and the finer is the one worth having. And **the answer is drawn only from sets
+flown at the step you asked for**: a coarse set can outrank a fine one on the
+difference between the two rules rather than on the difference between the two
+sets. Everything found is kept in the table and the CSV at whatever step it was
+flown, because that is what a map is for.
+
+Measured on Falcon 9 to 400 km on the bilinear tangent, five valleys throughout:
+
+| | nodes | flown | wall clock | found |
+|---|---|---|---|---|
+| no ramp, all at 10 Hz | 30,063 | 16,478 | 485 s | 131 m |
+| ramp, finishing at 10 Hz | 33,955 | 19,439 | **373 s** | 131 m |
+| ramp, finishing at 5 Hz | 33,955 | 19,439 | **234 s** | 131 m |
+
+The same set to the metre in all three. The ramp is worth about a quarter of the
+wall clock on its own, and finishing at 5 Hz rather than 10 is worth another
+third — two independent choices, and `--steps` is the second of them.
+
+**It does not always pay, and it is worth knowing when.** The saving is on the
+sweep, and most of a sweep's nodes never fly at all — the altitude integral
+drops them. What the ramp costs is two extra passes' worth of trajectories, once
+at each step-up, and a pass costs whatever `--basins` makes it. On Ariane 62 to
+600 km on the bilinear tangent, searched with thirty valleys and the angle axes
+resolved several times over, the refinement outweighs the sweep three to one:
+
+| | nodes | flown | wall clock | found |
+|---|---|---|---|---|
+| no ramp, all at 5 Hz | 141,229 | 85,198 | **2,573 s** | 17,641 m |
+| ramp, finishing at 5 Hz | 162,747 | 106,716 | **3,419 s** | 17,641 m |
+
+The same set to the metre again, and a third slower. The ramp helps where the
+sweep is a real share of the flying, which is where a search normally is, and
+costs where a heavy `--basins` has moved the weight into the passes.
 
 **Why the count on an axis matters, and which ones.** Not for precision. Ten
 passes resolve any of these axes far past what the tolerance asks, whatever the

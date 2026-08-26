@@ -1,5 +1,5 @@
 # Pitch-programme parameters that place Ariane 62 on a circular orbit of
-# the given altitude - one set per programme and altitude, 5 in all,
+# the given altitude - one set per programme and altitude, 6 in all,
 # at 400, 500, 600 km. This file is Ariane 62 and nothing else:
 # the catalogue is kept as one file a vehicle, and a command that wants the
 # whole of it reads the directory.
@@ -49,27 +49,26 @@
 #   five-phase at 500 km
 #   five-phase at 600 km
 #
-# The bilinear tangent at 600 km. An orbit is there and the search does not land
-# on it: what comes back has one apsis exact to ten metres and the other
-# seventeen kilometres away, and the speed at cut-off is 14 m/s out, which is
-# what a coordinate-wise descent looks like when it has walked into the wrong
-# valley. That it is the search and not the vehicle is measured rather than
-# supposed. Following five valleys instead of one recovers this same family at
-# 400 km on Falcon 9 and at 1100 on H3; here five leave the 400 km case 39,992 m
-# out and twenty leave it 39,471 m at three times the cost, so the count of
-# valleys is not what is short. The sweep's resolution on the two angle axes is:
-# `start` walks ten degrees in nine values while every answer for a vehicle that
-# burns for a thousand seconds sits in the top degree of it, which puts two
-# nodes where the whole answer lives:
-#   bilinear-tangent at 600 km - closest 17.6 km out
+# ALL THREE BILINEAR TANGENTS ARE HERE ON OTHER TERMS THAN THE REST, and they
+# are not alike. The family will not close to half a kilometre on this vehicle,
+# and it is the search that gives out rather than the vehicle: an orbit is there,
+# and what comes back has one apsis exact to ten metres and the other kilometres
+# away, which is what a coordinate-wise descent looks like when it has walked
+# into the wrong valley. That much is measured rather than supposed. Following
+# five valleys instead of one recovers this same family at 400 km on Falcon 9
+# and at 1100 on H3; here five leave the 400 km case 39,992 m out and twenty
+# leave it 39,471 m at three times the cost, so the count of valleys is not what
+# is short. The sweep's resolution on the two angle axes is: `start` walks ten
+# degrees in nine values while every answer for a vehicle that burns for a
+# thousand seconds sits in the top degree of it, which puts two nodes where the
+# whole answer lives.
 #
-# THE OTHER TWO BILINEAR TANGENTS ARE WHAT THAT FINER SWEEP FOUND, and they are
-# not alike. Both were searched with `start` at 17 values and the middle angle
-# at 23, with thirty valleys followed, and both were flown at five steps a
-# second rather than ten - which is recorded in `simulation`, because a set is
-# found against a model and the step is part of which model. Across the whole
+# So all three were searched with that axis at 17 values and the middle angle at
+# 23, with thirty valleys followed, and all three finish at five steps a second
+# rather than ten - which is recorded in `simulation`, because a set is found
+# against a model and the step is part of which model. Across the whole
 # catalogue the two steps differ by at most 3 m of apsis, and what the coarser
-# one buys is half the cost of a search that takes an hour and a half a set.
+# one buys is half the cost of a search that runs into the hours.
 #
 # The 500 km set closes the orbit to 5 m. It is filed on the same terms as
 # everything else in this catalogue, at half a kilometre, and the only thing
@@ -77,13 +76,18 @@
 # case 114 km out. Where the sweep can see the answer at all, the passes land on
 # it exactly.
 #
-# The 400 km set is 1.3 km out and is asked for two and a half, which is the
-# only entry in the catalogue held to anything but half. It is here rather than
-# left out because a set a kilometre from the circle is a set a vehicle could
-# fly, and because what it fills is a statement about this family on this
-# vehicle that a blank line cannot make. What it is not is a set that meets the
-# condition the rest of the file meets - and that is why every entry carries the
-# tolerance it was accepted at.
+# The 400 km set is 1.3 km out and is asked for two and a half.
+#
+# The 600 km set is 17.6 km out, with the speed at cut-off 14 m/s from the speed
+# of the orbit, and is asked for twenty and fifteen. Those are not tolerances so
+# much as an admission, and writing them down is the point: the perigee is on the
+# circle and the apogee is eighteen kilometres above it, which is a set a vehicle
+# could fly and an orbit nobody asked for. It is here because a blank line makes
+# no statement about this family on this vehicle and this does, and because the
+# figures beside it are what the family costs where it very nearly serves.
+#
+# Neither of those two meets the condition the rest of the file meets, and that
+# is the whole reason every entry carries the tolerance it was accepted at.
 #
 #     ascent a62 --list
 #     ascent a62 --altitude 400 --programme velocity-share
@@ -107,6 +111,7 @@ missions:
     simulation: {duration: 1087, steps_per_second: 5}
     tolerance: {orbit_km: 2.5, speed_ms: 10}
     reached: {perigee_km: 398.72, apogee_km: 400.00, gravity_loss: 2217.8, aerodynamic_loss: 226.9, steering_loss: 667.5, total_loss: 3112.1}
+
   - vehicle: lv.a62
     target_altitude: 500_000
     launch_site: {latitude: 5.2, azimuth: 90}
@@ -124,6 +129,7 @@ missions:
     simulation: {duration: 1128, steps_per_second: 5}
     tolerance: {orbit_km: 0.5, speed_ms: 10}
     reached: {perigee_km: 499.99, apogee_km: 500.00, gravity_loss: 2639.5, aerodynamic_loss: 195.5, steering_loss: 592.0, total_loss: 3427.0}
+
   - vehicle: lv.a62
     target_altitude: 600_000
     launch_site: {latitude: 5.2, azimuth: 90}
@@ -132,3 +138,12 @@ missions:
     simulation: {duration: 1223, steps_per_second: 10}
     tolerance: {orbit_km: 0.5, speed_ms: 10}
     reached: {perigee_km: 599.83, apogee_km: 599.99, gravity_loss: 3610.9, aerodynamic_loss: 160.6, steering_loss: 491.9, total_loss: 4263.4}
+
+  - vehicle: lv.a62
+    target_altitude: 600_000
+    launch_site: {latitude: 5.2, azimuth: 90}
+    pitch_programme: {type: bilinear-tangent, t1: 12.0, a: -0.00521721485846295, b: 5.68624247423877, c: 0.02775326503907547, te: 1101.9}
+    cutoff: {type: time, time: 1101.9}
+    simulation: {duration: 1162, steps_per_second: 5}
+    tolerance: {orbit_km: 20, speed_ms: 15}
+    reached: {perigee_km: 599.95, apogee_km: 617.64, gravity_loss: 3018.2, aerodynamic_loss: 192.6, steering_loss: 520.2, total_loss: 3731.1}

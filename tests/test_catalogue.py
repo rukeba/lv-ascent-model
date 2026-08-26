@@ -40,11 +40,11 @@ ROUNDING = 0.02
 def test_an_entry_reaches_its_orbit_to_the_tolerance_it_names(spec):
     """The point of an entry, and every entry names what that meant for it.
 
-    All but one were asked for at half a kilometre. Ariane 62's bilinear tangent
-    at 400 km was asked for at two and a half, because half will not close there
-    and a set a kilometre from the circle is worth more than a blank - and the
-    entry says so on its face, so that nothing has to know what the search was
-    run with to read the file correctly.
+    All but two were asked for at half a kilometre. Ariane 62's bilinear tangent
+    is the exception at 400 km and again at 600, because half will not close on
+    that vehicle and a set that is near the circle is worth more than a blank -
+    and the entry says so on its face, so that nothing has to know what the
+    search was run with to read the file correctly.
 
     Written down rather than derived, and checked here rather than assumed: an
     entry whose tolerance was quietly widened to cover a set that drifted is the
@@ -61,24 +61,31 @@ def test_an_entry_reaches_its_orbit_to_the_tolerance_it_names(spec):
         f'{misses:.2f} km out, asked for {allowed:g}'
 
 
-def test_the_tolerances_asked_for_are_the_two_the_file_explains():
-    """Half a kilometre everywhere but one entry, which is held to two and a half.
+# Every entry held to anything but half a kilometre, written out with what it
+# was held to instead. Ariane 62's bilinear tangent and nothing else, at two of
+# its three altitudes - and 20 km is not a tolerance so much as an admission,
+# which is exactly why it has to be named here and explained in the header of
+# the file rather than sliding in under a rule that permits anything.
+LOOSE = {
+    ('lv.a62', 400_000, 'bilinear-tangent'): (2.5, 10),
+    ('lv.a62', 600_000, 'bilinear-tangent'): (20, 15),
+}
 
-    A list rather than a bound, so that a third figure appearing - or a second
-    entry taking the looser one - has to be written here and explained in the
-    header of the file it appears in, rather than sliding in under a rule that
-    permits anything small enough.
+
+def test_only_the_entries_named_here_are_held_to_anything_but_half():
+    """And each to the figure written beside it.
+
+    A list rather than a bound. A tolerance is what an entry claims to have met,
+    so one appearing, or moving, or spreading to a second entry, is a change in
+    what the catalogue says and has to be read rather than absorbed.
     """
-    asked = {spec['tolerance']['orbit_km'] for spec in CATALOGUE}
-    assert asked == {0.5, 2.5}
-
-    # and there is exactly one entry held to anything but half a kilometre
-    loose = [spec for spec in CATALOGUE if spec['tolerance']['orbit_km'] != 0.5]
-    assert [(spec['vehicle'], spec['target_altitude'],
-             spec['pitch_programme']['type']) for spec in loose]         == [('lv.a62', 400_000, 'bilinear-tangent')]
-
-    # the speed at cut-off is held to the same figure throughout
-    assert {spec['tolerance']['speed_ms'] for spec in CATALOGUE} == {10}
+    held = {(spec['vehicle'], spec['target_altitude'],
+             spec['pitch_programme']['type']):
+            (spec['tolerance']['orbit_km'], spec['tolerance']['speed_ms'])
+            for spec in CATALOGUE
+            if (spec['tolerance']['orbit_km'], spec['tolerance']['speed_ms'])
+            != (0.5, 10)}
+    assert held == LOOSE
 
 
 # Every combination the catalogue holds, written out. Which of them are present
@@ -98,7 +105,7 @@ COVERED = {
     'lv.a62': {
         400_000: {'velocity-share', 'bilinear-tangent'},
         500_000: {'velocity-share', 'bilinear-tangent'},
-        600_000: {'velocity-share'},
+        600_000: {'velocity-share', 'bilinear-tangent'},
     },
     'lv.h3': {
         1_000_000: {'five-phase', 'velocity-share', 'bilinear-tangent'},
