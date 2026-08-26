@@ -13,10 +13,14 @@
 # An entry is the head of that ranking.
 #
 # A set counts as reaching the orbit when the perigee, the apogee and the
-# altitude at cut-off are all within 500 m of the target and the inertial speed
-# at cut-off is within 10 m/s of the speed of that circular orbit. So `reached`
-# does not read the target back twice over the way a root find would leave it:
-# it reads what the search actually landed on, inside that half-kilometre.
+# altitude at cut-off are all inside the tolerance it was asked for and the
+# inertial speed at cut-off is inside the tolerance on that. Both are written on
+# the entry, in `tolerance`, because they are not the same for all of them: the
+# orbit is half a kilometre nearly everywhere and two and a half on Ariane 62's
+# bilinear tangent, where half will not close and a set two kilometres out is
+# worth more than a blank. So `reached` does not read the target back twice over
+# the way a root find would leave it - it reads what the search actually landed
+# on, inside whatever the entry beside it says it was held to.
 #
 # Every instant is a whole tenth of a second - the vertical rise, the end of
 # the programme and the cut-off - because that is the finest a timeline is ever
@@ -45,6 +49,7 @@ missions:
     pitch_programme: {type: five-phase, t1: 23.3, t4: 679.7, k2: 0.08507812499999999, k3: 0.4669921875}
     cutoff: {type: time, time: 679.7}
     simulation: {duration: 740, steps_per_second: 10}
+    tolerance: {orbit_km: 0.5, speed_ms: 10}
     reached: {perigee_km: 999.88, apogee_km: 999.99, gravity_loss: 3322.5, aerodynamic_loss: 120.9, steering_loss: 1590.1, total_loss: 5033.5}
 
   - vehicle: lv.h3
@@ -53,6 +58,7 @@ missions:
     pitch_programme: {type: velocity-share, t1: 19.0, tf: 669.2281127929688, te: 671.4, s: 0.847412109375}
     cutoff: {type: time, time: 671.4}
     simulation: {duration: 731, steps_per_second: 10}
+    tolerance: {orbit_km: 0.5, speed_ms: 10}
     reached: {perigee_km: 1000.00, apogee_km: 1000.04, gravity_loss: 3262.1, aerodynamic_loss: 121.8, steering_loss: 1654.8, total_loss: 5038.6}
 
   - vehicle: lv.h3
@@ -61,6 +67,7 @@ missions:
     pitch_programme: {type: bilinear-tangent, t1: 39.8, a: -0.009916202540412599, b: 6.189693625725544, c: 0.013971265368538708, te: 664.0}
     cutoff: {type: time, time: 664.0}
     simulation: {duration: 724, steps_per_second: 10}
+    tolerance: {orbit_km: 0.5, speed_ms: 10}
     reached: {perigee_km: 999.95, apogee_km: 999.99, gravity_loss: 3208.0, aerodynamic_loss: 123.3, steering_loss: 1995.3, total_loss: 5326.6}
 
   - vehicle: lv.h3
@@ -69,6 +76,7 @@ missions:
     pitch_programme: {type: five-phase, t1: 12.8, t4: 690.7, k2: 0.057265625000000014, k3: 0.6240234375}
     cutoff: {type: time, time: 690.7}
     simulation: {duration: 751, steps_per_second: 10}
+    tolerance: {orbit_km: 0.5, speed_ms: 10}
     reached: {perigee_km: 1100.00, apogee_km: 1100.04, gravity_loss: 3458.3, aerodynamic_loss: 121.1, steering_loss: 1698.9, total_loss: 5278.4}
 
   - vehicle: lv.h3
@@ -77,6 +85,7 @@ missions:
     pitch_programme: {type: velocity-share, t1: 18.0, tf: 670.0891479492187, te: 691.4, s: 2.057373046875}
     cutoff: {type: time, time: 691.4}
     simulation: {duration: 751, steps_per_second: 10}
+    tolerance: {orbit_km: 0.5, speed_ms: 10}
     reached: {perigee_km: 1099.99, apogee_km: 1100.00, gravity_loss: 3463.3, aerodynamic_loss: 121.3, steering_loss: 1743.6, total_loss: 5328.2}
 
   - vehicle: lv.h3
@@ -85,6 +94,7 @@ missions:
     pitch_programme: {type: bilinear-tangent, t1: 12.0, a: -0.009110223730507057, b: 6.042811400445331, c: 0.009995520965874456, te: 675.3}
     cutoff: {type: time, time: 675.3}
     simulation: {duration: 735, steps_per_second: 10}
+    tolerance: {orbit_km: 0.5, speed_ms: 10}
     reached: {perigee_km: 1099.97, apogee_km: 1100.01, gravity_loss: 3340.5, aerodynamic_loss: 126.9, steering_loss: 2054.9, total_loss: 5522.3}
 
   - vehicle: lv.h3
@@ -93,6 +103,7 @@ missions:
     pitch_programme: {type: five-phase, t1: 19.4, t4: 704.8, k2: 0.06396484375, k3: 0.6736816406249999}
     cutoff: {type: time, time: 704.8}
     simulation: {duration: 765, steps_per_second: 10}
+    tolerance: {orbit_km: 0.5, speed_ms: 10}
     reached: {perigee_km: 1200.01, apogee_km: 1200.08, gravity_loss: 3618.4, aerodynamic_loss: 120.9, steering_loss: 1846.8, total_loss: 5586.1}
 
   - vehicle: lv.h3
@@ -101,6 +112,7 @@ missions:
     pitch_programme: {type: velocity-share, t1: 17.5, tf: 695.2457397460937, te: 705.8, s: 2.41845703125}
     cutoff: {type: time, time: 705.8}
     simulation: {duration: 766, steps_per_second: 10}
+    tolerance: {orbit_km: 0.5, speed_ms: 10}
     reached: {perigee_km: 1199.88, apogee_km: 1199.99, gravity_loss: 3625.7, aerodynamic_loss: 121.1, steering_loss: 1901.3, total_loss: 5648.1}
 
   - vehicle: lv.h3
@@ -109,4 +121,5 @@ missions:
     pitch_programme: {type: bilinear-tangent, t1: 28.3, a: -0.03355813606449783, b: 22.554423248948993, c: 0.04279177505063778, te: 700.4}
     cutoff: {type: time, time: 700.4}
     simulation: {duration: 760, steps_per_second: 10}
+    tolerance: {orbit_km: 0.5, speed_ms: 10}
     reached: {perigee_km: 1199.99, apogee_km: 1200.00, gravity_loss: 3584.7, aerodynamic_loss: 121.5, steering_loss: 2278.4, total_loss: 5984.5}

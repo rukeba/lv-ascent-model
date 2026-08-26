@@ -119,8 +119,13 @@ from .vehicle import DRAG_CEILING, LaunchVehicle
 # How far either side of the estimated ascent time the cut-off axis reaches.
 # The estimate leaves the rotation of the Earth out and prices the losses off a
 # turn that does not depend on the orbit, so it mostly reads low; against the
-# catalogue it sits between 4.8 per cent high and 9.1 per cent low, and these
-# carry that band with something to spare.
+# catalogue the cut-off on file sits between 0.949 and 1.089 of it, and these
+# carry that band. The late end has room to spare. The early end has 0.9 per
+# cent, which is thinner than it looks: it is one entry - Ariane 62's bilinear
+# tangent at 400 km - that put it there, and a vehicle sitting lower still would
+# be searched over a window that did not contain its answer. Widening it is not
+# free, since the window is what the cut-off axis spreads its values over, and
+# it would move every set on file; see tests/test_estimates.py.
 TIME_MARGIN_EARLY = 0.06
 TIME_MARGIN_LATE = 0.15
 
@@ -561,11 +566,22 @@ class SearchResult:
         the wrong thing to file: an entry of the catalogue is a set that meets
         its terminal condition, and one that misses would be read as one that
         does not.
+
+        The entry carries the tolerances it was accepted under, beside the orbit
+        it reached. Half a kilometre is what almost all of them were asked for
+        and it is not a property of the file: a family that no search closes on
+        a vehicle can still be worth an entry asked for at two and a half, and
+        the difference between the two is exactly the thing a reader has to be
+        able to see. `reached` says what the set does and this says what it had
+        to do, so an entry means one thing without anyone having to know what
+        the search was run with.
         """
         if self.best is None or not self.reaches_orbit:
             raise ValueError(
                 'the search found no set that reaches the orbit, and a set '
-                'that misses it is not a catalogue entry')
+                'that misses it is not a catalogue entry. A family that will '
+                'not close to half a kilometre may still close to more, and '
+                'then the entry says which - see `tolerance`')
         best = self.best
         altitude = self.target_altitude
         return {
@@ -575,8 +591,19 @@ class SearchResult:
             'launch_site': {'latitude': self.latitude_deg, 'azimuth': self.azimuth_deg},
             'pitch_programme': best.parameters,
             'cutoff': {'type': 'time', 'time': best.cutoff_time},
+            # the step the search actually flew, and not ten because ten is
+            # usual. A set is found against a model, and the step is part of
+            # which model: the orbit moves by a metre or two between five steps
+            # a second and ten, and the steering loss by up to a metre per
+            # second, so an entry filed at a step it was not searched at would
+            # not reproduce the figures written beside it
             'simulation': {'duration': round(best.cutoff_time + duration_margin),
-                           'steps_per_second': 10},
+                           'steps_per_second': self.steps_per_second},
+            # what was asked of it, before what it did: the perigee, the apogee
+            # and the altitude at cut-off all inside the first, the inertial
+            # speed at cut-off inside the second
+            'tolerance': {'orbit_km': round(self.tolerance / 1000, 3),
+                          'speed_ms': round(self.speed_tolerance, 3)},
             'reached': {
                 'perigee_km': round(best.orbit.perigee_altitude / 1000, 2),
                 'apogee_km': round(best.orbit.apogee_altitude / 1000, 2),

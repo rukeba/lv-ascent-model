@@ -720,6 +720,23 @@ def test_a_set_that_misses_is_not_written_out_as_an_entry(found):
         strict.specification('lv.f9')
 
 
+def test_an_entry_records_what_it_was_searched_at(found):
+    """The step it was flown at, and the tolerances it had to meet.
+
+    A set is found against a model and the step is part of which model - the
+    orbit moves by a metre or two between five steps a second and ten, and the
+    steering loss by up to a metre per second - so an entry that named a step it
+    was not searched at would not reproduce the figures written beside it. The
+    searches here run at one step a second, which is what makes this worth
+    checking: a hard ten would go unnoticed against a default of ten.
+    """
+    entry = found.specification('lv.f9')
+
+    assert entry['simulation']['steps_per_second'] == found.steps_per_second == 1
+    assert entry['tolerance'] == {'orbit_km': found.tolerance / 1000,
+                                  'speed_ms': found.speed_tolerance}
+
+
 def test_the_screen_drops_nodes_without_flying_them():
     """The dissertation's altitude integral, used as a gate.
 

@@ -323,7 +323,7 @@ under [The three pitch programmes](#the-three-pitch-programmes):
 ## Catalogue of solved parameter sets
 
 The catalogue holds parameters that place each vehicle on a circular orbit of a
-given altitude - one set per vehicle, pitch programme and altitude, 23 in all.
+given altitude - one set per vehicle, pitch programme and altitude, 25 in all.
 It is kept as **one file a vehicle**: `config/catalogue.f9.yaml`,
 `config/catalogue.a62.yaml`, `config/catalogue.h3.yaml`. A search is run over
 one vehicle at a time and a vehicle is recomputed on its own, so a file that
@@ -340,9 +340,20 @@ an entry is the head of that ranking. Nothing is held behind the search's back
 tangent's middle angle is prescribed at - so the sets differ from what a root
 find with four of those numbers pinned would return. A set counts as reaching
 the orbit when the perigee, the apogee and the altitude at cut-off are all
-within 500 m of the target and the inertial speed at cut-off is within 10 m/s
-of the speed of that orbit, which is why `reached` does not read 400.00 and
-400.00: it reads what the search landed on, inside that half-kilometre.
+inside the tolerance it was asked for and the inertial speed at cut-off is
+inside the tolerance on that — which is why `reached` does not read 400.00 and
+400.00: it reads what the search landed on, inside whatever it was held to.
+
+**Each entry carries both tolerances**, in a `tolerance` block, and so does the
+step it was flown at, in `simulation`. Neither is a property of the file. The
+orbit is half a kilometre on every entry but one, and that one — Ariane 62's
+bilinear tangent at 400 km — is held to two and a half, because half will not
+close there and a set a kilometre from the circle is still worth having. The
+step is ten a second nearly everywhere and five on the two Ariane 62 bilinear
+sets, which halves the cost of a search that takes an hour and a half apiece and
+costs at most 3 m of apsis across the whole catalogue. A set is found against a
+model, and both of those say which model — so an entry means one thing without
+anyone having to know how the search that produced it was run.
 
 Every instant of an entry - the vertical rise, the end of the programme, the
 cut-off - is a whole tenth of a second, because that is the finest a timeline
@@ -376,27 +387,44 @@ on a low-thrust upper stage; and the velocity-share quartic gives out on Falcon
 9 above 600 km, where the handful of nodes that survive the screen come out on
 an ellipse with both apsides wrong.
 
-The other three are a limit of the search rather than of the vehicle, and are
-worth stating plainly: the bilinear tangent on Ariane 62, at all three
-altitudes. An orbit is there - the sets found have one apsis exact to ten metres
-and the other kilometres away - and this search does not land on it. A tenth of
-a second of burn is some five kilometres of apogee on a vehicle that burns for a
-thousand seconds, so the ranking along the cut-off axis is a row of narrow
-valleys rather than one, and each pass is a coordinate-wise descent that halves
-its reach: it travels about two sweep steps and stays in whichever valley it
-started in.
+The last is a limit of the search rather than of the vehicle: the bilinear
+tangent on Ariane 62 at 600 km. An orbit is there - what comes back has one
+apsis exact to ten metres and the other seventeen kilometres away - and this
+search does not land on it. A tenth of a second of burn is some five kilometres
+of apogee on a vehicle that burns for a thousand seconds, so the ranking along
+the cut-off axis is a row of narrow valleys rather than one, and each pass is a
+coordinate-wise descent that halves its reach: it travels about two sweep steps
+and stays in whichever valley it started in.
 
 Following five valleys instead of one is what recovered the same family at
 400 km on Falcon 9 and at 1100 km on H3, which were on this list until the
-passes learnt to do it. It does not recover Ariane 62, and the measurements say
-why it cannot: five valleys leave it 39,992 m out and twenty leave it 39,471 m,
-so the count is not what is short. The sweep's resolution on the two angle axes
-is. Sweeping them at 17 and 23 values rather than 9 and 12 takes the search from
-28 km out to 2.1 km, and there it stops - because the last step of the descent
-is a grid where a solver belongs. At a fixed vertical rise and a fixed cut-off,
-the two coefficients of the turn are two unknowns for the two terminal
-conditions of a circular orbit, which is a root to be found rather than a floor
-to be walked down to.
+passes learnt to do it. It is not what recovers Ariane 62, and the measurements
+say why: five valleys leave the 400 km case 39,992 m out and twenty leave it
+39,471 m at three times the cost, so the count is not what is short. The sweep's
+resolution on the two angle axes is - `start` walks ten degrees in nine values
+while every answer for a vehicle that burns for a thousand seconds sits in the
+top degree of it, which puts two nodes where the whole answer lives.
+
+**So two of the three were searched again with that axis at 17 values and the
+middle angle at 23, and thirty valleys followed**, and the two came out quite
+differently. At 500 km the set closes the orbit to **5 m**, where the default
+grid had left the same case 114 km out: where the sweep can see the answer at
+all, the passes land on it exactly. At 400 km it comes to 1.3 km and stops
+there, so that entry is filed at a tolerance of 2.5 km and says so. At 600 km it
+is 17.6 km out and is left out.
+
+**Every entry carries the tolerance it was accepted at**, in a `tolerance` block
+beside `reached`, and that 400 km set is the only one in the catalogue held to
+anything but half a kilometre. It is filed rather than dropped because a set a
+kilometre from the circle is a set a vehicle could fly, and what it fills is a
+statement about this family on this vehicle that a blank line cannot make - but
+it is not a set that meets what the rest of the file meets, and the entry has to
+be readable as that without anyone knowing how the search was run.
+
+Where the last stretch stops, it stops because a grid is being asked to do a
+solver's job. At a fixed vertical rise and a fixed cut-off, the two coefficients
+of the turn are two unknowns for the two terminal conditions of a circular
+orbit, which is a root to be found rather than a floor to be walked down to.
 
 ## Searching for a parameter set
 

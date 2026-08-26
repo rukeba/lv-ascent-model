@@ -182,15 +182,21 @@ def _list(directory: Path, vehicle: str) -> None:
     catalogue = [spec for spec in load_catalogue(directory)
                  if spec['vehicle'] == vehicle]
     print(f'{"altitude":>10}{"programme":>18}{"cut-off":>10}'
-          f'{"steering":>10}{"total loss":>12}')
+          f'{"steering":>10}{"total loss":>12}{"to within":>11}')
     for spec in sorted(catalogue, key=lambda s: (s['target_altitude'],
                                                  s['pitch_programme']['type'])):
         reached = spec.get('reached', {})
+        # the tolerance the set was accepted at, printed beside it. Not every
+        # entry was asked for the same thing - a family that will not close to
+        # half a kilometre on a vehicle can still be worth an entry asked for at
+        # more - and a listing that left it out would show the two alike
+        asked = spec.get('tolerance', {}).get('orbit_km', float('nan'))
         print(f'{spec["target_altitude"] / 1000:>8g} km'
               f'{spec["pitch_programme"]["type"]:>18}'
               f'{spec["cutoff"]["time"]:>9.1f} s'
               f'{reached.get("steering_loss", float("nan")):>9.1f} '
-              f'{reached.get("total_loss", float("nan")):>11.1f} m/s')
+              f'{reached.get("total_loss", float("nan")):>11.1f} m/s'
+              f'{asked:>8.1f} km')
 
 
 class _Progress:
@@ -346,9 +352,13 @@ def _search(argv: list[str] | None) -> int:
                              'anything')
     parser.add_argument('--steps', type=float, default=10, metavar='PER_SECOND',
                         help='integration steps per second of every trajectory '
-                             'flown (default 10). A coarser step is for a quick '
-                             'look and barely moves the orbit or the budget; '
-                             'the entry written out asks for ten either way')
+                             'flown (default 10). Five barely moves the answer - '
+                             'across the whole catalogue it shifts an apsis by '
+                             'at most 3 m, against a tolerance of 500 - and '
+                             'halves what a search costs, which is worth having '
+                             'on the long-burn vehicles. The entry written out '
+                             'records the step it was searched at, because that '
+                             'is the model the set was found against')
     parser.add_argument('--workers', type=int, metavar='N',
                         help=f'processes the nodes of a pass are divided over '
                              f'(default {default_workers()}, two thirds of the '
