@@ -6,7 +6,6 @@ rather than against a number written down here.
 """
 
 import numpy as np
-import pytest
 
 from ascent.atmosphere import air_at
 from ascent.config import load_vehicle
