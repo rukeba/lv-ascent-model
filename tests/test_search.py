@@ -4,9 +4,9 @@ The searches here are narrow on purpose. What is under test is the machinery -
 the grid, the ranges, the ranking, the passes that close in - and not how long
 a sweep of a whole family takes, so every one of them holds most of the axes
 and sweeps a few nodes of the rest, at one integration step a second rather
-than ten. The whole file is a few seconds; a search at the settings the command
-line defaults to is ten thousand trajectories, which is not what a test suite
-is for.
+than ten, and closing in on one valley rather than five. A couple of minutes for
+the file; a search at the settings the command line defaults to is ten thousand
+trajectories, which is not what a test suite is for.
 
 The step does not change what a search finds. The orbit a set reaches is the
 same to within a few metres at either step - `test_mission.py` is where that is
@@ -31,7 +31,7 @@ from ascent.search import (FAMILIES, NODE_LIMIT, REFINED_NODES,
                            BilinearTangent, Candidate, FivePhase, Range,
                            VelocityShare, _centres, _closer, _nodes,
                            _planned_nodes, axis_names, parse_ranges, plan,
-                           search)
+                           search, step_schedule)
 from ascent.summary import summarise_plan
 
 FALCON = load_vehicle('config/lv.f9.yaml')
@@ -52,9 +52,16 @@ NARROW = {'t1': Range(20.0, 20.0), 'k2': Range(0.03, 0.07, 3),
 
 
 def quick(**overrides):
-    """A search narrow enough for a test and complete in every step of itself."""
+    """A search narrow enough for a test and complete in every step of itself.
+
+    One valley, unless a test asks for more. A pass that closes in on five costs
+    five times what one does, and almost nothing in this file is about how many
+    are followed - the few tests that are say so themselves. It was one when
+    these were written, and leaving it to the default would quietly have made
+    every search here five times longer than it needs to be.
+    """
     settings = {'ranges': NARROW, 'refinements': 6, 'steps_per_second': 1,
-                'workers': 1, 'tolerance': 1000.0, **SITE}
+                'workers': 1, 'tolerance': 1000.0, 'basins': 1, **SITE}
     settings.update(overrides)
     return search(FALCON, 500_000, 'five-phase', **settings)
 
@@ -383,6 +390,76 @@ def test_a_held_parameter_is_not_closed_in_on():
     """A range of one node is what holding a parameter is, and it stays one."""
     grid = {'k2': Range(0.05, 0.05)}
     assert _closer(grid, {'k2': 0.05}, {}, {'k2': (0.05, 0.05)}) == grid
+
+
+# --- the step each pass integrates at ---------------------------------------
+
+
+@pytest.mark.parametrize('passes, expected', [
+    (1, (10.0,)),                       # the only pass is the answer
+    (2, (2.0, 10.0)),
+    (3, (1.0, 2.0, 10.0)),
+    (11, (1.0, 2.0) + (10.0,) * 9),
+])
+def test_the_ramp_is_laid_from_the_end(passes, expected):
+    """However few passes there are, the last of them is at the finest step.
+
+    Laid from the end rather than the start for exactly that reason: a search
+    with no refinements is one pass, and that pass is what the search answers
+    with, so it cannot be the one that runs coarse.
+    """
+    assert step_schedule(passes, 10.0) == expected
+
+
+def test_the_ramp_is_never_coarser_than_what_was_asked_for():
+    """A caller who wants two steps a second is not helped by a sweep at one."""
+    assert step_schedule(4, 2.0) == (1.0, 2.0, 2.0, 2.0)
+    assert step_schedule(4, 1.0) == (1.0,) * 4
+    assert step_schedule(4, 0.5) == (0.5,) * 4
+
+
+def test_a_coarse_pass_is_not_where_the_answer_comes_from():
+    """The table holds every step; the answer comes from the finest of them.
+
+    A set measured at one step a second is known to within a hundred metres or
+    so, and one measured at ten to within three. Ranked against each other the
+    first can win on the difference between the two rules rather than on the
+    difference between the two sets, which is why `measured` exists and why
+    `best` is drawn from it.
+    """
+    # two steps a second rather than ten, which is all it takes to have two of
+    # them: the ramp comes to (1, 2, 2, 2) here where at ten it would be
+    # (1, 2, 10, 10), and the searches in this file are narrow on purpose
+    result = quick(refinements=3, steps_per_second=2)
+
+    assert {c.steps_per_second for c in result.found} == {1.0, 2.0}
+    assert {c.steps_per_second for c in result.measured} == {2.0}
+    assert result.best.steps_per_second == 2.0
+    assert all(c.steps_per_second == 2.0 for c in result.reaching)
+
+    # the coarse passes are kept, and they are most of what a sweep found
+    assert len(result.found) > len(result.measured)
+
+
+def test_a_node_walked_coarsely_is_walked_again_at_the_finer_step():
+    """The same node at two steps is two answers, not one already had.
+
+    A pass that steps up re-flies the ground the pass before it covered. If the
+    node keys ignored the step it would skip exactly that, and the finer passes
+    would inherit measurements they were meant to replace.
+    """
+    ramped = quick(refinements=3, steps_per_second=2)
+    flat = quick(refinements=3, steps_per_second=1)
+
+    # every distinct set carries the step it was flown at, and a node that both
+    # a coarse pass and a fine one reached appears once, at the finer
+    fine = {c.key for c in ramped.found if c.steps_per_second == 2.0}
+    coarse = {c.key for c in ramped.found if c.steps_per_second == 1.0}
+    assert not (fine & coarse), 'a node is in the table at one step only'
+
+    # and the ramp flies more than a search that never steps up, because
+    # stepping up is flying some of it twice
+    assert ramped.flown > flat.flown
 
 
 # --- which valleys are closed in on ----------------------------------------

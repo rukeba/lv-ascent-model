@@ -687,6 +687,40 @@ than about which cell is worth descending into. Sweeping those two axes at
 17 and 23 values takes the same search from 28 km out to 2.1 km — and stops
 there, a good deal short of the half-kilometre an entry needs.
 
+**And the step it integrates at rises as it goes.** A sweep is not measuring
+anything. Its job is to say which cell of the family the orbit lies in, and one
+step of its own on the cut-off axis is worth tens of kilometres of apogee — so a
+trajectory known to within a hundred metres tells it everything it can use. That
+is what one integration step a second comes to, measured across the whole
+catalogue against ten; two steps a second comes to 28 m, and five to 3.
+
+So the sweep runs at 1 Hz, the pass after it at 2, and every pass from the third
+on at the step you asked for — where the answer is being resolved to metres and
+a coarse step would not be noise around it but noise instead of it. The ramp is
+laid from the end, so the last pass is always at the finest step however few
+there are: `--refinements 0` is one pass, and that pass is the answer.
+
+Two things follow that look wrong until you see why. **A search that ramps flies
+more trajectories than one that does not** — a node walked at 1 Hz is walked
+again when the step rises, because the same set measured two ways is two answers
+and the finer is the one worth having. And **the answer is drawn only from sets
+flown at the step you asked for**: a coarse set can outrank a fine one on the
+difference between the two rules rather than on the difference between the two
+sets. Everything found is kept in the table and the CSV at whatever step it was
+flown, because that is what a map is for.
+
+Measured on Falcon 9 to 400 km on the bilinear tangent, five valleys throughout:
+
+| | nodes | flown | wall clock | found |
+|---|---|---|---|---|
+| no ramp, all at 10 Hz | 30,063 | 16,478 | 485 s | 131 m |
+| ramp, finishing at 10 Hz | 33,955 | 19,439 | **373 s** | 131 m |
+| ramp, finishing at 5 Hz | 33,955 | 19,439 | **234 s** | 131 m |
+
+The same set to the metre in all three. The ramp is worth about a quarter of the
+wall clock on its own, and finishing at 5 Hz rather than 10 is worth another
+third — two independent choices, and `--steps` is the second of them.
+
 **Why the count on an axis matters, and which ones.** Not for precision. Ten
 passes resolve any of these axes far past what the tolerance asks, whatever the
 sweep gave them. What the passes cannot do is travel: one step either side,

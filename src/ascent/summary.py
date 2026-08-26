@@ -316,6 +316,16 @@ def _grid_cost(result) -> list[tuple[str, str]]:
               f'{result.passes}: one over the whole grid above, and no more')
     rows = [('passes', passes)]
 
+    # what each of them integrates at, where that is not one figure throughout.
+    # A reader who sees a search cost less than the last one is owed the reason
+    from .search import step_schedule
+    schedule = step_schedule(result.passes, result.steps_per_second)
+    if len(set(schedule)) > 1:
+        rows.append(('integrated at', ', '.join(
+            f'{step:g} Hz' for step in schedule[:3]) + ' and so on to the end'
+            if len(schedule) > 3 else
+            ', '.join(f'{step:g} Hz' for step in schedule)))
+
     finest = ', '.join(f'{name} {spacing:g}'
                        for name, spacing in result.spacing.items())
     if finest:
