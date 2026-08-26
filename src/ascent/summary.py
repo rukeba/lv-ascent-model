@@ -368,6 +368,12 @@ def _cost(result) -> list[tuple[str, str]]:
 # of the family come before these and are built per search, since which of them
 # were searched and how finely is part of what the search was asked for.
 TERMINAL_COLUMNS = (
+    # what this row was integrated at, first of the measured columns because
+    # every one after it was measured at it. The table holds rows from the
+    # coarse early passes as well as the fine later ones - that is what makes it
+    # a map of the family - and a row known to within a hundred metres reads
+    # exactly like one known to within three unless it says so
+    ('Hz', 6, 0, lambda c: c.steps_per_second),
     ('cut-off', 10, 1, lambda c: c.cutoff_time),
     ('gamma', 8, 3, lambda c: c.flight_path_angle),
     ('h km', 9, 2, lambda c: c.altitude / 1000),

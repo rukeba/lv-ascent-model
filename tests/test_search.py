@@ -462,6 +462,33 @@ def test_a_node_walked_coarsely_is_walked_again_at_the_finer_step():
     assert ramped.flown > flat.flown
 
 
+def test_a_coarse_set_is_never_the_answer_even_when_it_is_all_there_is():
+    """`best` may be coarse; `reaches_orbit` may not, and filing is gated on it.
+
+    The fine passes re-fly what the coarse sweep liked, and they can come back
+    with nothing: an orbit measured at one step a second can fail to be one at
+    ten, or turn out to ask more of the airframe than was allowed. What is left
+    is a table with no set at the step asked for in it, and the closest thing
+    found is coarse. Showing it is right - it says where to look next - but a
+    set known to within a hundred metres has not met tolerances tighter than
+    that, and nothing may be filed on it.
+    """
+    result = quick(refinements=3, steps_per_second=2, tolerance=50_000.0)
+    coarse = next(c for c in result.found if c.steps_per_second == 1.0)
+
+    stranded = copy.copy(result)
+    stranded.best = coarse
+
+    assert coarse.reaches(stranded.tolerance, stranded.speed_tolerance)
+    assert not stranded.reaches_orbit, 'coarse, however close it came'
+    with pytest.raises(ValueError, match='not a catalogue entry'):
+        stranded.specification('lv.f9')
+
+    # and the same set flown at the step asked for is an answer like any other
+    assert result.best.steps_per_second == 2.0
+    assert result.reaches_orbit
+
+
 def test_a_pass_that_steps_up_does_not_also_narrow():
     """So the spacing reported is the spacing reached, and not four times finer.
 

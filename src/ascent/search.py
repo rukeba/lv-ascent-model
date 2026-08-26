@@ -617,7 +617,21 @@ class SearchResult:
 
     @property
     def reaches_orbit(self) -> bool:
+        """Whether the search has an answer, at the step it was asked for.
+
+        Both halves of that matter. `best` is the closest set found and falls
+        back to a coarsely flown one where no pass at the finest step has closed
+        anything - which is every pass of the ramp before the first fine one,
+        and is also what is left if the fine passes re-fly what the sweep liked
+        and find it is not an orbit after all, or that it asks more of the
+        airframe than the caller allowed. Showing that set is right. Answering
+        with it is not: it has been measured to within a hundred metres or so
+        and the tolerances it would be judged by are tighter than that.
+
+        `specification` is gated on this, so nothing coarse can be filed.
+        """
         return self.best is not None \
+            and self.best.steps_per_second == self.steps_per_second \
             and self.best.reaches(self.tolerance, self.speed_tolerance)
 
     @property
