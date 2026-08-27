@@ -105,3 +105,21 @@ def test_sampling_interpolates_between_tabulated_points():
 
     middle = programme.sample(100.05)[0]
     assert min(before, after) < middle < max(before, after)
+
+
+def test_the_angle_alone_is_the_angle_the_sample_gives():
+    """The equations of motion read the angle through `angle_at`, which
+    interpolates one table where `sample` interpolates three. The two have to
+    give the same number to the last bit, or a trajectory would depend on which
+    of them asked."""
+    programmes = (
+        FivePhaseProgramme(t1=20.0, t4=502.8, k2=0.056178, k3=0.522859),
+        VelocityShareProgramme(t1=15.0, tf=420.0, te=480.0, s=1.4),
+        BilinearTangentProgramme(t1=20.0, a=-0.019, b=5.67, c=0.0043, te=500.0),
+    )
+    for programme in programmes:
+        end = programme.end_time
+        instants = [-1.0, 0.0, end, end + 1.0, end - 1e-12]
+        instants += [end * i / 9999.0 for i in range(10_000)]
+        for t in instants:
+            assert programme.angle_at(t) == programme.sample(t)[0], t

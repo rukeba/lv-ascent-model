@@ -13,30 +13,40 @@ from .state import FlightState
 
 DEGREES = 180.0 / math.pi
 
-# name, unit, how to read it off a state
+# name, unit, and how to read it off a state `s`, as an expression
 COLUMNS = (
-    ('t', 's', lambda s: s.t),
-    ('altitude', 'm', lambda s: s.altitude),
-    ('radius', 'm', lambda s: s.radius),
-    ('polar_angle', 'deg', lambda s: s.polar_angle * DEGREES),
-    ('downrange_x', 'm', lambda s: s.downrange_x),
-    ('downrange_y', 'm', lambda s: s.downrange_y),
-    ('speed', 'm/s', lambda s: s.speed),
-    ('inertial_speed', 'm/s', lambda s: s.inertial_speed),
-    ('horizontal_speed', 'm/s', lambda s: s.horizontal_speed),
-    ('vertical_speed', 'm/s', lambda s: s.vertical_speed),
-    ('flight_path_angle', 'deg', lambda s: s.flight_path_angle * DEGREES),
-    ('flight_path_rate', 'deg/s', lambda s: s.flight_path_rate * DEGREES),
-    ('mass', 'kg', lambda s: s.mass),
-    ('thrust', 'N', lambda s: s.thrust),
-    ('drag', 'N', lambda s: s.drag),
-    ('dynamic_pressure', 'Pa', lambda s: s.dynamic_pressure),
-    ('steering_angle', 'deg', lambda s: s.steering_angle * DEGREES),
-    ('steering_demand', '', lambda s: s.steering_demand),
-    ('steering_loss', 'm/s', lambda s: s.steering_loss),
-    ('control_effort', 'm^2/s^3', lambda s: s.control_effort),
-    ('stage', '', lambda s: s.stage),
+    ('t', 's', 's.t'),
+    ('altitude', 'm', 's.altitude'),
+    ('radius', 'm', 's.radius'),
+    ('polar_angle', 'deg', 's.polar_angle * DEGREES'),
+    ('downrange_x', 'm', 's.downrange_x'),
+    ('downrange_y', 'm', 's.downrange_y'),
+    ('speed', 'm/s', 's.speed'),
+    ('inertial_speed', 'm/s', 's.inertial_speed'),
+    ('horizontal_speed', 'm/s', 's.horizontal_speed'),
+    ('vertical_speed', 'm/s', 's.vertical_speed'),
+    ('flight_path_angle', 'deg', 's.flight_path_angle * DEGREES'),
+    ('flight_path_rate', 'deg/s', 's.flight_path_rate * DEGREES'),
+    ('mass', 'kg', 's.mass'),
+    ('thrust', 'N', 's.thrust'),
+    ('drag', 'N', 's.drag'),
+    ('dynamic_pressure', 'Pa', 's.dynamic_pressure'),
+    ('steering_angle', 'deg', 's.steering_angle * DEGREES'),
+    ('steering_demand', '', 's.steering_demand'),
+    ('steering_loss', 'm/s', 's.steering_loss'),
+    ('control_effort', 'm^2/s^3', 's.control_effort'),
+    ('stage', '', 's.stage'),
 )
+
+# The whole row in one expression, built from the table above once at import.
+# A flight is tens of thousands of rows of twenty-one columns and every one of
+# them is recorded, so a separate call per column costs several times what
+# reading the state does. Expressions rather than functions is what lets the
+# row be one of them.
+# nothing but the one constant the expressions above use: they read a state and
+# multiply, and there is no call among them for the builtins to be reachable
+_row_of = eval('lambda s: (' + ', '.join(read for _, _, read in COLUMNS) + ',)',
+               {'DEGREES': DEGREES, '__builtins__': {}})
 
 
 class Telemetry:
@@ -47,7 +57,7 @@ class Telemetry:
         self._arrays: dict[str, np.ndarray] | None = None
 
     def record(self, state: FlightState) -> None:
-        self._rows.append(tuple(read(state) for _, _, read in COLUMNS))
+        self._rows.append(_row_of(state))
         self._arrays = None
 
     def __len__(self) -> int:
