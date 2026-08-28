@@ -38,8 +38,9 @@ COLUMNS = (
     ('stage', '', 's.stage'),
 )
 
-# The whole row in one expression, built from the table above once at import,
-# with nothing in its globals but the one constant the expressions use
+# The whole row in one expression, built from the table above once at import.
+# Its globals hold the one constant the expressions use and an empty
+# __builtins__, so nothing else is reachable from them
 # See docs/performance.md
 _row_of = eval('lambda s: (' + ', '.join(read for _, _, read in COLUMNS) + ',)',
                {'DEGREES': DEGREES, '__builtins__': {}})

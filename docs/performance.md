@@ -66,8 +66,10 @@ read than an instance dictionary.
 
 `COLUMNS` in [`telemetry.py`](../src/ascent/telemetry.py) declares the name, the
 unit and how to read each column off a state. The whole row is built from that
-table as a single lambda, compiled once at import with nothing in its globals
-but the one constant the expressions use.
+table as a single lambda, compiled once at import. Its globals hold the one
+constant the expressions use and an empty `__builtins__`: the expressions read a
+state and multiply, and there is no call among them for the builtins to be
+reachable.
 
 A flight is tens of thousands of rows of twenty-one columns and every one of
 them is recorded, so a separate call per column costs several times what reading
