@@ -9,6 +9,8 @@ The catalogue holds the same kind of specification many times over - one per
 vehicle, programme and target altitude - so a solved parameter set can be
 flown without writing a mission file for it. It is kept as one file a vehicle,
 and `load_catalogue` on the directory reads the lot of them.
+
+See docs/configuration.md
 """
 
 from pathlib import Path
@@ -28,9 +30,7 @@ PITCH_PROGRAMMES = {
     'bilinear-tangent': BilinearTangentProgramme,
 }
 
-# short names for the programmes above, accepted on the command line: a
-# parameter search is run over one family many times over, and its name is
-# typed every time
+# short names for the programmes above, accepted on the command line
 PROGRAMME_ALIASES = {
     '5f': 'five-phase',
     'vs': 'velocity-share',
@@ -81,8 +81,8 @@ def mission_from_spec(spec: dict[str, Any], directory: str | Path) -> Mission:
 
 
 # What a catalogue file is called: the word, the vehicle it holds and nothing
-# else. One file a vehicle rather than one file, because a search is run over
-# one vehicle at a time and a recomputed vehicle should touch its own file only
+# else. One file a vehicle, because a recomputed vehicle should touch its own
+# file only
 CATALOGUE_FILES = 'catalogue.*.yaml'
 
 

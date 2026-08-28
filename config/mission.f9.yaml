@@ -1,6 +1,6 @@
-# Falcon 9 into a 500 km circular orbit from Cape Canaveral, flying the
-# five-phase pitch programme with the parameters that minimise the steering
-# loss under the terminal conditions of the orbit.
+# Falcon 9 into a 500 km circular orbit from Cape Canaveral, on the five-phase
+# pitch programme with the parameters that minimise the steering loss.
+# See docs/configuration.md
 vehicle: lv.f9
 
 # altitude of the circular orbit aimed for, m

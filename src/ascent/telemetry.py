@@ -38,13 +38,9 @@ COLUMNS = (
     ('stage', '', 's.stage'),
 )
 
-# The whole row in one expression, built from the table above once at import.
-# A flight is tens of thousands of rows of twenty-one columns and every one of
-# them is recorded, so a separate call per column costs several times what
-# reading the state does. Expressions rather than functions is what lets the
-# row be one of them.
-# nothing but the one constant the expressions above use: they read a state and
-# multiply, and there is no call among them for the builtins to be reachable
+# The whole row in one expression, built from the table above once at import,
+# with nothing in its globals but the one constant the expressions use
+# See docs/performance.md
 _row_of = eval('lambda s: (' + ', '.join(read for _, _, read in COLUMNS) + ',)',
                {'DEGREES': DEGREES, '__builtins__': {}})
 
@@ -77,8 +73,8 @@ class Telemetry:
         """Index of the last row recorded at or before the given instant."""
         index = int(np.searchsorted(self.t, t + 1e-9, side='right') - 1)
         if index < 0:
-            # an index of -1 is a valid row and the wrong one: the last of the
-            # flight, handed back for an instant before its first
+            # -1 is a valid row and the wrong one: the last of the flight,
+            # handed back for an instant before its first
             raise ValueError(
                 f'nothing was recorded at or before t = {t:g} s'
                 + (f'; the flight starts at {self.t[0]:g} s' if len(self) else ''))

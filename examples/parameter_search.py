@@ -5,15 +5,11 @@ family. Nothing is taken from the catalogue but the row to compare against: the
 search is given the vehicle, the orbit and the family, and works from there.
 
 The two columns should agree, and they do - because the catalogue is what this
-search returned. Every set on file was found this way, so running it again is a
-check that the file can be reproduced from the vehicle and the orbit alone,
-rather than a comparison of two methods. The rows come back identical: a search
-walks the same grid in the same order however many processes answer it.
+search returned. Running it again is a check that the file can be reproduced
+from the vehicle and the orbit alone, rather than a comparison of two methods.
 
-What the columns are worth watching for is the day they stop agreeing. A change
-anywhere under the search - the axes a family offers, what the estimates bound
-the cut-off to, the tolerances a set is judged by - moves the answer, and this
-is where that shows as two rows that no longer match.
+What they are worth watching for is the day they stop agreeing: a change
+anywhere under the search moves the answer, and this is where that shows.
 
     uv run python examples/parameter_search.py
 

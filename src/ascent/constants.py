@@ -8,16 +8,10 @@ import math
 
 # mean radius, m
 EARTH_RADIUS = 6_371_000
-# gravitational parameter, m^3/s^2. Measured directly - from the motion of
-# satellites, laser ranging and the perturbation of orbits - and known to some
-# nine significant figures. It is not built from the two constants below: G is
-# the worst measured of the fundamental constants, at a relative uncertainty
-# near 2e-5, and the mass of the Earth is not measured independently at all but
-# obtained as mu/G, so it carries the whole of that uncertainty. Multiplying
-# rounded G and M back together throws away the precision mu was measured for.
-# For a check: with G as below, the tabulated mu answers to M = 5.972168e24
-# rather than 5.972e24, and the whole discrepancy sits in the fourth digit of
-# the mass
+# gravitational parameter, m^3/s^2. Measured directly and known to some nine
+# significant figures; deliberately not built from the two constants below,
+# which would throw away the precision it was measured for
+# See docs/constants.md
 MU = 3.986004418e14
 # gravitational constant, m^3/(kg*s^2) - for reference; nothing here is
 # computed from it

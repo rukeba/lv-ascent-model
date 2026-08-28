@@ -11,9 +11,8 @@ from dataclasses import dataclass
 from .constants import EARTH_RADIUS
 
 
-# `slots` because one is built for every step of every flight and read back
-# column by column straight afterwards, and a slot is both quicker to fill and
-# quicker to read than an instance dictionary
+# `slots` because one is built for every step of every flight
+# See docs/performance.md
 @dataclass(slots=True)
 class FlightState:
     # time from lift-off, s
@@ -37,15 +36,14 @@ class FlightState:
     # thrust deflection the programme demands of the guidance, rad
     steering_angle: float = 0.0
     # the sine of that deflection before it is clamped. Above one no such
-    # deflection exists: the thrust cannot hold the programme, and the loss
-    # below saturates at the whole of it
+    # deflection exists: the thrust cannot hold the programme
     steering_demand: float = 0.0
     # velocity lost to that deflection since lift-off, m/s
     steering_loss: float = 0.0
-    # the control-effort functional since lift-off, m^2/s^3: the square of the
-    # normal acceleration the programme demands, integrated over the powered
-    # flight. Built on the demand before it is clamped, so it goes on measuring
-    # where the loss above saturates
+    # the control-effort functional since lift-off, m^2/s^3. Built on the
+    # demand before it is clamped, so it goes on measuring where the loss
+    # above saturates
+    # See docs/control-effort.md
     control_effort: float = 0.0
     # index of the stage burning at this instant
     stage: int = 0

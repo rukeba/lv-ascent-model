@@ -1,6 +1,6 @@
-# H3-22S into a 1200 km circular orbit from Tanegashima, flying the five-phase
-# programme. The programme ends just before cut-off; over that last stretch the
-# vehicle holds the attitude it reached.
+# H3-22S into a 1200 km circular orbit from Tanegashima, on the five-phase
+# programme, which here ends just before cut-off.
+# See docs/configuration.md
 vehicle: lv.h3
 
 target_altitude: 1_200_000

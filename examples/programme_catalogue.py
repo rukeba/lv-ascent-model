@@ -5,6 +5,8 @@ insert that vehicle into that circular orbit, and what the ascent costs in
 velocity.
 
     uv run python examples/programme_catalogue.py
+
+See docs/catalogue.md
 """
 
 from ascent.config import load_catalogue

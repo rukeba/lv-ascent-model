@@ -8,8 +8,9 @@ whole step.
 
 A policy that cannot say its instant in advance has to watch the flight
 instead, and then cut-off is a thing that happens once rather than a condition
-that holds. `LatchedCutoff` is where that is settled; see the note there for
-why the difference matters and why holding the state is safe.
+that holds. `LatchedCutoff` is where that is settled.
+
+See docs/configuration.md
 """
 
 
@@ -33,9 +34,8 @@ class Cutoff:
         """Whether a policy that watches the flight has fired at this state.
 
         Asked at trial points that are never reached, so it answers without
-        being told. A policy that knows its own instant watches nothing, and
-        that instant is already a bound of the piece being integrated, so a
-        crossing of its can never fall strictly inside one: it answers no.
+        being told. A policy that knows its own instant watches nothing: that
+        instant is already a bound of the piece, so it answers no.
         """
         return False
 
@@ -60,22 +60,15 @@ class CutoffAtTime(Cutoff):
 class LatchedCutoff(Cutoff):
     """A threshold watched in flight: once it has fired the engines stay off.
 
-    Both quantities below are crossed on the way up and fall again afterwards -
-    the inertial speed as soon as the vehicle coasts uphill, the altitude past
-    apogee. Reading the condition afresh each time would relight the engines
-    there, on a stage that has propellant left, which is not what a cut-off
-    means. So the first crossing is remembered instead.
-
-    Where the threshold is crossed is not known before the step, so it cannot
-    be put on the bounds of one the way a scheduled cut-off can. `Mission`
-    solves for the instant instead and cuts the step there, asking `reached`
-    at trial points - which is why the question of whether the threshold is met
-    is kept apart from the act of firing on it.
+    Both quantities below are crossed on the way up and fall again afterwards,
+    and reading the condition afresh each time would relight the engines there.
+    So the first crossing is remembered, which is why whether the threshold is
+    met is kept apart from the act of firing on it: `Mission` asks `reached` at
+    trial points while solving for the instant.
 
     Holding that state is safe because the throttle is read once per piece of a
-    step, before the piece is integrated and in flight order - never at a trial
-    point of the scheme, which is where remembering anything would quietly cost
-    the order of accuracy. `Mission.run` clears it before each flight.
+    step, in flight order and never at a trial point of the scheme.
+    `Mission.run` clears it before each flight.
     """
 
     def __init__(self) -> None:

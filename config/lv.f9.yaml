@@ -1,6 +1,6 @@
-# Falcon 9 Full Thrust. Published figures: masses, thrusts and specific
-# impulses from the SpaceX users guide and open sources; the drag coefficient
-# is a generic profile for a slender launch vehicle, not a measured one.
+# Falcon 9 Full Thrust, from the SpaceX users guide and open sources. The drag
+# coefficient is a generic profile for a slender launch vehicle, not measured.
+# See docs/vehicles.md
 name: Falcon 9
 
 # drag coefficient against Mach number, interpolated linearly between points

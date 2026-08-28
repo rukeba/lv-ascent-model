@@ -1,5 +1,5 @@
-# Ariane 62 into an 800 km circular orbit from Kourou, flying a bilinear
-# tangent programme.
+# Ariane 62 into an 800 km circular orbit from Kourou, on a bilinear tangent.
+# See docs/configuration.md
 vehicle: lv.a62
 
 target_altitude: 800_000

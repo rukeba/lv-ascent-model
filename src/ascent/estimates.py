@@ -20,9 +20,10 @@ axis a cut-off can fall.
 
 Neither stands in for a flight. The first overstates the altitude, by half a
 per cent to a fifth across the catalogue; the second understates the time, by
-up to a ninth, and by how much depends on the vehicle. Both are accurate
-enough to say which flights are worth making, which is all a grid search needs
-of them.
+up to a ninth. Both are accurate enough to say which flights are worth making,
+which is all a grid search needs of them.
+
+See docs/search-estimates.md
 """
 
 import math
@@ -35,10 +36,8 @@ from .pitch import PitchProgramme
 from .vehicle import LaunchVehicle
 
 # The loss model of the ascent-time estimate replaces the layered atmosphere
-# with an exponential one and the Mach-dependent drag coefficient with a mean
-# over the trajectory. Both are coarse on purpose: the term they build is a
-# small correction for a vehicle with its stages in a stack, and a term of the
-# first order for one that flies with boosters strapped alongside.
+# with an exponential one and the drag coefficient with a mean over the
+# trajectory. Both are coarse on purpose
 MEAN_DRAG_COEFFICIENT = 0.25
 SEA_LEVEL_DENSITY = 1.225
 DENSITY_SCALE_HEIGHT = 7500.0
@@ -114,11 +113,9 @@ def vacuum_time(vehicle: LaunchVehicle, altitude: float,
     this figure can be asked on its own.
 
     `head_start` is speed the vehicle has before the engines give it any: the
-    rotation of the pad, worth some 400 m/s to a launch due east from Cape
-    Canaveral and nothing to one due north. The rest of this module leaves the
-    rotation of the Earth out, as the dissertation does; it is credited here
-    because this is the figure a request is refused on, and a refusal has to be
-    made on the most generous reading there is.
+    rotation of the pad. This module leaves the rotation of the Earth out, as
+    the dissertation does, and credits it here because this is the figure a
+    request is refused on.
     """
     required, gained = required_velocity(altitude) - head_start, 0.0
     if required <= 0.0:
@@ -147,13 +144,10 @@ def equivalent_time(vehicle: LaunchVehicle, altitude: float,
     cumulative integral in flight order finds the same root, and only monotony
     makes either of them safe.
 
-    `head_start` is speed the vehicle has before the engines give it any - the
-    rotation of the pad - and is zero by default, because the model this
-    estimate comes from does not turn the Earth. Credit it where the answer is
-    a yes or a no rather than a number: an eastward pad is worth some 400 m/s,
-    and a balance that ignores it can fail to close on an orbit the vehicle
-    reaches comfortably. Leave it out where the answer is the number, which is
-    what the band around it was measured on.
+    `head_start` is zero by default, because the model this estimate comes from
+    does not turn the Earth. Credit it where the answer is a yes or a no rather
+    than a number; leave it out where the answer is the number, which is what
+    the band around it was measured on.
 
     None when the balance never reaches zero: the orbit is out of reach of this
     vehicle, and that is known before a single trajectory is integrated.
@@ -206,6 +200,8 @@ def analytic_altitude(vehicle: LaunchVehicle, programme: PitchProgramme) -> floa
     at sea level, and the fall of gravity with altitude. All three push the
     same way, so the figure is always high - which is why the band it is
     screened against is not centred on the target.
+
+    See docs/search-estimates.md
     """
     time = programme.time
     share = np.sin(programme.angle)
@@ -246,17 +242,12 @@ def _loss_rate(time: np.ndarray, speed: np.ndarray, mass: np.ndarray,
     # climbed at the mean speed so far along the current direction. The coarsest
     # thing here, and it only ever enters through R + h and the air density
     altitude = 0.5 * speed * time * np.sin(angle)
-    # Gravity less what the horizontal speed already carries. This is the
-    # dissertation's effective gravity, and it is the one deliberate difference
-    # from the along-track equation the model itself integrates, which carries
-    # g alone (less the centrifugal term of the rotating frame, which this
-    # estimate does not have because it does not turn the Earth). What it buys
-    # is that the loss dies out exactly where the vehicle reaches orbit, at
-    # theta -> 0 and V -> V_R; the objection to it is that a term normal to the
-    # velocity does no work along it, so subtracting it here prices the gravity
-    # loss low. Either way the estimate is calibrated as it stands - see the
-    # band `search.TIME_MARGIN_EARLY` and `TIME_MARGIN_LATE` carry - and
-    # changing it would move that band and every window built from it
+    # gravity less what the horizontal speed already carries: the
+    # dissertation's effective gravity, and the one deliberate difference from
+    # the along-track equation the model itself integrates. The estimate is
+    # calibrated as it stands, and changing it would move `TIME_MARGIN_EARLY`,
+    # `TIME_MARGIN_LATE` and every window built from them
+    # See docs/search-estimates.md
     effective = np.maximum(0.0, STANDARD_GRAVITY - speed**2 * np.cos(angle)**2
                            / (EARTH_RADIUS + altitude))
     drag = MEAN_DRAG_COEFFICIENT * area * SEA_LEVEL_DENSITY \

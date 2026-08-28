@@ -2,21 +2,18 @@
 
 Falcon 9 into a 500 km circular orbit from Cape Canaveral, due east, with the
 same three parameter sets as `steering_loss_comparison.py`. That script prices
-the programmes in propellant: the steering loss is the share of the thrust that
-holding the programme points away from the velocity. This one prices them in
-control: the functional
+the programmes in propellant; this one prices them in control, by the
+functional
 
     J = integral of a_control^2 dt over the powered flight,  m^2/s^3
-
-where `a_control` is the normal acceleration the guidance has to produce. The
-square charges an abrupt stretch more than an even one, so two programmes that
-cost the same propellant are still told apart by it.
 
 The two accumulations are drawn side by side, because where they part is the
 point: the loss grows wherever the thrust is deflected at all, the effort grows
 sharply wherever the programme swings the flight-path angle.
 
     uv run python examples/control_effort_comparison.py [figure.png]
+
+See docs/control-effort.md
 """
 
 import sys
