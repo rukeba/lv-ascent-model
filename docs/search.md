@@ -93,6 +93,10 @@ TOP 15 OF THE 6,271 SETS THAT REACHED AN ORBIT, BEST FIRST
   2*   25.7    0.076035    0.468506  503.0     503.0   0.000   499.94 0.00013   7616.6 0.00001   499.94   500.02 0.000006  0.000012
 ```
 
+That is one run of the five-phase turn to 500 km, kept for the shape of the
+table rather than for the set at the head of it - the entry on file for that
+orbit came from a later search and is a different set.
+
 `--csv` writes the whole of that table to a file, not just the head of it, so a
 coarse sweep can be looked at as the map it is - sorted, plotted, narrowed on.
 A held parameter gets no column, because it is the same in every row and is

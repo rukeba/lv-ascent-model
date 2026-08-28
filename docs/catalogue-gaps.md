@@ -5,7 +5,7 @@ kind. Each catalogue file's header names its own.
 
 ## Limits of the family and the vehicle
 
-Four combinations reach nothing near the orbit at all.
+Five combinations reach nothing near the orbit at all.
 
 **The five-phase turn on Ariane 62**, at 400, 500 and 600 km. Not one node of
 the grid came out on an orbit - not an open trajectory that nearly closed, but
@@ -14,9 +14,11 @@ that every node was integrated rather than dropped on the estimate, and the
 answer was the same. Its turn would have to be one continuous manoeuvre while
 the vehicle spends its last several hundred seconds on a low-thrust upper stage.
 
-**The velocity-share quartic on Falcon 9 above 600 km.** The handful of nodes
-that survive the screen come out on an ellipse with both apsides wrong; the
-closest at 700 km is 1668.8 km out.
+**The velocity-share quartic on Falcon 9 above 600 km**, at 650 and at 700. The
+handful of nodes that survive the screen come out on an ellipse with both
+apsides wrong: the closest at 650 km is 34.7 km out, and at 700 km it is
+1668.8 km. The other two families are on file at both altitudes, so this is the
+quartic giving out rather than the vehicle running short.
 
 ## A limit of the search: the bilinear tangent on Ariane 62
 

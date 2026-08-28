@@ -11,6 +11,11 @@ thirteen processes of a twenty-core machine:
 | `velocity-share` | 13,284 | 15,941 | 74 % | 4,201 | 2 min 15 s | 34 m |
 | `bilinear-tangent` | 17,712 | 20,244 | 51 % | 9,908 | 4 min 43 s | 199 m |
 
+Those are one run each, and what a run costs is what the table is for. Two of
+the three errors are also what the catalogue now holds; the five-phase set on
+file was searched again later, over the wider spread of altitudes, and comes to
+497 m rather than 59.
+
 The sweep is the whole grid; the ten passes that [close
 in](search-refinement.md) add five nodes an axis each, and between three hundred
 and seven hundred of those turn out to have been walked already - a pass is
@@ -130,13 +135,15 @@ This search cannot answer that and should not: it asks for the cut-off in tenths
 of a second, and the nearest it will offer is 502.7. So `k2` has to be searched,
 because with the cut-off on a tenth it is `k2` and `k3` that carry the two
 terminal conditions between them. What comes back is a different route to the
-same circle - and it is the one of the two that could be put on a timeline:
-`t1` = 25.7 s, `k2` = 0.0760, `k3` = 0.4686, cut-off at 503.0 s, which is the
-circle to 59 m.
+same circle - and it is the one of the two that could be put on a timeline. The
+set on file is `t1` = 12.2 s, `k2` = 0.045, `k3` = 0.5625, cut-off at 502.5 s,
+which is the circle to 497 m.
 
-The routes differ in what they cost. The root-found set spends 516.8 m/s on
-steering and 3110.1 in total; this one spends 608.1 and 3213.7, dearer by
-104 m/s. Nothing there is wrong: the ranking asks how close the orbit came and
-nothing at all about what the route to it cost. `--csv` writes the velocity
-budget of every set found beside its errors, which is where to look when the
-cheapest route to the circle is wanted rather than the closest one to it.
+The routes differ in what they cost, and the ranking has nothing to say about
+the difference: the root-found set spends 516.8 m/s on steering and 3110.1 in
+total, this one 468.1 and 3052.6. Which of the two comes out dearer is not
+something the search decides - it asks how close the orbit came and nothing at
+all about what the route to it cost, so a re-search that moves the answer moves
+the price with it, in whichever direction it happens to go. `--csv` writes the
+velocity budget of every set found beside its errors, which is where to look
+when the cheapest route to the circle is wanted rather than the closest one.

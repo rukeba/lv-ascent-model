@@ -1,7 +1,7 @@
 # The catalogue of solved parameter sets
 
 Parameters that place each vehicle on a circular orbit of a given altitude - one
-set per vehicle, pitch programme and altitude, 26 in all.
+set per vehicle, pitch programme and altitude, 34 in all.
 
 Kept as **one file a vehicle**: [`catalogue.f9.yaml`](../config/catalogue.f9.yaml),
 [`catalogue.a62.yaml`](../config/catalogue.a62.yaml),
@@ -11,7 +11,7 @@ one vehicle is a file that changes when that vehicle's sets change and not
 otherwise. `load_catalogue` on the directory reads all of them; on a single
 file, that vehicle's sets alone.
 
-Falcon 9 is covered at 400, 500, 600 and 700 km, Ariane 62 at 400, 500 and
+Falcon 9 is covered from 400 to 700 km every fifty, Ariane 62 at 400, 500 and
 600 km, and H3 at 1000, 1100 and 1200 km. For what is not there, see [what the
 catalogue is missing](catalogue-gaps.md).
 
@@ -51,10 +51,18 @@ orbit when the perigee, the apogee and the altitude at cut-off are all inside
 leave it: it reads what the search actually landed on, inside whatever the
 entry beside it says it was held to.
 
-The tolerance is not a property of the file. It is half a kilometre on every
-entry but two, and those two are on [other terms](catalogue-gaps.md) because
-half will not close there and a set that misses is still worth having. An entry
-has to be readable as either without anyone knowing how the search was run.
+The tolerance is not a property of the file, and it is not the same on every
+entry. Twenty are held to half a kilometre. Twelve - most of Falcon 9 - are
+held to one, which is the box section 4.4 of the dissertation compares against,
+and a tighter one closed no orbit at all on two of the three families there.
+Two are on [other terms](catalogue-gaps.md): two and a half, and twenty with
+fifteen metres per second beside it, because half will not close on Ariane 62's
+bilinear tangent and a set that is near the circle is worth more than a blank.
+
+`tests/test_catalogue.py` lists every entry held to anything but half a
+kilometre by name, so a tolerance quietly widened to cover a set that drifted
+fails the suite. An entry has to be readable as what it is without anyone
+knowing how the search was run.
 
 **`simulation`** carries the step it was flown at, for the same reason: a set is
 found against a model, and the step is part of which model. Ten a second nearly

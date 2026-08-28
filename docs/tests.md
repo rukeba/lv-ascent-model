@@ -34,7 +34,11 @@ constants the search relies on cannot drift away from the data they were
 measured on. See [the two estimates](search-estimates.md).
 
 **Every catalogue entry, flown again**, against the orbit and the losses
-recorded for it. See [the catalogue](catalogue.md).
+recorded for it - and against the tolerance the entry itself names. Both the
+entries held to more than half a kilometre and the combinations the catalogue
+holds at all are written out by name in `tests/test_catalogue.py` rather than
+derived, so a tolerance quietly widened, or a set that stopped being found,
+fails the suite instead of being absorbed. See [the catalogue](catalogue.md).
 
 **The search machinery**, on narrow grids on purpose: what is under test is the
 grid, the ranges, the ranking and the passes that close in, not how long a sweep

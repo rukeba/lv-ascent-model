@@ -100,7 +100,7 @@ lists the stages in the order they burn. Both formats are in
 how the strap-on boosters are modelled — in [docs/vehicles.md](docs/vehicles.md).
 
 The catalogue holds parameters that place each vehicle on a circular orbit of a
-given altitude — one set per vehicle, pitch programme and altitude, 26 in all,
+given altitude — one set per vehicle, pitch programme and altitude, 34 in all,
 one file a vehicle. Every set was **searched for, not solved for**, and every
 entry records the orbit it produces, what it costs and the tolerance it was
 accepted at.
