@@ -40,11 +40,12 @@ ROUNDING = 0.02
 def test_an_entry_reaches_its_orbit_to_the_tolerance_it_names(spec):
     """The point of an entry, and every entry names what that meant for it.
 
-    All but two were asked for at half a kilometre. Ariane 62's bilinear tangent
-    is the exception at 400 km and again at 600, because half will not close on
-    that vehicle and a set that is near the circle is worth more than a blank -
-    and the entry says so on its face, so that nothing has to know what the
-    search was run with to read the file correctly.
+    Half a kilometre is what most were asked for. The ones that were not are
+    listed in `LOOSE` below and accounted for beside it - most of Falcon 9 at a
+    kilometre, and Ariane 62's bilinear tangent looser still, because half will
+    not close on that vehicle and a set that is near the circle is worth more
+    than a blank. Each entry says so on its face, so that nothing has to know
+    what the search was run with to read the file correctly.
 
     Written down rather than derived, and checked here rather than assumed: an
     entry whose tolerance was quietly widened to cover a set that drifted is the
@@ -62,13 +63,28 @@ def test_an_entry_reaches_its_orbit_to_the_tolerance_it_names(spec):
 
 
 # Every entry held to anything but half a kilometre, written out with what it
-# was held to instead. Ariane 62's bilinear tangent and nothing else, at two of
-# its three altitudes - and 20 km is not a tolerance so much as an admission,
-# which is exactly why it has to be named here and explained in the header of
-# the file rather than sliding in under a rule that permits anything.
+# was held to instead. Two kinds sit here. Ariane 62's bilinear tangent at two
+# of its three altitudes, where 20 km is not a tolerance so much as an
+# admission. And most of Falcon 9, held to a kilometre because that is the box
+# section 4.4 of the dissertation compares against: a tighter one closed no
+# orbit at all on two of the three families. Either way the figure has to be
+# named here and explained in the header of the file rather than sliding in
+# under a rule that permits anything.
 LOOSE = {
     ('lv.a62', 400_000, 'bilinear-tangent'): (2.5, 10),
     ('lv.a62', 600_000, 'bilinear-tangent'): (20, 15),
+    ('lv.f9', 400_000, 'five-phase'): (1, 10),
+    ('lv.f9', 400_000, 'bilinear-tangent'): (1, 10),
+    ('lv.f9', 450_000, 'five-phase'): (1, 10),
+    ('lv.f9', 450_000, 'velocity-share'): (1, 10),
+    ('lv.f9', 450_000, 'bilinear-tangent'): (1, 10),
+    ('lv.f9', 550_000, 'five-phase'): (1, 10),
+    ('lv.f9', 550_000, 'velocity-share'): (1, 10),
+    ('lv.f9', 550_000, 'bilinear-tangent'): (1, 10),
+    ('lv.f9', 600_000, 'five-phase'): (1, 10),
+    ('lv.f9', 650_000, 'five-phase'): (1, 10),
+    ('lv.f9', 650_000, 'bilinear-tangent'): (1, 10),
+    ('lv.f9', 700_000, 'five-phase'): (1, 10),
 }
 
 
@@ -89,17 +105,19 @@ def test_only_the_entries_named_here_are_held_to_anything_but_half():
 
 
 # Every combination the catalogue holds, written out. Which of them are present
-# is not a rule - it is what searching thirty of them returned, and the nine
-# that are absent are absent for three different reasons, each named in the
-# header of the file it belongs to. That is exactly why this is a list and not
-# a count: a rule could be restated, but a set that stopped being found, or one
-# that started being found, is a change in what the search does and has to be
-# read and agreed to rather than absorbed.
+# is not a rule - it is what the searches returned, and the five that are absent
+# are absent for reasons named in the header of the file they belong to. That is
+# exactly why this is a list and not a count: a rule could be restated, but a set
+# that stopped being found, or one that started being found, is a change in what
+# the search does and has to be read and agreed to rather than absorbed.
 COVERED = {
     'lv.f9': {
         400_000: {'five-phase', 'velocity-share', 'bilinear-tangent'},
+        450_000: {'five-phase', 'velocity-share', 'bilinear-tangent'},
         500_000: {'five-phase', 'velocity-share', 'bilinear-tangent'},
+        550_000: {'five-phase', 'velocity-share', 'bilinear-tangent'},
         600_000: {'five-phase', 'velocity-share', 'bilinear-tangent'},
+        650_000: {'five-phase', 'bilinear-tangent'},
         700_000: {'five-phase', 'bilinear-tangent'},
     },
     'lv.a62': {
