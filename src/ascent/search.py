@@ -10,7 +10,9 @@ where in the family the orbit lies, and the passes that follow are what land on
 it - see `REFINEMENTS`, `BASINS` and `COARSE_STEPS`. A set is judged by three
 errors, and ranked by the third.
 
-See docs/search.md, docs/search-grid.md and docs/search-refinement.md
+See docs/search.md
+See docs/search-grid.md
+See docs/search-refinement.md
 """
 
 import math

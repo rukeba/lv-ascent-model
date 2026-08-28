@@ -13,7 +13,8 @@ Events matter more than the order of the scheme: separation, cut-off, the end
 of the programme and a tank running dry are step changes, and the step is cut
 exactly at each of them.
 
-See docs/model.md and docs/integration.md
+See docs/model.md
+See docs/integration.md
 """
 
 import math
@@ -405,7 +406,8 @@ class Mission:
         before the clamp, so it goes on separating programmes where the loss
         saturates.
 
-        See docs/velocity-budget.md and docs/control-effort.md
+        See docs/velocity-budget.md
+        See docs/control-effort.md
         """
         radius, speed = state.radius, state.speed
         # the same projection the free-flight equations carry: gravity less the
