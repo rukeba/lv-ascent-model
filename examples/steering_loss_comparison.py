@@ -6,6 +6,8 @@ to reaching that orbit, and the resulting velocity budget is printed next to
 the published figures, so the agreement can be read off directly.
 
     uv run python examples/steering_loss_comparison.py
+
+See docs/programme-comparison.md
 """
 
 from ascent import (BilinearTangentProgramme, CutoffAtTime, FivePhaseProgramme,

@@ -1,98 +1,36 @@
-# Pitch-programme parameters that place Ariane 62 on a circular orbit of
-# the given altitude - one set per programme and altitude, 6 in all,
-# at 400, 500, 600 km. This file is Ariane 62 and nothing else:
-# the catalogue is kept as one file a vehicle, and a command that wants the
-# whole of it reads the directory.
+# Pitch-programme parameters that place Ariane 62 on a circular orbit of the
+# given altitude - one set per programme and altitude, 6 in all, at 400, 500
+# and 600 km. This file is Ariane 62 and nothing else: the catalogue is kept as
+# one file a vehicle, and a command that wants the whole of it reads the
+# directory.
 #
-# Every set here was searched for rather than solved for, and searched with
-# every parameter of its family free: `ascent-search` sweeps a grid over the
-# whole family, closes in on the best node ten times over, and ranks what it
-# finds by how far the orbit reached is from the circle asked for. Nothing is
-# held behind the search's back - not the vertical rise, not the five-phase
-# k2, not the instant the bilinear tangent's middle angle is prescribed at.
-# An entry is the head of that ranking.
+# Every set was searched for rather than solved for, with every parameter of
+# its family free. `tolerance` is what the set was accepted under and `reached`
+# is what it does; instants are whole tenths of a second and the coefficients
+# of the guidance law are written to full precision.
+# See docs/catalogue.md
 #
-# A set counts as reaching the orbit when the perigee, the apogee and the
-# altitude at cut-off are all inside the tolerance it was asked for and the
-# inertial speed at cut-off is inside the tolerance on that. Both are written on
-# the entry, in `tolerance`, because they are not the same for all of them: the
-# orbit is half a kilometre nearly everywhere and two and a half on Ariane 62's
-# bilinear tangent, where half will not close and a set two kilometres out is
-# worth more than a blank. So `reached` does not read the target back twice over
-# the way a root find would leave it - it reads what the search actually landed
-# on, inside whatever the entry beside it says it was held to.
+# WHAT IS NOT HERE, AND WHAT IS HERE ON OTHER TERMS.
 #
-# Every instant is a whole tenth of a second - the vertical rise, the end of
-# the programme and the cut-off - because that is the finest a timeline is ever
-# issued to, and an answer written finer is the same answer with digits after
-# it that nothing can act on. The coefficients of the guidance law are not
-# instants and nothing rounds them: they are written to full precision because
-# they have to be. Near a circular orbit the apogee answers to the cut-off at
-# some 80 km per second, and the bilinear tangent is more delicate still - its
-# numerator a*tau + b cancels to almost nothing at the end of the turn, which
-# is what levels the vehicle out, so the last digits of a and b carry the
-# terminal angle and rounding them moves the perigee by a kilometre. With the
-# cut-off held to a tenth, it is the shape of the turn that places the orbit.
+# Not one node came out on an orbit at all - flown again with the altitude
+# screen off, and the answer was the same. This is the family and the vehicle,
+# not the search:
+#   five-phase at 400 km, at 500 km, at 600 km
 #
-# An entry is an ordinary mission specification with one block added: `reached`
-# records the orbit it produces and what it costs, so any entry can be checked
-# without repeating the search. tests/test_catalogue.py flies all of them.
-#
-# WHAT IS NOT HERE, and what is here on other terms.
-#
-# Not one node of the grid came out on an orbit at all - not an open
-# trajectory that nearly closed, but no orbit anywhere in the family. Flown
-# again with the altitude screen off, so that every node was integrated rather
-# than dropped on the estimate, and the answer was the same. This is the family
-# and the vehicle, not the search:
-#   five-phase at 400 km
-#   five-phase at 500 km
-#   five-phase at 600 km
-#
-# ALL THREE BILINEAR TANGENTS ARE HERE ON OTHER TERMS THAN THE REST, and they
-# are not alike. The family will not close to half a kilometre on this vehicle,
-# and it is the search that gives out rather than the vehicle: an orbit is there,
-# and what comes back has one apsis exact to ten metres and the other kilometres
-# away, which is what a coordinate-wise descent looks like when it has walked
-# into the wrong valley. That much is measured rather than supposed. Following
-# five valleys instead of one recovers this same family at 400 km on Falcon 9
-# and at 1100 on H3; here five leave the 400 km case 39,992 m out and twenty
-# leave it 39,471 m at three times the cost, so the count of valleys is not what
-# is short. The sweep's resolution on the two angle axes is: `start` walks ten
-# degrees in nine values while every answer for a vehicle that burns for a
-# thousand seconds sits in the top degree of it, which puts two nodes where the
-# whole answer lives.
-#
-# So all three were searched with that axis at 17 values and the middle angle at
-# 23, with thirty valleys followed, and all three finish at five steps a second
-# rather than ten - which is recorded in `simulation`, because a set is found
-# against a model and the step is part of which model. Across the whole
-# catalogue the two steps differ by at most 3 m of apsis, and what the coarser
-# one buys is half the cost of a search that runs into the hours.
-#
-# The 500 km set closes the orbit to 5 m. It is filed on the same terms as
-# everything else in this catalogue, at half a kilometre, and the only thing
-# remarkable about it is where it came from: the default grid left this very
-# case 114 km out. Where the sweep can see the answer at all, the passes land on
-# it exactly.
-#
-# The 400 km set is 1.3 km out and is asked for two and a half.
-#
-# The 600 km set is 17.6 km out, with the speed at cut-off 14 m/s from the speed
-# of the orbit, and is asked for twenty and fifteen. Those are not tolerances so
-# much as an admission, and writing them down is the point: the perigee is on the
-# circle and the apogee is eighteen kilometres above it, which is a set a vehicle
-# could fly and an orbit nobody asked for. It is here because a blank line makes
-# no statement about this family on this vehicle and this does, and because the
-# figures beside it are what the family costs where it very nearly serves.
-#
-# Neither of those two meets the condition the rest of the file meets, and that
-# is the whole reason every entry carries the tolerance it was accepted at.
+# All three bilinear tangents are here on terms the rest of the catalogue is
+# not, and they are not alike. The family will not close to half a kilometre on
+# this vehicle and it is the search that gives out rather than the vehicle. All
+# three were searched with `start` at 17 values, `middle` at 23 and thirty
+# valleys followed, and all three finish at five steps a second rather than ten
+# - which `simulation` records, because a set is found against a model.
+#   500 km closes to 5 m and is filed at half a kilometre, as the rest
+#   400 km is 1.3 km out and is asked for two and a half
+#   600 km is 17.6 km out with the speed 14 m/s out, and is asked for 20 and 15
+# See docs/catalogue-gaps.md
 #
 #     ascent a62 --list
 #     ascent a62 --altitude 400 --programme velocity-share
 #     ascent-search a62 --altitude 400 --programme vs --yaml   # what wrote one
-
 missions:
   - vehicle: lv.a62
     target_altitude: 400_000

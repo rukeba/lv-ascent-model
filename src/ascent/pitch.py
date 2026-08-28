@@ -1,13 +1,13 @@
 """Pitch programmes: the prescribed flight-path angle gamma(t) of the ascent.
 
-Each programme is a different way of parametrising the turn from the vertical
-to the horizontal, and it is these parameters that are being optimised. All of
-them are tabulated on a uniform time grid once, at construction, and read back
-by interpolation, so the shape of a programme never enters the equations of
-motion - only its value at an instant does.
+Each is a different way of parametrising the turn from the vertical to the
+horizontal, and it is these parameters that are being optimised. All of them
+are tabulated on a uniform time grid at construction and read back by
+interpolation, so the shape of a programme never enters the equations of motion
+- only its value at an instant does. Each ends before the engines do; after its
+last instant the vehicle holds the attitude it reached and flies on it.
 
-The programme ends before the engines do. After its last instant the vehicle
-holds the attitude it reached and flies on it until cut-off.
+See docs/pitch-programmes.md
 """
 
 import numpy as np
@@ -24,11 +24,9 @@ class PitchProgramme:
         self.rate = rate
         self.acceleration = acceleration
         self._inverse_step = float(1.0 / (time[1] - time[0]))
-        # The same tables as plain floats, and the figures the two readers
-        # below take off their ends. Those readers are the most-run lines in
-        # the model - four calls an integration step - and taking a number out
-        # of a numpy array wraps it in a numpy scalar first; the arithmetic
-        # that follows is the same IEEE double either way.
+        # the same tables as plain floats: the two readers below are the
+        # most-run lines in the model, four calls an integration step
+        # See docs/performance.md
         self._start = float(time[0])
         self._end_time = float(time[-1])
         self._last_angle = float(angle[-1])
@@ -70,12 +68,7 @@ class PitchProgramme:
         )
 
     def angle_at(self, t: float) -> float:
-        """The angle alone, which is all the equations of motion ask for.
-
-        `sample` interpolates three tables; the rate and the acceleration
-        beside the angle are for the reporting. This is the one of the two the
-        scheme calls, four times an integration step.
-        """
+        """The angle alone, which is all the equations of motion ask for."""
         if t >= self._end_time:
             return self._last_angle
         position = (t - self._start) * self._inverse_step
@@ -94,15 +87,16 @@ class FivePhaseProgramme(PitchProgramme):
     k2 of the turn; held constant over the fraction k3; then arrested so that
     the angle arrives at final_angle exactly at t4, where the programme ends
     and the fifth phase - free flight on the attitude reached - begins. omega
-    follows from the angle that has to be covered, so the shape of the turn is
-    set by t1, t4, k2 and k3 alone.
+    follows from the angle that has to be covered, so t1, t4, k2 and k3 are the
+    whole of the shape.
+
+    See docs/pitch-five-phase.md
     """
 
     def __init__(self, t1: float, t4: float, k2: float, k3: float,
                  final_angle_deg: float = 0.0) -> None:
         # every one of these divides something below, and the phases have to
-        # come in order: a bad set would otherwise raise out of the arithmetic
-        # or build a turn that runs backwards
+        # come in order
         if not (t4 > t1 and k2 > 0.0 and k3 >= 0.0 and k2 + k3 < 1.0):
             raise ValueError(
                 f'the five phases need t4 > t1, k2 > 0, k3 >= 0 and k2 + k3 < 1, '
@@ -152,14 +146,15 @@ class VelocityShareProgramme(PitchProgramme):
     """Turn set by the share of the speed that stays vertical.
 
     A quartic prescribes eta = v_vertical / v = sin(gamma) directly, and the
-    angle follows as gamma = arcsin(eta). The quartic is flat at both ends, so
-    the turn starts smoothly and joins the horizontal phase without a kink.
-    The parameter s controls how much of the turn is done early.
+    angle follows as gamma = arcsin(eta). It is flat at both ends, so the turn
+    starts smoothly and joins the horizontal phase without a kink; s controls
+    how much of the turn is done early.
+
+    See docs/pitch-velocity-share.md
     """
 
-    # the quartic has an interior stationary point at (s - 3) / 2s, which falls
-    # inside the turn for |s| > 3: beyond that the share leaves [0, 1] and a
-    # clip would kink the turn, which the differenced rate reads off the grid
+    # outside this the quartic's interior stationary point falls inside the
+    # turn, the share leaves [0, 1] and a clip would kink the rate
     SHARE_LIMIT = 3.0
 
     def __init__(self, t1: float, tf: float, te: float, s: float) -> None:
@@ -198,15 +193,16 @@ class BilinearTangentProgramme(PitchProgramme):
     The classical optimal-steering law of powered flight, held here as an
     explicit programme rather than solved for: vertical rise to t1, then the
     ratio of two linear functions until te.
+
+    See docs/pitch-bilinear-tangent.md
     """
 
     def __init__(self, t1: float, a: float, b: float, c: float, te: float) -> None:
         if te <= t1:
             raise ValueError(f'the turn has to end after it starts, and not '
                              f't1={t1:g}, te={te:g}')
-        # the denominator has a pole at tau = -1/c, and a turn that runs
-        # through it comes back as a jump of pi in the angle and as division by
-        # nothing in the rate
+        # a turn running through the pole at tau = -1/c comes back as a jump of
+        # pi in the angle and as division by nothing in the rate
         if c * (te - t1) + 1.0 <= 0.0:
             raise ValueError(f'the denominator of the tangent passes through '
                              f'zero inside the turn: c={c:g}, te-t1={te - t1:g}')

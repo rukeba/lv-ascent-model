@@ -5,10 +5,10 @@ the equations of motion need all three at the same altitude: pressure sets the
 thrust and the specific impulse, the other two set the drag.
 
 `air_values` returns the three as a tuple and `air_at` returns them named. The
-equations of motion take the tuple: they ask for it four times an integration
-step and unpack it on the spot, and building an object to be read three times
-and dropped is a fifth of what the whole atmosphere costs. Everything else -
-where it is held, passed on or printed - takes `Air`.
+equations of motion take the tuple; everything else - where the three are held,
+passed on or printed - takes `Air`.
+
+See docs/atmosphere.md
 """
 
 import math
@@ -36,11 +36,9 @@ LAYERS = (
 
 # Where one layer gives way to the next, and what never changes inside one:
 # the exponent of the barometric formula where the temperature falls with
-# height, and the scale of the exponential where it does not. Both are worked
-# out here rather than on each of sixteen million calls a search, and the layer
-# is found by bisection rather than by walking the table - with the top one,
-# which is where the greater part of every ascent is flown, taken by a
-# comparison ahead of the search.
+# height, and the scale of the exponential where it does not. Worked out here
+# rather than on each of sixteen million calls a search
+# See docs/performance.md
 CEILINGS = tuple(layer[0] for layer in LAYERS[1:])
 SOUND_FACTOR = HEAT_CAPACITY_RATIO * GAS_CONSTANT
 _LAYERS = tuple(

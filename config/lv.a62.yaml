@@ -1,10 +1,7 @@
-# Ariane 62: core stage with two P120C solid boosters. The boosters burn
-# alongside the core rather than under it, which this model has no stage
-# sequence for, so the boosted phase is one entry and the core alone continues
-# as the next. The entries are summed over everything still on the vehicle, so
-# each of them holds only what it adds: the first is the two boosters plus the
-# core propellant spent before separation, and the core itself - structure and
-# the propellant it has left - is in the second and nowhere else.
+# Ariane 62: core stage with two P120C solid boosters. The boosted phase is one
+# entry and the core alone continues as the next, each holding only what it
+# adds to the stack.
+# See docs/vehicles.md
 name: Ariane 62
 
 drag_coefficient:
@@ -25,9 +22,7 @@ stages:
     ignition_time: 0
     dry_mass: 22_000          # 2 x 11 t of booster structure: all that is dropped
     propellant_mass: 324_384  # 2 x 142 t, and the 40.384 t of core spent by then
-    # the mean thrust over the boosted phase rather than the peak of the solids:
-    # at a constant thrust this is what empties that propellant in the 130 s the
-    # boosters burn for
+    # the mean over the boosted phase, not the peak of the solids
     thrust_sea_level: 5_925_000
     thrust_vacuum: 7_720_000
     isp_sea_level: 265        # the two propellants together, weighted by flow

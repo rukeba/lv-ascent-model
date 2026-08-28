@@ -155,9 +155,8 @@ def _demand(telemetry: Telemetry, guided_until: float) -> str:
     told apart by their steering loss, so the share that saturates says how far
     the figure above is a measurement at all.
     """
-    # only while the programme runs: there is no demand to meet once the
-    # vehicle holds the attitude it reached, and rows past the handover would
-    # dilute the share below with zeros that mean nothing
+    # only while the programme runs: rows past the handover would dilute the
+    # share below with zeros that mean nothing
     guided = (telemetry.thrust > 0.0) & (telemetry.t <= guided_until)
     demand = np.abs(telemetry.steering_demand[guided])
     if not len(demand):
@@ -167,7 +166,7 @@ def _demand(telemetry: Telemetry, guided_until: float) -> str:
     if not saturated:
         return peak
     # a nought is what this line says when nothing saturated, so a share too
-    # small to round to one percent has to be spelled out rather than rounded
+    # small to round to one per cent is spelled out rather than rounded
     share = f'{saturated * 100:.0f}%' if saturated >= 0.005 else 'less than 1%'
     return f'{peak}, unreachable over {share} of the burn'
 
@@ -301,10 +300,8 @@ def _axes(result) -> list[tuple[str, str]]:
 def _grid_cost(result) -> list[tuple[str, str]]:
     """What the shape of the grid comes to: the passes and what they resolve."""
     refinements = max(result.passes - 1, 0)
-    # what the passes closed in on, which before a search has run is what it
-    # was asked for and after one is what the ranking actually offered: a
-    # search that only ever found the one valley says so rather than claiming
-    # to have looked around five
+    # what the passes closed in on: before a search has run, what it was asked
+    # for; after one, what the ranking actually offered
     valleys = max(getattr(result, 'basins', 1), 1)
     where = ('the best set found so far' if valleys == 1 else
              f'the best {valleys} sets found so far that are not in one '
@@ -321,14 +318,10 @@ def _grid_cost(result) -> list[tuple[str, str]]:
               f'{result.passes}: one over the whole grid above, and no more')
     rows = [('passes', passes)]
 
-    # what each of them integrated at, where that is not one figure throughout.
-    # A reader who sees a search cost less than the last one is owed the reason.
-    # Taken from the result rather than worked out again from the count of
-    # passes, which a search that stopped early rewrites - a sweep that ran at
-    # one step a second would otherwise be reported as having run at ten
-    # said whenever it is not simply the step that was asked for throughout -
-    # which covers a ramp, and covers a search that stopped after its coarse
-    # sweep and would otherwise be read as having run at the step it never got to
+    # what each of them integrated at, where that is not one figure throughout:
+    # a reader who sees a search cost less than the last one is owed the reason
+    # said whenever it is not simply the step that was asked for throughout,
+    # which covers a ramp and covers a search that stopped after its sweep
     schedule = getattr(result, 'schedule', ())
     if schedule and set(schedule) != {result.steps_per_second}:
         rows.append(('integrated at', ', '.join(
@@ -369,10 +362,8 @@ def _cost(result) -> list[tuple[str, str]]:
 # were searched and how finely is part of what the search was asked for.
 TERMINAL_COLUMNS = (
     # what this row was integrated at, first of the measured columns because
-    # every one after it was measured at it. The table holds rows from the
-    # coarse early passes as well as the fine later ones - that is what makes it
-    # a map of the family - and a row known to within a hundred metres reads
-    # exactly like one known to within three unless it says so
+    # every one after it was measured at it: the table holds rows from the
+    # coarse early passes as well as the fine later ones
     ('Hz', 6, 0, lambda c: c.steps_per_second),
     ('cut-off', 10, 1, lambda c: c.cutoff_time),
     ('gamma', 8, 3, lambda c: c.flight_path_angle),
@@ -404,9 +395,7 @@ def search_table(result) -> list[str]:
 
     columns = [*_axis_columns(result), *TERMINAL_COLUMNS]
     # what the search would answer with, which is not every row that happens to
-    # sit inside the tolerances: a set flown by a coarse pass is known to within
-    # a hundred metres or so and has not been shown to meet anything at the step
-    # the search was asked for. `reaching` is where that rule lives
+    # sit inside the tolerances: `reaching` is where that rule lives
     reaching = {id(candidate) for candidate in result.reaching}
     lines = [f'TOP {len(rows):,} OF THE {len(result.found):,} SETS THAT '
              f'REACHED AN ORBIT, BEST FIRST',

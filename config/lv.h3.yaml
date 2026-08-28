@@ -1,7 +1,7 @@
 # H3-22S: LE-9 core with two SRB-3 solid boosters. As with Ariane, the boosted
-# phase is one entry and the core alone continues as the next, and each entry
-# holds only what it adds to the stack: the first is the two boosters plus the
-# core propellant spent before separation, the second the core itself.
+# phase is one entry and the core alone continues as the next, each holding
+# only what it adds to the stack.
+# See docs/vehicles.md
 name: H3-22S
 
 drag_coefficient:
@@ -22,8 +22,7 @@ stages:
     ignition_time: 0
     dry_mass: 21_200           # 2 x ~10.6 t of booster structure: all that is dropped
     propellant_mass: 215_077   # 2 x ~66 t, and the 83.077 t of core spent by then
-    # the mean thrust over the boosted phase: at a constant thrust this is what
-    # empties that propellant in the 120 s the boosters burn for
+    # the mean over the boosted phase, not the peak of the solids
     thrust_sea_level: 7_255_000
     thrust_vacuum: 7_600_000
     isp_sea_level: 426
@@ -35,9 +34,8 @@ stages:
     ignition_time: 120
     dry_mass: 23_200           # the core structure, carried from lift-off
     propellant_mass: 141_923   # what is left of the ~225 t core tank
-    # equal, as the equal specific impulses below say: this stage only ever
-    # burns in near-vacuum. A vacuum figure below the sea-level one would make
-    # the nozzle area negative and the thrust rise with ambient pressure
+    # equal: this stage only ever burns in near-vacuum, and an inverted pair
+    # would make the nozzle area negative
     thrust_sea_level: 2_942_000
     thrust_vacuum: 2_942_000
     isp_sea_level: 426

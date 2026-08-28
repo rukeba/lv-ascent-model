@@ -18,14 +18,13 @@ DRAG_CEILING = 100_000
 def _interpolated(mach: float, points, values, slopes) -> float:
     """Linear interpolation on a table, term for term what `np.interp` gives.
 
-    Written out because the drag is asked for one Mach number at a time, four
-    times an integration step: numpy interpolates an array faster than this and
-    a single number slower, and the slopes are worked out once when the vehicle
-    is built rather than at every call.
+    Written out because the drag is asked for one Mach number at a time: numpy
+    interpolates an array faster than this and a single number slower.
+
+    See docs/performance.md
     """
     if not slopes:
-        # a table of one point is that number at every Mach: no interval to
-        # interpolate over, and nothing outside it either
+        # a table of one point is that number at every Mach
         return values[0]
     if mach <= points[0]:
         return values[0]
@@ -81,8 +80,7 @@ class Stage:
         """Thrust (N) and propellant flow (kg/s) together, as above.
 
         Together because the flow is the thrust over the exhaust speed, so
-        asking for the two of them separately works the thrust out twice - and
-        that is four times an integration step for the length of a flight.
+        asking for the two of them separately works the thrust out twice.
         """
         thrust = self.thrust(pressure)
         return (thrust * throttle,
@@ -111,30 +109,27 @@ class LaunchVehicle:
             / (self._mach_points[i + 1] - self._mach_points[i])
             for i in range(len(mach) - 1))
         # what the flow sees, from each stage upwards: the widest stage still
-        # on the vehicle. Ariane 62 and H3 are as wide as their boosters side
-        # by side, but only until those boosters go
+        # on the vehicle, boosters included until they go
         areas, widest = [], 0.0
         for stage in reversed(self.stages):
             widest = max(widest, stage.diameter)
             areas.append(math.pi * widest ** 2 / 4)
         self.frontal_areas = tuple(reversed(areas))
-        # mass of the stack from each stage up, with full tanks. Fixed for the
+        # mass of the stack from each stage up, with full tanks: fixed for the
         # flight, and `mass_on` below is asked for it some five times a step
         self._stack_masses = tuple(
             sum(s.dry_mass + s.propellant_mass for s in self.stages[index:])
             for index in range(len(self.stages)))
         self._capacities = tuple(s.propellant_mass for s in self.stages)
         self._ignitions = tuple(s.ignition_time for s in self.stages)
-        # a vehicle with no drag profile flies without drag, and the check for
-        # it is worth making once rather than at every trial point
+        # a vehicle with no drag profile flies without drag: checked once
         self._has_drag = bool(self._mach_points)
 
     def active_stage(self, t: float) -> tuple[int, Stage]:
         """The stage flying at this instant, and where it sits in the stack.
 
         Before the first ignition it is the first stage: a vehicle sitting on
-        the pad is the whole of itself. Asked twice an integration step, so the
-        instants are searched rather than walked.
+        the pad is the whole of itself.
         """
         index = bisect_right(self._ignitions, t) - 1
         if index < 0:
@@ -161,13 +156,9 @@ class LaunchVehicle:
              speed: float, index: int) -> float:
         """Aerodynamic drag on the stack from `index` upwards, N.
 
-        The two figures of the air it needs rather than the whole of it: the
-        equations of motion read the atmosphere as three numbers - see
-        `atmosphere.air_values` - and the pressure is not one of these two.
-
-        Taken as zero above `DRAG_CEILING`. A vehicle given no drag profile flies
-        without drag, rather than through an interpolation with nothing to
-        interpolate between.
+        The two figures of the air it needs rather than the whole of it - see
+        `atmosphere.air_values`. Taken as zero above `DRAG_CEILING`, and a
+        vehicle given no drag profile flies without drag.
         """
         if altitude > DRAG_CEILING or not self._has_drag:
             return 0.0

@@ -1,47 +1,17 @@
-# Pitch-programme parameters that place H3-22S on a circular orbit of
-# the given altitude - one set per programme and altitude, 9 in all,
-# at 1000, 1100, 1200 km. This file is H3-22S and nothing else:
-# the catalogue is kept as one file a vehicle, and a command that wants the
-# whole of it reads the directory.
+# Pitch-programme parameters that place H3-22S on a circular orbit of the given
+# altitude - one set per programme and altitude, 9 in all, at 1000, 1100 and
+# 1200 km. This file is H3-22S and nothing else: the catalogue is kept as one
+# file a vehicle, and a command that wants the whole of it reads the directory.
 #
-# Every set here was searched for rather than solved for, and searched with
-# every parameter of its family free: `ascent-search` sweeps a grid over the
-# whole family, closes in on the best node ten times over, and ranks what it
-# finds by how far the orbit reached is from the circle asked for. Nothing is
-# held behind the search's back - not the vertical rise, not the five-phase
-# k2, not the instant the bilinear tangent's middle angle is prescribed at.
-# An entry is the head of that ranking.
-#
-# A set counts as reaching the orbit when the perigee, the apogee and the
-# altitude at cut-off are all inside the tolerance it was asked for and the
-# inertial speed at cut-off is inside the tolerance on that. Both are written on
-# the entry, in `tolerance`, because they are not the same for all of them: the
-# orbit is half a kilometre nearly everywhere and two and a half on Ariane 62's
-# bilinear tangent, where half will not close and a set two kilometres out is
-# worth more than a blank. So `reached` does not read the target back twice over
-# the way a root find would leave it - it reads what the search actually landed
-# on, inside whatever the entry beside it says it was held to.
-#
-# Every instant is a whole tenth of a second - the vertical rise, the end of
-# the programme and the cut-off - because that is the finest a timeline is ever
-# issued to, and an answer written finer is the same answer with digits after
-# it that nothing can act on. The coefficients of the guidance law are not
-# instants and nothing rounds them: they are written to full precision because
-# they have to be. Near a circular orbit the apogee answers to the cut-off at
-# some 80 km per second, and the bilinear tangent is more delicate still - its
-# numerator a*tau + b cancels to almost nothing at the end of the turn, which
-# is what levels the vehicle out, so the last digits of a and b carry the
-# terminal angle and rounding them moves the perigee by a kilometre. With the
-# cut-off held to a tenth, it is the shape of the turn that places the orbit.
-#
-# An entry is an ordinary mission specification with one block added: `reached`
-# records the orbit it produces and what it costs, so any entry can be checked
-# without repeating the search. tests/test_catalogue.py flies all of them.
+# Every set was searched for rather than solved for, with every parameter of
+# its family free. `tolerance` is what the set was accepted under and `reached`
+# is what it does; instants are whole tenths of a second and the coefficients
+# of the guidance law are written to full precision.
+# See docs/catalogue.md
 #
 #     ascent h3 --list
 #     ascent h3 --altitude 1000 --programme velocity-share
 #     ascent-search h3 --altitude 1000 --programme vs --yaml   # what wrote one
-
 missions:
   - vehicle: lv.h3
     target_altitude: 1_000_000

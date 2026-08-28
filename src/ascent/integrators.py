@@ -11,19 +11,16 @@ are step changes, so the caller must not step across them; Mission splits the
 step at those instants.
 
 `held` is whatever the caller holds fixed over the step. It is handed to `f`
-unchanged and never looked into here. It exists so that the derivative
-function can stay a plain function of the instant and the state: what it needs
-besides those two arrives as an argument rather than out of a closure rebuilt
-at every step, or - worse - off the caller between one probe and the next,
-which is how a scheme that evaluates the middle of a step quietly falls to
-first order.
+unchanged and never looked into here, so that the derivative function can stay
+a plain function of the instant and the state: what it needs besides those two
+arrives as an argument rather than off the caller between one probe and the
+next, which is how a scheme falls to first order.
 
 The two lengths this model carries - four while the pitch programme runs, five
-after it - are written out component by component. This is the innermost line
-of every trajectory, run some four million times in a search, and there a
-generator over `zip` costs several times what the arithmetic inside it does.
-`_general` below is the same scheme for any other length, and gives the same
-numbers term for term.
+after it - are written out component by component. `_general` below is the same
+scheme for any other length, and gives the same numbers term for term.
+
+See docs/integration.md
 """
 
 

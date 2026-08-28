@@ -64,8 +64,7 @@ RED, PURPLE, TEAL = '#c62828', '#6a1b9a', '#00695c'
 GUIDE = '#b6bec9'
 
 # the trajectory is drawn over the Earth itself: the ground below the surface
-# is filled in the muted blue-green of a sea, and the sky over it is shaded,
-# at its deepest at the top of the drawing
+# is filled in the muted blue-green of a sea, and the sky over it is shaded
 GROUND = '#a3c1bd'
 SKY = '#4a86d0'
 SKY_DEPTH = 0.5
@@ -105,8 +104,8 @@ def write_report(mission: Mission, telemetry: Telemetry,
 
     budget = velocity_budget(telemetry, mission.omega)
     orbit = mission.orbit
-    # the style is set for the drawing alone: a caller that plots something
-    # of its own afterwards gets its own matplotlib back
+    # set for the drawing alone: a caller that plots something of its own
+    # afterwards gets its own matplotlib back
     with plt.rc_context(STYLE):
         figures = _plot(mission, telemetry, budget.burnout_time, directory)
 
@@ -175,8 +174,7 @@ def _tiles(mission: Mission, telemetry: Telemetry, budget) -> list[dict]:
                f'{orbit.apogee_altitude / 1000:.0f}' if orbit.is_closed else 'open')
 
     def tile(value, unit, label, css=''):
-        # a value wider than the tile is set smaller rather than trimmed:
-        # 'perigee x apogee' carries two numbers and a sign
+        # a value wider than the tile is set smaller rather than trimmed
         if len(value) > VALUE_DIGITS:
             css = f'{css} long'.strip()
         return {'value': value, 'unit': unit, 'label': label, 'css': css}
@@ -277,9 +275,8 @@ def _plot(mission: Mission, telemetry: Telemetry, burnout: float,
         for pane, series, demanded, label in zip(axes, flown, asked, labels):
             for instant in events:
                 pane.axvline(instant, color=GUIDE, linewidth=0.9, zorder=0)
-            # the guidance holds the flown angle on the programme, so the two
-            # lie on top of each other while it runs: the programme is laid
-            # down as a broad band and the flight drawn over it
+            # the two lie on top of each other while the guidance runs, so the
+            # programme is a broad band with the flight drawn over it
             pane.plot(programme.time, demanded, color=ORANGE, linewidth=5.0,
                       alpha=0.35, solid_capstyle='butt',
                       label='asked for by the programme')
@@ -359,28 +356,24 @@ def _plot(mission: Mission, telemetry: Telemetry, burnout: float,
 
     def trajectory(axes):
         # a flight that goes a long way round runs the drawing into the
-        # horizon, where a height over a downrange stops meaning anything;
-        # the frame stops just short of it
+        # horizon, where a height over a downrange stops meaning anything
         reach = min(telemetry.downrange_x.max() * 1.05, 0.99 * EARTH_RADIUS)
         # the ground and the sky run to the axis, but the pad does not sit on
         # it: the frame opens a little before the launch
         left = -0.02 * reach
-        # the surface and the orbit are circles about the centre of the Earth;
-        # taking them as a height over the downrange, rather than as an arc
-        # over an angle, is what makes each of them span the axis exactly
+        # circles about the centre of the Earth, taken as a height over the
+        # downrange rather than as an arc over an angle, so each spans the axis
         x = np.linspace(left, reach, 400)
         surface = np.sqrt(EARTH_RADIUS ** 2 - x ** 2) - EARTH_RADIUS
         orbit = np.sqrt((EARTH_RADIUS + target) ** 2 - x ** 2) - EARTH_RADIUS
         # the frame holds the deepest the surface falls away and the highest
-        # the flight or the orbit reaches; the flight itself stays over the
-        # surface, because the model stops if it does not
+        # the flight or the orbit reaches
         deepest, highest = surface[-1], max(orbit[0], telemetry.downrange_y.max())
         top = highest + 0.05 * (highest - deepest)
         # a band of ground under the surface, enough of it to read as a body
         bottom = deepest - 0.09 * (top - deepest)
 
-        # thinner than the plots against time: this one is read as a shape
-        # over a filled Earth, and a heavy line coarsens the curves
+        # thinner than the plots against time: a heavy line coarsens the curves
         thin = 1.4
         _sky(axes, left, reach, bottom, top)
         axes.fill_between(x / 1000, bottom / 1000, surface / 1000,
@@ -398,7 +391,7 @@ def _plot(mission: Mission, telemetry: Telemetry, burnout: float,
         axes.set_aspect('equal')
 
     # the angle and its two derivatives come first: the programme is what the
-    # model exists to compare, and this is the plot of it
+    # model exists to compare
     figure, panes = plt.subplots(3, 1, figsize=STACK, sharex=True)
     attitude(panes)
     figure.align_ylabels(panes)

@@ -15,6 +15,8 @@
 
 A pitch programme can be named in full or by the short form beside it - `5f`,
 `vs`, `bt`.
+
+See docs/cli.md
 """
 
 import argparse
@@ -46,15 +48,10 @@ def _programmes(names) -> str:
 def quietly(run, argv) -> int:
     """Run an entry point, and let Ctrl+C end it without a traceback.
 
-    A search is minutes long and stopping one part way through is an ordinary
-    thing to do, not an error: what the interpreter would otherwise print is a
-    stack from the middle of a process pool, once for the process that was
-    asked and once again for every one of its workers. None of it says anything
-    the person who pressed the keys did not already know.
-
-    The newline goes first because a search writes its progress in place, and
-    what is being closed off is that line: without it the word below would land
-    in the middle of it and the shell prompt after that.
+    Stopping a search part way through is an ordinary thing to do, not an
+    error, and what the interpreter would print is a stack from the middle of a
+    process pool once per worker. The newline goes first because a search
+    writes its progress in place, and that line has to be closed off.
     """
     try:
         return run(argv)
@@ -186,10 +183,9 @@ def _list(directory: Path, vehicle: str) -> None:
     for spec in sorted(catalogue, key=lambda s: (s['target_altitude'],
                                                  s['pitch_programme']['type'])):
         reached = spec.get('reached', {})
-        # the tolerance the set was accepted at, printed beside it. Not every
-        # entry was asked for the same thing - a family that will not close to
-        # half a kilometre on a vehicle can still be worth an entry asked for at
-        # more - and a listing that left it out would show the two alike
+        # the tolerance the set was accepted at, printed beside it: not every
+        # entry was asked for the same thing
+        # See docs/catalogue.md
         asked = spec.get('tolerance', {}).get('orbit_km', float('nan'))
         print(f'{spec["target_altitude"] / 1000:>8g} km'
               f'{spec["pitch_programme"]["type"]:>18}'
@@ -279,9 +275,7 @@ def _search(argv: list[str] | None) -> int:
     `--programme` when those are not given. The pitch-programme parameters in
     it are ignored: they are what the search is for.
 
-    Every parameter of the family is an axis of the grid, and `--range` says
-    what any of them is searched over. `--dry-run` prints the grid, every axis
-    with its range and its step, and stops before the first trajectory.
+    See docs/cli.md
     """
     parser = argparse.ArgumentParser(
         prog='ascent-search',
@@ -424,15 +418,13 @@ def _search(argv: list[str] | None) -> int:
     )
     vehicle = load_vehicle(mission_path.parent / f'{vehicle_file}.yaml')
 
-    # with `--yaml` the entry is the whole of what this command is for, so
-    # everything else goes to the error stream and a redirect of the output is
-    # a file the catalogue reader can read
+    # with `--yaml` the entry is the whole of what this command is for, so a
+    # redirect of the output is a file the catalogue reader can read
     told = sys.stderr if arguments.yaml else sys.stdout
 
-    # what is about to be searched, printed before it is searched. A grid is
-    # minutes of integration and the thing most worth knowing about one is
-    # whether it is the grid that was meant, which is a question with a short
-    # answer and a long wait behind it
+    # what is about to be searched, printed before it is searched: a grid is
+    # minutes of integration, and whether it is the grid that was meant is a
+    # question with a short answer and a long wait behind it
     print(summarise_plan(plan(vehicle, **settings)), file=told, flush=True)
     if arguments.dry_run:
         return 0
@@ -518,10 +510,8 @@ def _write_search_csv(result, path: Path) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     axes = list(result.ranges)
     # what the search would answer with, rather than every row that happens to
-    # sit inside the tolerances. A set flown by one of the coarse early passes
-    # is known to within a hundred metres or so and has not been shown to meet
-    # anything at the step the search was asked for; `steps_per_second` beside
-    # it is what lets a reader see which rows those are
+    # sit inside the tolerances: a set flown by a coarse early pass has not
+    # been shown to meet anything at the step the search was asked for
     reaching = {id(candidate) for candidate in result.reaching}
     with open(path, 'w', newline='', encoding='utf-8') as handle:
         writer = csv.writer(handle)

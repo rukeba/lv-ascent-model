@@ -56,8 +56,7 @@ def orbit_from_state(radius: float, tangential_velocity: float,
         perigee_altitude=perigee - EARTH_RADIUS,
         apogee_altitude=apogee - EARTH_RADIUS,
         period=2.0 * math.pi * math.sqrt(semi_major_axis**3 / MU),
-        # on the magnitude: the impulse that circularises an orbit does not
-        # depend on which way round it is being flown, and a retrograde one
-        # carries a negative momentum
+        # on the magnitude: a retrograde orbit carries a negative momentum and
+        # costs the same impulse to circularise
         circularisation_dv=math.sqrt(MU / apogee) - abs(momentum) / apogee,
     )

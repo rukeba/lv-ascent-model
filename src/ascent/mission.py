@@ -1,21 +1,20 @@
 """Equations of motion of the powered ascent, and the stepping that solves them.
 
-The flight is planar and written in polar coordinates about the centre of the
-Earth: the distance `r` and the angle `psi` travelled from the pad. The state
-is integrated in the frame that rotates with the Earth, so the speed the model
-carries is the speed relative to the atmosphere and to the launch site, while
-the orbit is built from the inertial speed, which adds the rotation the pad
-already had.
+Planar, in polar coordinates about the centre of the Earth: the distance `r`
+and the angle `psi` travelled from the pad. Integrated in the frame that
+rotates with the Earth, so the speed carried is the speed relative to the
+atmosphere and to the launch site; the orbit is built from the inertial speed.
 
-While the pitch programme runs, the guidance holds the flight-path angle on it
-and only the magnitude of the velocity is integrated. When the programme ends
-the vehicle holds the attitude it reached and both velocity components are
-integrated to the end of the flight.
+While the pitch programme runs the guidance holds the flight-path angle on it
+and only the magnitude of the velocity is integrated. When it ends the vehicle
+holds the attitude it reached and both components are integrated to the end.
 
-Events matter more than the order of the scheme. Separation, cut-off, the end
-of the programme and running a tank dry are step changes in mass, thrust or in
-the equations themselves; the step is cut exactly at each of them, because at
-around 60 m/s^2 an event misplaced by one step at 10 Hz is worth several m/s.
+Events matter more than the order of the scheme: separation, cut-off, the end
+of the programme and a tank running dry are step changes, and the step is cut
+exactly at each of them.
+
+See docs/model.md
+See docs/integration.md
 """
 
 import math
@@ -50,10 +49,8 @@ class Segment:
     # attitude flown once the programme has ended, rad; None while it runs
     attitude: float | None
     # the throttle the engines actually run at over the piece, zero once the
-    # tank is dry. Settled here and never at a trial point: a trial point that
-    # overshot the capacity would drop the thrust in the middle of the step,
-    # which is the step change that cutting the step at the dry instant exists
-    # to keep out
+    # tank is dry. Settled here and never at a trial point, which would drop
+    # the thrust in the middle of a step
     power: float = 0.0
 
 
@@ -79,8 +76,7 @@ class Mission:
         self.steps_per_second = steps_per_second
         self.latitude_deg = latitude_deg
         self.azimuth_deg = azimuth_deg
-        # what the pad is called, when it is called anything: reported, and
-        # nothing the flight depends on
+        # what the pad is called: reported, and nothing the flight depends on
         self.site_name = site_name
         self.omega = rotation_in_plane(latitude_deg, azimuth_deg)
 
@@ -149,10 +145,10 @@ class Mission:
     def _integrate(self, begin: float, end: float) -> None:
         """Advance one smooth piece, cutting it again at an event inside it.
 
-        A tank running dry and a watched cut-off threshold cannot be put on the
-        bounds beforehand: where they fall is what the integration is for. Each
-        is solved for, the piece cut there, and the rest advanced as a piece of
-        its own, with stage, throttle and tank all read again.
+        A dry tank and a watched threshold cannot be put on the bounds
+        beforehand: where they fall is what the integration is for. Each is
+        solved for and the rest advanced as a piece of its own, with stage,
+        throttle and tank all read again.
         """
         index, stage = self.vehicle.active_stage(begin)
         # read at the start of the piece, instant and state alike: no piece
@@ -222,11 +218,11 @@ class Mission:
                        begin: float, end: float) -> float | None:
         """The first instant inside the piece at which a watched threshold is met.
 
-        Walked rather than tested at the end alone: the inertial speed can rise
-        through a threshold and fall back under it inside one piece, near the
-        top of a lofted ascent, and the end would then show nothing. Bisection
-        rather than the regula falsi a dry tank gets, because a policy says
-        whether it has fired and not by how much. Only a watched policy pays.
+        Walked rather than tested at the end alone: a threshold can be crossed
+        and fallen back through inside one piece. Bisection, because a policy
+        says whether it has fired and not by how much.
+
+        See docs/integration.md
         """
         low = begin
         for i in range(1, self.CUT_OFF_SAMPLES + 1):
@@ -251,13 +247,11 @@ class Mission:
                           burned_at_end: float, capacity: float) -> float:
         """The instant inside the piece at which the tank runs dry.
 
-        Worth solving rather than estimating: a first stage empties a fraction
-        of a second before separation under some 60 m/s^2, so a millisecond of
-        error costs 0.06 m/s, and a single linear estimate is first order -
-        which would drag the whole scheme down to first order exactly where it
-        hurts most. Regula falsi on the propellant burned, re-integrating from
-        the start of the piece; the flow rate barely varies over a step, so two
-        or three passes reach the tolerance.
+        Regula falsi on the propellant burned, re-integrating from the start of
+        the piece. Solved rather than estimated: a linear estimate would be
+        first order exactly where it hurts most.
+
+        See docs/integration.md
         """
         low, burned_low = begin, y[-1]
         high, burned_high = end, burned_at_end
@@ -283,9 +277,7 @@ class Mission:
         """A magnitude has no sign to turn round.
 
         Reported as a zero it would read as a vehicle at rest while its radius
-        went on falling, and the orbit at the end would be built out of that.
-        Asked at the handover as well, which can fall inside a step and hand
-        free flight a negative magnitude before anything else looks at it.
+        went on falling, and the orbit would be built out of that.
         """
         if speed < 0.0:
             raise ValueError(
@@ -310,9 +302,8 @@ class Mission:
 
         The programme fixes the direction of the velocity, so only its
         magnitude is integrated. Thrust and drag act along that direction;
-        gravity and the centrifugal term of the rotating frame project on to it
-        through the flight-path angle. The Coriolis term is perpendicular to
-        the velocity and does no work on its magnitude.
+        gravity and the centrifugal term project on to it through the
+        flight-path angle. Coriolis is normal to it and does no work on it.
         """
         speed, radius, _, burned = y
         altitude = radius - EARTH_RADIUS
@@ -331,11 +322,10 @@ class Mission:
     def _free_rates(self, t: float, y, segment: Segment):
         """dy/dt after the programme; y = (radius, angle, vertical, horizontal, burned).
 
-        Polar equations in the rotating frame. The quadratic terms come from
+        Polar equations in the rotating frame: the quadratic terms come from
         the rotating polar basis, the omega terms are the centrifugal and
-        Coriolis accelerations of the Earth-fixed frame. Thrust and drag act
-        along the held attitude, which is the zero-lift assumption of a vehicle
-        flying at a small angle of attack.
+        Coriolis accelerations. Thrust and drag act along the held attitude,
+        which is the zero-lift assumption of a small angle of attack.
         """
         radius, _, vertical, horizontal, burned = y
         altitude = radius - EARTH_RADIUS
@@ -408,19 +398,16 @@ class Mission:
     def _accumulate_steering(self, state: FlightState) -> None:
         """Recover the deflection the programme demands, and what it costs.
 
-        The programme prescribes the flight-path angle without saying how it is
-        produced, so the thrust deflection that would produce it is recovered
-        from the normal equation of motion. The share of the thrust that this
-        deflection points away from the velocity is the steering loss - the
-        figure of merit by which pitch programmes are compared.
+        The programme prescribes the angle without saying how it is produced,
+        so the deflection that would produce it is recovered from the normal
+        equation of motion; the share of the thrust it points away from the
+        velocity is the steering loss. The same normal acceleration, squared
+        and integrated, is the control-effort functional, m^2/s^3 - taken
+        before the clamp, so it goes on separating programmes where the loss
+        saturates.
 
-        The same normal acceleration, squared and integrated over the powered
-        flight, is the second measure: the control-effort functional, m^2/s^3.
-        It weighs how hard the guidance is worked rather than what that costs,
-        so the square charges an abrupt stretch more than an even one. Taken
-        before the clamp on purpose: unlike the loss it does not saturate where
-        the thrust cannot hold the programme, and goes on telling such
-        programmes apart.
+        See docs/velocity-budget.md
+        See docs/control-effort.md
         """
         radius, speed = state.radius, state.speed
         # the same projection the free-flight equations carry: gravity less the
@@ -441,12 +428,10 @@ class Mission:
             state.steering_angle = math.asin(max(-1.0, min(1.0, demanded)))
             rate = (state.thrust / state.mass) * (1.0 - math.cos(state.steering_angle))
             effort = control * control
-        # over the interval, not off its end alone. An interval that begins
-        # unpowered and ends alight spans an ignition and was flown before it,
-        # so it carries nothing: averaging across that step change would charge
-        # the new stage for time the old one flew. Asked of the thrust rather
-        # than of the rate, which is legitimately zero wherever the programme
-        # happens to be a gravity turn
+        # over the interval, not off its end alone - and an interval that
+        # begins unpowered and ends alight spans an ignition and carries
+        # nothing. Asked of the thrust rather than of the rate, which is
+        # legitimately zero wherever the programme is a gravity turn
         half = 0.0 if not self._was_powered else 0.5 * self.dt
         self._steering_loss += half * (self._steering_rate + rate)
         self._control_effort += half * (self._effort_rate + effort)
