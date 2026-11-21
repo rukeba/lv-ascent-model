@@ -1,5 +1,5 @@
-# Add the DOI of the archived release under `identifiers` once Zenodo has
-# minted it, and keep `version` and `date-released` in step with the git tag.
+# Keep `version`, `date-released` and the DOI in step with the GitHub
+# release that Zenodo archives.
 cff-version: 1.2.0
 message: "If you use this software, please cite it as below."
 title: "lv-ascent-model: a two-dimensional ascent model of a launch vehicle with parametric pitch programmes"
@@ -17,7 +17,15 @@ authors:
     email: phd@kebamail.com
     affiliation: "Oles Honchar Dnipro National University"
 version: 1.0.0
-date-released: 2026-08-22
+date-released: 2026-08-28
+doi: 10.5281/zenodo.22150057
+identifiers:
+  - type: doi
+    value: 10.5281/zenodo.22150057
+    description: "Version 1.0.0, archived from the GitHub release v.2026.08.28"
+  - type: doi
+    value: 10.5281/zenodo.22150056
+    description: "All versions; resolves to the latest"
 license: MIT
 repository-code: "https://github.com/rukeba/lv-ascent-model"
 keywords:
